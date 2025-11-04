@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: stack4things-vault
+data:
+  vault.hcl: |
+    storage "file" {
+      path = "/vault/data"
+    }
+    
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1  # Enable TLS in production
+    }
+    
+    ui = true
+    
+    api_addr = "http://0.0.0.0:8200"
+    
+    # Enable Kubernetes auth
+    # Configured via setup script
+

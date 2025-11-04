@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-openstack-shared
+  namespace: stack4things-infrastructure
+type: Opaque
+stringData:
+  # Configuration for shared OpenStack MySQL cluster
+  # Update these values to match your OpenStack MySQL configuration
+  host: "openstack-mysql.example.com"
+  port: "3306"
+  database: "stack4things"
+  username: "stack4things"
+  password: "CHANGE_ME"
+  # Connection string format
+  # mysql+pymysql://username:password@host:port/database
+  connection-string: "mysql+pymysql://stack4things:CHANGE_ME@openstack-mysql.example.com:3306/stack4things"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-shared-config
+  namespace: stack4things-infrastructure
+data:
+  # Instructions for using shared OpenStack MySQL cluster
+  README.md: |
+    # Using Shared OpenStack MySQL Cluster
+    
+    ## Prerequisites
+    
+    1. OpenStack MySQL cluster must be accessible from Kubernetes cluster
+    2. Database `stack4things` must be created in OpenStack MySQL
+    3. User `stack4things` must have appropriate permissions
+    
+    ## Setup
+    
+    1. Update secret `mysql-openstack-shared` with correct credentials:
+       ```bash
+       kubectl edit secret mysql-openstack-shared -n stack4things-infrastructure
+       ```
+    
+    2. Create database in OpenStack MySQL:
+       ```sql
+       CREATE DATABASE stack4things CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+       CREATE USER 'stack4things'@'%' IDENTIFIED BY 'password';
+       GRANT ALL PRIVILEGES ON stack4things.* TO 'stack4things'@'%';
+       FLUSH PRIVILEGES;
+       ```
+    
+    3. Update service configuration to use shared MySQL:
+       ```yaml
+       env:
+       - name: DATABASE_URL
+         valueFrom:
+           secretKeyRef:
+             name: mysql-openstack-shared
+             key: connection-string
+       ```
+    
+    ## Testing
+    
+    Run compatibility test:
+    ```bash
+    MYSQL_HOST=openstack-mysql.example.com \
+    MYSQL_USER=stack4things \
+    MYSQL_PASSWORD=password \
+    ./scripts/kubernetes/database/test-openstack-compatibility.sh
+    ```
+

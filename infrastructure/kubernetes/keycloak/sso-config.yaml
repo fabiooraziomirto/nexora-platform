@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-sso-config
+  namespace: stack4things-auth
+data:
+  sso-config.yaml: |
+    # SSO Configuration for Stack4Things
+    
+    # SSO Session Settings
+    sso_session_idle_timeout: 1800  # 30 minutes
+    sso_session_max_lifespan: 36000  # 10 hours
+    offline_session_idle_timeout: 2592000  # 30 days
+    
+    # Access Token Settings
+    access_token_lifespan: 3600  # 1 hour
+    access_token_lifespan_for_implicit_flow: 900  # 15 minutes
+    
+    # Refresh Token Settings
+    refresh_token_max_reuse: 0  # Unlimited reuse
+    revoke_refresh_token: false
+    
+    # Cookie Settings
+    remember_me: true
+    remember_me_cookie_max_age: 604800  # 7 days
+    
+    # Cross-Service SSO
+    cross_service_sso: true
+    sso_cookie_name: "KEYCLOAK_SESSION"
+    sso_cookie_domain: ".stack4things.io"
+

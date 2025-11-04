@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-roles
+  namespace: stack4things
+data:
+  openstack-roles.yaml: |
+    # OpenStack Standard Roles
+    
+    # admin: Full administrative access
+    admin:
+      description: "Full administrative access to all resources"
+      permissions:
+        - "*"
+      
+    # member: Standard user access
+    member:
+      description: "Standard user access to own resources"
+      permissions:
+        - "devices:create"
+        - "devices:read:own"
+        - "devices:update:own"
+        - "devices:delete:own"
+        - "fleet:read:own"
+      
+    # reader: Read-only access
+    reader:
+      description: "Read-only access to resources"
+      permissions:
+        - "devices:read"
+        - "fleet:read"
+        - "network:read"
+        - "dns:read"
+      
+    # service: Service account role
+    service:
+      description: "Service account access"
+      permissions:
+        - "devices:read"
+        - "devices:update"
+        - "execution:create"
+        - "execution:read"
+        - "events:publish"
+

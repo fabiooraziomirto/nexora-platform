@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: rbac-service-metrics
+  namespace: stack4things
+  labels:
+    app: rbac-service
+spec:
+  selector:
+    matchLabels:
+      app: rbac-service
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+

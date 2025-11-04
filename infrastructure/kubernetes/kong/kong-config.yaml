@@ -1,0 +1,108 @@
+# Kong API Gateway Configuration for Stack4Things v2.0
+
+## Service: device-service
+
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongService
+metadata:
+  name: device-service
+  namespace: stack4things
+spec:
+  url: http://device-service.stack4things.svc.cluster.local
+  protocol: http
+  port: 80
+  path: /
+```
+
+## Route: device-service-api
+
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongRoute
+metadata:
+  name: device-service-route
+  namespace: stack4things
+spec:
+  service: device-service
+  paths:
+    - /api/v2/devices
+  methods:
+    - GET
+    - POST
+    - PATCH
+    - DELETE
+  strip_path: false
+  preserve_host: true
+```
+
+## Plugin: Keycloak Authentication
+
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: keycloak-auth
+  namespace: stack4things
+config:
+  discovery: "https://keycloak.stack4things.svc.cluster.local:8080/realms/stack4things/.well-known/openid-configuration"
+  client_id: "api-gateway"
+  client_secret: "CHANGE_ME"
+  token_endpoint: "https://keycloak.stack4things.svc.cluster.local:8080/realms/stack4things/protocol/openid-connect/token"
+  introspection_endpoint: "https://keycloak.stack4things.svc.cluster.local:8080/realms/stack4things/protocol/openid-connect/token/introspect"
+  introspection_endpoint_auth_method: "client_secret_post"
+  bearer_token: "yes"
+  realm: "stack4things"
+plugin: openid-connect
+```
+
+## Plugin: Keystone Authentication (Fallback)
+
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: keystone-auth-fallback
+  namespace: stack4things
+config:
+  keystone_url: "https://keystone.example.com/v3"
+  keystone_project_id: "CHANGE_ME"
+  keystone_project_domain_id: "default"
+  keystone_user_domain_id: "default"
+plugin: keystone-auth
+```
+
+## Dual Authentication Plugin (Custom)
+
+```lua
+-- kong/plugins/dual-auth/handler.lua
+local DualAuth = {}
+
+function DualAuth:access(conf)
+  -- Try Keycloak first
+  local keycloak_token = kong.request.get_header("Authorization")
+  
+  if keycloak_token then
+    -- Verify with Keycloak
+    local keycloak_plugin = kong.plugins["openid-connect"]
+    if keycloak_plugin and keycloak_plugin:verify_token(keycloak_token) then
+      return -- Success with Keycloak
+    end
+  end
+  
+  -- Fallback to Keystone
+  local keystone_token = kong.request.get_header("X-Auth-Token")
+  if keystone_token then
+    local keystone_plugin = kong.plugins["keystone-auth"]
+    if keystone_plugin and keystone_plugin:verify_token(keystone_token) then
+      return -- Success with Keystone
+    end
+  end
+  
+  -- No valid token found
+  return kong.response.exit(401, { message = "Unauthorized" })
+end
+
+return DualAuth
+```
+

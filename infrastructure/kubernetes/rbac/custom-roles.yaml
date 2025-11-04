@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stack4things-roles
+  namespace: stack4things
+data:
+  custom-roles.yaml: |
+    # Stack4Things Custom Roles
+    
+    # device-admin: Device management administrator
+    device-admin:
+      description: "Full access to device management"
+      permissions:
+        - "devices:*"
+        - "fleet:*"
+        - "device-plugins:*"
+      
+    # fleet-manager: Fleet management role
+    fleet-manager:
+      description: "Manage device fleets"
+      permissions:
+        - "fleet:create"
+        - "fleet:read"
+        - "fleet:update"
+        - "fleet:delete"
+        - "devices:read"
+        - "devices:update"
+      
+    # network-admin: Network management role
+    network-admin:
+      description: "Full access to network management"
+      permissions:
+        - "network:*"
+        - "dns:*"
+        - "devices:read"
+      
+    # plugin-developer: Plugin development role
+    plugin-developer:
+      description: "Create and manage plugins"
+      permissions:
+        - "plugins:create"
+        - "plugins:read:own"
+        - "plugins:update:own"
+        - "plugins:delete:own"
+        - "execution:create:own"
+        - "execution:read:own"
+      
+    # execution-operator: Execution management role
+    execution-operator:
+      description: "Manage device executions"
+      permissions:
+        - "execution:create"
+        - "execution:read"
+        - "execution:update"
+        - "execution:delete"
+        - "devices:read"
+      
+    # auditor: Audit and read-only access
+    auditor:
+      description: "Audit access to all resources"
+      permissions:
+        - "*:read"
+        - "audit:read"
+

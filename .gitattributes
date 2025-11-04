@@ -1,0 +1,140 @@
+# Git attributes for Stack4Things v2.0
+# Ensures consistent line endings and file handling across different platforms
+
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted
+# to native line endings on checkout
+*.py text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+*.sql text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.jsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.xml text eol=lf
+*.txt text eol=lf
+*.log text eol=lf
+*.env text eol=lf
+*.env.example text eol=lf
+
+# Dockerfiles
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# Kubernetes manifests
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Git files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.gitmodules text eol=lf
+
+# Markdown files
+*.md text eol=lf
+
+# Denote all files that are truly binary and should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tgz binary
+*.bz2 binary
+*.rar binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.class binary
+
+# Python
+*.pyc binary
+*.pyo binary
+*.pyd binary
+*.egg binary
+*.whl binary
+
+# Compiled files
+*.o binary
+*.a binary
+*.lib binary
+*.obj binary
+
+# Archives
+*.7z binary
+*.deb binary
+*.rpm binary
+
+# Database files
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Terraform
+*.tfstate binary
+*.tfstate.backup binary
+
+# Helm
+*.tgz binary
+
+# Secrets and certificates (should not be committed, but just in case)
+*.pem binary
+*.key binary
+*.crt binary
+*.p12 binary
+*.pfx binary
+
+# Lock files - treat as text for diff purposes
+poetry.lock text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+Pipfile.lock text eol=lf
+
+# Documentation
+*.md linguist-detectable=true
+*.rst linguist-detectable=true
+
+# Configuration files
+*.toml linguist-detectable=true
+*.ini linguist-detectable=true
+*.yaml linguist-detectable=true
+*.yml linguist-detectable=true
+*.json linguist-detectable=true
+
+# Scripts
+*.sh linguist-detectable=true
+*.bash linguist-detectable=true
+
+# Kubernetes manifests
+*.yaml linguist-detectable=true
+*.yml linguist-detectable=true
+
+# Infrastructure as Code
+*.tf linguist-detectable=true
+*.tfvars linguist-detectable=true
+

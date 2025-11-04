@@ -1,0 +1,76 @@
+# Dependabot Configuration for Stack4Things v2.0
+
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "stack4things-team"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # Poetry dependencies
+  - package-ecosystem: "pip"
+    directory: "/services/device-service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "stack4things-team"
+    labels:
+      - "dependencies"
+      - "device-service"
+
+  - package-ecosystem: "pip"
+    directory: "/libraries/common"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "stack4things-team"
+    labels:
+      - "dependencies"
+      - "common-library"
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/services/device-service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "stack4things-team"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "stack4things-team"
+    labels:
+      - "dependencies"
+      - "github-actions"
+

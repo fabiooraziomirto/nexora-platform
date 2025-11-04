@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keystone-role-mappings
+  namespace: stack4things-infrastructure
+data:
+  role-mappings.yaml: |
+    # Keystone role mappings for Stack4Things RBAC
+    
+    # OpenStack roles
+    openstack-roles:
+      - name: admin
+        keystone-role-id: admin
+        permissions:
+          - "*"
+      - name: member
+        keystone-role-id: member
+        permissions:
+          - "devices:create"
+          - "devices:read:own"
+          - "devices:update:own"
+      - name: reader
+        keystone-role-id: reader
+        permissions:
+          - "*:read"
+      - name: service
+        keystone-role-id: service
+        permissions:
+          - "devices:read"
+          - "execution:create"
+    
+    # Stack4Things custom roles
+    stack4things-roles:
+      - name: device-admin
+        keystone-role-id: device-admin
+        permissions:
+          - "devices:*"
+          - "fleet:*"
+      - name: fleet-manager
+        keystone-role-id: fleet-manager
+        permissions:
+          - "fleet:*"
+          - "devices:read"
+      - name: network-admin
+        keystone-role-id: network-admin
+        permissions:
+          - "network:*"
+          - "dns:*"
+      - name: plugin-developer
+        keystone-role-id: plugin-developer
+        permissions:
+          - "plugins:*"
+      - name: execution-operator
+        keystone-role-id: execution-operator
+        permissions:
+          - "execution:*"
+      - name: auditor
+        keystone-role-id: auditor
+        permissions:
+          - "*:read"
+          - "audit:read"
+

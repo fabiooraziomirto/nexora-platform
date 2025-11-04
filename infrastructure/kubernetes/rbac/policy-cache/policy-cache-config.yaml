@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-cache-config
+  namespace: stack4things
+data:
+  cache-config.yaml: |
+    # Policy caching configuration
+    
+    cache:
+      enabled: true
+      backend: redis
+      ttl: 3600  # 1 hour
+      max_size: 10000
+      
+    redis:
+      host: redis-master.stack4things-infrastructure.svc.cluster.local
+      port: 6379
+      db: 1
+      key_prefix: "policy:"
+      
+    invalidation:
+      on_role_change: true
+      on_policy_change: true
+      on_user_change: true
+

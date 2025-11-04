@@ -1,0 +1,107 @@
+# Gitignore for Stack4Things v2.0
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Poetry
+poetry.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kubernetes secrets
+*.secret.yaml
+*secret*.yaml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Helm
+*.tgz
+
+# Crossplane
+*.claim.yaml
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+
+# Bandit
+bandit-report.json
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
+
+# Black
+.black_cache/
+
+# EditorConfig
+.editorconfig.bak
+
+# CI/CD
+.cache/
+.coverage.*
+coverage.xml
+htmlcov/
+*.sarif
+safety-report.json
+requirements.txt
+*.dockerfile.bak

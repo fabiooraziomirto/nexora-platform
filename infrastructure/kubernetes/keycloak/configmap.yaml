@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm-config
+  namespace: stack4things
+data:
+  realm.json: |
+    {
+      "realm": "stack4things",
+      "enabled": true,
+      "displayName": "Stack4Things",
+      "clients": [
+        {
+          "clientId": "device-service",
+          "enabled": true,
+          "clientAuthenticatorType": "client-secret",
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true
+        },
+        {
+          "clientId": "api-gateway",
+          "enabled": true,
+          "clientAuthenticatorType": "client-secret",
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true
+        }
+      ],
+      "roles": {
+        "realm": [
+          {
+            "name": "admin",
+            "description": "Full access to all resources"
+          },
+          {
+            "name": "device-manager",
+            "description": "Manage devices"
+          },
+          {
+            "name": "device-viewer",
+            "description": "View devices only"
+          },
+          {
+            "name": "plugin-manager",
+            "description": "Manage plugins"
+          },
+          {
+            "name": "execution-manager",
+            "description": "Execute commands"
+          }
+        ]
+      },
+      "identityProviders": [
+        {
+          "alias": "keystone",
+          "providerId": "keycloak-oidc",
+          "enabled": true,
+          "config": {
+            "clientId": "stack4things-client",
+            "authorizationUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/authorize",
+            "tokenUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/token"
+          }
+        }
+      ]
+    }
+

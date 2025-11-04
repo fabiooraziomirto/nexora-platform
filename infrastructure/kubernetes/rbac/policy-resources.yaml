@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-resources
+  namespace: stack4things
+data:
+  resource-policies.yaml: |
+    # Resource-level policies
+    
+    device:
+      create: "rule:devices:create"
+      read: "rule:devices:read"
+      read_own: "rule:devices:read:own"
+      read_all: "rule:devices:read:all"
+      update: "rule:devices:update"
+      update_own: "rule:devices:update:own"
+      delete: "rule:devices:delete"
+      delete_own: "rule:devices:delete:own"
+      
+    fleet:
+      create: "rule:fleet:create"
+      read: "rule:fleet:read"
+      read_own: "rule:fleet:read:own"
+      update: "rule:fleet:update"
+      delete: "rule:fleet:delete"
+      
+    network:
+      create: "rule:network:create"
+      read: "rule:network:read"
+      update: "rule:network:update"
+      delete: "rule:network:delete"
+      
+    dns:
+      create: "rule:dns:create"
+      read: "rule:dns:read"
+      update: "rule:dns:update"
+      delete: "rule:dns:delete"
+      
+    plugin:
+      create: "rule:plugins:create"
+      read: "rule:plugins:read"
+      read_own: "rule:plugins:read:own"
+      update: "rule:plugins:update"
+      update_own: "rule:plugins:update:own"
+      delete: "rule:plugins:delete"
+      delete_own: "rule:plugins:delete:own"
+      
+    execution:
+      create: "rule:execution:create"
+      read: "rule:execution:read"
+      read_own: "rule:execution:read:own"
+      update: "rule:execution:update"
+      delete: "rule:execution:delete"
+

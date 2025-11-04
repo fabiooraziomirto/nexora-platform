@@ -1,0 +1,188 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xstacks.database.stack4things.io
+spec:
+  group: database.stack4things.io
+  names:
+    kind: XStackDatabase
+    plural: xstacks
+  claimNames:
+    kind: DatabaseClaim
+    plural: databaseclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  storageGB:
+                    type: integer
+                    default: 20
+                  instanceClass:
+                    type: string
+                    default: db-f1-micro
+                  region:
+                    type: string
+                    default: us-central1
+            required:
+            - parameters
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xstacks.cache.stack4things.io
+spec:
+  group: cache.stack4things.io
+  names:
+    kind: XStackCache
+    plural: xstacks
+  claimNames:
+    kind: CacheClaim
+    plural: cacheclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  memoryGB:
+                    type: integer
+                    default: 1
+                  region:
+                    type: string
+                    default: us-central1
+            required:
+            - parameters
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xstacks.messaging.stack4things.io
+spec:
+  group: messaging.stack4things.io
+  names:
+    kind: XStackMessaging
+    plural: xstacks
+  claimNames:
+    kind: MessagingClaim
+    plural: messagingclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  clusterSize:
+                    type: integer
+                    default: 3
+                  storageGB:
+                    type: integer
+                    default: 20
+                  region:
+                    type: string
+                    default: us-central1
+            required:
+            - parameters
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xstacks.storage.stack4things.io
+spec:
+  group: storage.stack4things.io
+  names:
+    kind: XStackStorage
+    plural: xstacks
+  claimNames:
+    kind: StorageClaim
+    plural: storageclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  storageGB:
+                    type: integer
+                    default: 100
+                  region:
+                    type: string
+                    default: us-central1
+                  storageClass:
+                    type: string
+                    default: STANDARD
+            required:
+            - parameters
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xstacks.loadbalancer.stack4things.io
+spec:
+  group: loadbalancer.stack4things.io
+  names:
+    kind: XStackLoadBalancer
+    plural: xstacks
+  claimNames:
+    kind: LoadBalancerClaim
+    plural: loadbalancerclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    default: EXTERNAL
+                  region:
+                    type: string
+                    default: us-central1
+            required:
+            - parameters
+

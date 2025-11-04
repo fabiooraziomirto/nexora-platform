@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-backup-storage
+  namespace: stack4things-infrastructure
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup
+  namespace: stack4things-infrastructure
+spec:
+  schedule: "0 2 * * *"  # Daily at 2:00 AM
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mysql-backup
+            image: mysql:8.0
+            env:
+            - name: MYSQL_HOST
+              value: mariadb.stack4things-infrastructure.svc.cluster.local
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_USER
+              value: root
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb
+                  key: mariadb-root-password
+            - name: MYSQL_DATABASE
+              value: stack4things
+            - name: BACKUP_FILE
+              value: "mysql-backup-$(date +%Y-%m-%d-%H%M%S).sql.gz"
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              BACKUP_FILE="/backup/$BACKUP_FILE"
+              echo "Starting backup to $BACKUP_FILE"
+              
+              # Create backup
+              mysqldump \
+                -h $MYSQL_HOST \
+                -P $MYSQL_PORT \
+                -u $MYSQL_USER \
+                -p$MYSQL_PASSWORD \
+                --single-transaction \
+                --routines \
+                --triggers \
+                --events \
+                --all-databases \
+                | gzip > "$BACKUP_FILE"
+              
+              # Remove backups older than 7 days
+              find /backup -name "mysql-backup-*.sql.gz" -mtime +7 -delete
+              
+              echo "Backup completed: $BACKUP_FILE"
+              ls -lh /backup/
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: mysql-backup-storage
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup-verification
+  namespace: stack4things-infrastructure
+spec:
+  schedule: "0 3 * * *"  # Daily at 3:00 AM (after backup)
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup-verification
+            image: mysql:8.0
+            env:
+            - name: MYSQL_HOST
+              value: mariadb.stack4things-infrastructure.svc.cluster.local
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_USER
+              value: root
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb
+                  key: mariadb-root-password
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              LATEST_BACKUP=$(ls -t /backup/mysql-backup-*.sql.gz 2>/dev/null | head -1)
+              
+              if [ -z "$LATEST_BACKUP" ]; then
+                echo "ERROR: No backup file found"
+                exit 1
+              fi
+              
+              echo "Verifying backup: $LATEST_BACKUP"
+              
+              # Verify backup file integrity
+              if ! gunzip -t "$LATEST_BACKUP"; then
+                echo "ERROR: Backup file is corrupted"
+                exit 1
+              fi
+              
+              echo "✅ Backup verification successful: $LATEST_BACKUP"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: mysql-backup-storage
+

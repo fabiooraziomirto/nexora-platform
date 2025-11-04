@@ -1,0 +1,57 @@
+apiVersion: database.stack4things.io/v1alpha1
+kind: DatabaseClaim
+metadata:
+  name: stack4things-database
+  namespace: stack4things-infrastructure
+spec:
+  parameters:
+    storageGB: 20
+    instanceClass: db-f1-micro
+    region: us-central1
+
+---
+apiVersion: cache.stack4things.io/v1alpha1
+kind: CacheClaim
+metadata:
+  name: stack4things-redis
+  namespace: stack4things-infrastructure
+spec:
+  parameters:
+    memoryGB: 1
+    region: us-central1
+
+---
+apiVersion: messaging.stack4things.io/v1alpha1
+kind: MessagingClaim
+metadata:
+  name: stack4things-kafka
+  namespace: stack4things-infrastructure
+spec:
+  parameters:
+    clusterSize: 3
+    storageGB: 20
+    region: us-central1
+
+---
+apiVersion: storage.stack4things.io/v1alpha1
+kind: StorageClaim
+metadata:
+  name: stack4things-storage
+  namespace: stack4things-infrastructure
+spec:
+  parameters:
+    storageGB: 100
+    region: us-central1
+    storageClass: STANDARD
+
+---
+apiVersion: loadbalancer.stack4things.io/v1alpha1
+kind: LoadBalancerClaim
+metadata:
+  name: stack4things-lb
+  namespace: stack4things
+spec:
+  parameters:
+    type: EXTERNAL
+    region: us-central1
+

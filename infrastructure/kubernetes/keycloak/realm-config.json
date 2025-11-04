@@ -1,0 +1,83 @@
+# Keycloak Configuration for Stack4Things v2.0
+
+## Realm: stack4things
+
+### Client: device-service
+
+```json
+{
+  "clientId": "device-service",
+  "enabled": true,
+  "clientAuthenticatorType": "client-secret",
+  "secret": "CHANGE_ME",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": true,
+  "serviceAccountsEnabled": true,
+  "authorizationServicesEnabled": true,
+  "redirectUris": [
+    "http://localhost:8000/*",
+    "https://api.stack4things.io/*"
+  ],
+  "webOrigins": [
+    "*"
+  ],
+  "attributes": {
+    "access.token.lifespan": "3600",
+    "client.secret.creation.time": "1234567890"
+  }
+}
+```
+
+### Client: api-gateway
+
+```json
+{
+  "clientId": "api-gateway",
+  "enabled": true,
+  "clientAuthenticatorType": "client-secret",
+  "secret": "CHANGE_ME",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": true,
+  "serviceAccountsEnabled": true,
+  "authorizationServicesEnabled": true,
+  "redirectUris": [
+    "http://localhost:8000/*",
+    "https://api.stack4things.io/*"
+  ],
+  "webOrigins": [
+    "*"
+  ]
+}
+```
+
+### Roles
+
+- `admin`: Full access to all resources
+- `device-manager`: Manage devices
+- `device-viewer`: View devices only
+- `plugin-manager`: Manage plugins
+- `execution-manager`: Execute commands
+
+### Identity Provider: Keystone (OpenStack)
+
+```json
+{
+  "alias": "keystone",
+  "providerId": "keycloak-oidc",
+  "enabled": true,
+  "config": {
+    "clientId": "stack4things-client",
+    "clientSecret": "CHANGE_ME",
+    "authorizationUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/authorize",
+    "tokenUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/token",
+    "userInfoUrl": "https://keystone.example.com/v3/auth/user",
+    "jwksUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/.well-known/openid-configuration",
+    "issuer": "https://keystone.example.com/v3"
+  }
+}
+```
+

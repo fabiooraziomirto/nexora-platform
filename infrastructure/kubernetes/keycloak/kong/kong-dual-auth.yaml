@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-dual-auth
+  namespace: stack4things
+data:
+  kong.yaml: |
+    _format_version: "3.0"
+    
+    services:
+    - name: device-service
+      url: http://device-service.stack4things.svc.cluster.local:8000
+      routes:
+      - name: device-service-route
+        paths:
+        - /api/v2/devices
+        plugins:
+        - name: oidc
+          config:
+            client_id: api-gateway
+            client_secret: ${KEYCLOAK_CLIENT_SECRET}
+            discovery: http://keycloak.stack4things-auth.svc.cluster.local:8080/realms/stack4things/.well-known/openid-configuration
+            bearer_only: "no"
+        - name: keystone-auth
+          config:
+            keystone_url: ${KEYSTONE_URL}
+            as_fallback: true
+            enabled: true
+    
+    plugins:
+    - name: cors
+      config:
+        origins:
+        - "*"
+        methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+        headers:
+        - Accept
+        - Accept-Version
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - Authorization
+        exposed_headers:
+        - X-Auth-Token
+        credentials: true
+        max_age: 3600
+

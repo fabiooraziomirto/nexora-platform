@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-role-mappings
+  namespace: stack4things-auth
+data:
+  role-mappings.yaml: |
+    # Keycloak role mappings for Stack4Things RBAC
+    
+    # OpenStack roles
+    openstack-roles:
+      - name: admin
+        keycloak-role: admin
+        permissions:
+          - "*"
+      - name: member
+        keycloak-role: member
+        permissions:
+          - "devices:create"
+          - "devices:read:own"
+          - "devices:update:own"
+          - "devices:delete:own"
+      - name: reader
+        keycloak-role: reader
+        permissions:
+          - "*:read"
+      - name: service
+        keycloak-role: service
+        permissions:
+          - "devices:read"
+          - "execution:create"
+          - "execution:read"
+    
+    # Stack4Things custom roles
+    stack4things-roles:
+      - name: device-admin
+        keycloak-role: device-admin
+        permissions:
+          - "devices:*"
+          - "fleet:*"
+      - name: fleet-manager
+        keycloak-role: fleet-manager
+        permissions:
+          - "fleet:*"
+          - "devices:read"
+          - "devices:update"
+      - name: network-admin
+        keycloak-role: network-admin
+        permissions:
+          - "network:*"
+          - "dns:*"
+      - name: plugin-developer
+        keycloak-role: plugin-developer
+        permissions:
+          - "plugins:*"
+          - "execution:create:own"
+      - name: execution-operator
+        keycloak-role: execution-operator
+        permissions:
+          - "execution:*"
+          - "devices:read"
+      - name: auditor
+        keycloak-role: auditor
+        permissions:
+          - "*:read"
+          - "audit:read"
+

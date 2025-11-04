@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-keystone
+  namespace: stack4things
+data:
+  kong.yaml: |
+    _format_version: "3.0"
+    
+    plugins:
+    - name: keystone-auth
+      config:
+        keystone_url: ${KEYSTONE_URL}
+        keystone_domain: ${KEYSTONE_DOMAIN}
+        keystone_project: ${KEYSTONE_PROJECT}
+        keystone_username: ${KEYSTONE_USERNAME}
+        keystone_password: ${KEYSTONE_PASSWORD}
+        enabled: true
+        as_fallback: true
+

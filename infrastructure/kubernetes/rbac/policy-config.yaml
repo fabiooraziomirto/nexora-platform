@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-config
+  namespace: stack4things
+data:
+  policy.json: |
+    {
+      "context_is_admin": "role:admin",
+      "admin_or_owner": "role:admin or project_id:%(project_id)s",
+      "admin_or_creator": "role:admin or user_id:%(user_id)s",
+      
+      "default": "rule:admin_or_owner",
+      
+      "devices:create": "rule:admin_or_creator",
+      "devices:read": "rule:admin_or_owner or role:reader or role:member",
+      "devices:read:own": "rule:admin_or_creator",
+      "devices:read:all": "rule:admin_or_owner",
+      "devices:update": "rule:admin_or_owner",
+      "devices:update:own": "rule:admin_or_creator",
+      "devices:delete": "rule:admin_or_owner",
+      "devices:delete:own": "rule:admin_or_creator",
+      
+      "fleet:create": "rule:admin_or_creator or role:fleet-manager",
+      "fleet:read": "rule:admin_or_owner or role:reader or role:member",
+      "fleet:read:own": "rule:admin_or_creator",
+      "fleet:update": "rule:admin_or_owner or role:fleet-manager",
+      "fleet:delete": "rule:admin_or_owner",
+      
+      "network:create": "rule:admin_or_creator or role:network-admin",
+      "network:read": "rule:admin_or_owner or role:reader",
+      "network:update": "rule:admin_or_owner or role:network-admin",
+      "network:delete": "rule:admin_or_owner",
+      
+      "dns:create": "rule:admin_or_creator or role:network-admin",
+      "dns:read": "rule:admin_or_owner or role:reader",
+      "dns:update": "rule:admin_or_owner or role:network-admin",
+      "dns:delete": "rule:admin_or_owner",
+      
+      "plugins:create": "rule:admin_or_creator or role:plugin-developer",
+      "plugins:read": "rule:admin_or_owner or role:reader",
+      "plugins:read:own": "rule:admin_or_creator or role:plugin-developer",
+      "plugins:update": "rule:admin_or_owner",
+      "plugins:update:own": "rule:admin_or_creator or role:plugin-developer",
+      "plugins:delete": "rule:admin_or_owner",
+      "plugins:delete:own": "rule:admin_or_creator or role:plugin-developer",
+      
+      "execution:create": "rule:admin_or_creator or role:execution-operator",
+      "execution:read": "rule:admin_or_owner or role:reader",
+      "execution:read:own": "rule:admin_or_creator",
+      "execution:update": "rule:admin_or_owner or role:execution-operator",
+      "execution:delete": "rule:admin_or_owner",
+      
+      "audit:read": "rule:admin_or_owner or role:auditor",
+      
+      "rbac:role_assign": "rule:admin_or_owner",
+      "rbac:role_list": "rule:admin_or_owner or role:reader",
+      "rbac:policy_list": "rule:admin_or_owner",
+      "rbac:policy_update": "rule:admin_or_owner"
+    }
+

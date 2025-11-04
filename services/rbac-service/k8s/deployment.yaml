@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rbac-service
+  namespace: stack4things
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rbac-service
+  template:
+    metadata:
+      labels:
+        app: rbac-service
+    spec:
+      containers:
+      - name: rbac-service
+        image: stack4things/rbac-service:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: POLICY_FILE
+          value: /etc/policy/policy.json
+        - name: REDIS_HOST
+          value: redis-master.stack4things-infrastructure.svc.cluster.local
+        - name: REDIS_PORT
+          value: "6379"
+        - name: AUDIT_ENABLED
+          value: "true"
+        - name: AUDIT_LOG_DIR
+          value: /var/log/audit
+        volumeMounts:
+        - name: policy-config
+          mountPath: /etc/policy
+          readOnly: true
+        - name: audit-logs
+          mountPath: /var/log/audit
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: policy-config
+        configMap:
+          name: policy-config
+      - name: audit-logs
+        persistentVolumeClaim:
+          claimName: audit-logs-storage
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rbac-service
+  namespace: stack4things
+spec:
+  selector:
+    app: rbac-service
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+

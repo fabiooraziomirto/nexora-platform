@@ -1,0 +1,42 @@
+apiVersion: gcp.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: gcp-provider
+spec:
+  projectID: ${GCP_PROJECT_ID}
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: gcp-creds
+      key: creds
+
+---
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: aws-provider
+spec:
+  region: ${AWS_REGION:-us-east-1}
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: aws-creds
+      key: creds
+
+---
+apiVersion: azure.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: azure-provider
+spec:
+  tenantId: ${AZURE_TENANT_ID}
+  subscriptionId: ${AZURE_SUBSCRIPTION_ID}
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: azure-creds
+      key: creds
+

@@ -1,0 +1,342 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: mysql-database-gcp
+  labels:
+    provider: gcp
+    database: mysql
+spec:
+  writeConnectionSecretsToRef:
+    name: mysql-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: database.stack4things.io/v1alpha1
+    kind: XStackDatabase
+  resources:
+  - name: cloudsql-instance
+    base:
+      apiVersion: sql.gcp.upbound.io/v1beta1
+      kind: DatabaseInstance
+      spec:
+        forProvider:
+          databaseVersion: MYSQL_8_0
+          region: us-central1
+          settings:
+          - tier: db-f1-micro
+            diskSize: 20
+            diskType: PD_SSD
+            backupConfiguration:
+            - enabled: true
+              startTime: "03:00"
+            - ipConfiguration:
+              authorizedNetworks: []
+          deletionProtection: false
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.storageGB
+      toFieldPath: spec.forProvider.settings[0].diskSize
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.instanceClass
+      toFieldPath: spec.forProvider.settings[0].tier
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.region
+      toFieldPath: spec.forProvider.region
+  - name: cloudsql-database
+    base:
+      apiVersion: sql.gcp.upbound.io/v1beta1
+      kind: Database
+      spec:
+        forProvider:
+          charset: utf8mb4
+          collation: utf8mb4_unicode_ci
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: spec.forProvider.name
+    - type: ToCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: status.atProvider.databaseName
+  - name: cloudsql-user
+    base:
+      apiVersion: sql.gcp.upbound.io/v1beta1
+      kind: User
+      spec:
+        forProvider:
+          password: ""
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: spec.forProvider.name
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: mysql-database-aws
+  labels:
+    provider: aws
+    database: mysql
+spec:
+  writeConnectionSecretsToRef:
+    name: mysql-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: database.stack4things.io/v1alpha1
+    kind: XStackDatabase
+  resources:
+  - name: rds-instance
+    base:
+      apiVersion: rds.aws.upbound.io/v1beta1
+      kind: Instance
+      spec:
+        forProvider:
+          engine: mysql
+          engineVersion: "8.0"
+          instanceClass: db.t3.micro
+          allocatedStorage: 20
+          storageType: gp3
+          backupRetentionPeriod: 7
+          backupWindow: "03:00-04:00"
+          multiAz: false
+          publiclyAccessible: false
+          skipFinalSnapshot: true
+        providerConfigRef:
+          name: aws-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.storageGB
+      toFieldPath: spec.forProvider.allocatedStorage
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.instanceClass
+      toFieldPath: spec.forProvider.instanceClass
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.region
+      toFieldPath: spec.forProvider.region
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: redis-cache-gcp
+  labels:
+    provider: gcp
+    cache: redis
+spec:
+  writeConnectionSecretsToRef:
+    name: redis-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: cache.stack4things.io/v1alpha1
+    kind: XStackCache
+  resources:
+  - name: redis-instance
+    base:
+      apiVersion: redis.gcp.upbound.io/v1beta1
+      kind: Instance
+      spec:
+        forProvider:
+          tier: BASIC
+          memorySizeGb: 1
+          region: us-central1
+          authorizedNetwork: default
+          redisVersion: REDIS_7_0
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.memoryGB
+      toFieldPath: spec.forProvider.memorySizeGb
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.region
+      toFieldPath: spec.forProvider.region
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: redis-cache-aws
+  labels:
+    provider: aws
+    cache: redis
+spec:
+  writeConnectionSecretsToRef:
+    name: redis-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: cache.stack4things.io/v1alpha1
+    kind: XStackCache
+  resources:
+  - name: elasticache-cluster
+    base:
+      apiVersion: elasticache.aws.upbound.io/v1beta1
+      kind: ReplicationGroup
+      spec:
+        forProvider:
+          engine: redis
+          nodeType: cache.t3.micro
+          numCacheClusters: 1
+          automaticFailoverEnabled: false
+          atRestEncryptionEnabled: true
+          transitEncryptionEnabled: false
+        providerConfigRef:
+          name: aws-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.memoryGB
+      toFieldPath: spec.forProvider.nodeType
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.region
+      toFieldPath: spec.forProvider.region
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: kafka-messaging-gcp
+  labels:
+    provider: gcp
+    messaging: kafka
+spec:
+  writeConnectionSecretsToRef:
+    name: kafka-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: messaging.stack4things.io/v1alpha1
+    kind: XStackMessaging
+  resources:
+  - name: pubsub-topic
+    base:
+      apiVersion: pubsub.gcp.upbound.io/v1beta1
+      kind: Topic
+      spec:
+        forProvider:
+          labels:
+            managed-by: crossplane
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: spec.forProvider.name
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: object-storage-gcp
+  labels:
+    provider: gcp
+    storage: gcs
+spec:
+  writeConnectionSecretsToRef:
+    name: storage-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: storage.stack4things.io/v1alpha1
+    kind: XStackStorage
+  resources:
+  - name: gcs-bucket
+    base:
+      apiVersion: storage.gcp.upbound.io/v1beta1
+      kind: Bucket
+      spec:
+        forProvider:
+          location: US-CENTRAL1
+          storageClass: STANDARD
+          uniformBucketLevelAccess: true
+          versioning:
+          - enabled: true
+          lifecycleRule:
+          - action:
+            - type: Delete
+            condition:
+              age: 90
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: spec.forProvider.name
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.region
+      toFieldPath: spec.forProvider.location
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.storageClass
+      toFieldPath: spec.forProvider.storageClass
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: object-storage-aws
+  labels:
+    provider: aws
+    storage: s3
+spec:
+  writeConnectionSecretsToRef:
+    name: storage-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: storage.stack4things.io/v1alpha1
+    kind: XStackStorage
+  resources:
+  - name: s3-bucket
+    base:
+      apiVersion: s3.aws.upbound.io/v1beta1
+      kind: Bucket
+      spec:
+        forProvider:
+          forceDestroy: false
+          versioning:
+          - enabled: true
+          lifecycleRule:
+          - id: delete-old-versions
+            status: Enabled
+            noncurrentVersionExpiration:
+            - days: 90
+        providerConfigRef:
+          name: aws-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: spec.forProvider.bucket
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.parameters.region
+      toFieldPath: spec.forProvider.region
+
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: loadbalancer-gcp
+  labels:
+    provider: gcp
+    loadbalancer: true
+spec:
+  writeConnectionSecretsToRef:
+    name: lb-connection
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: loadbalancer.stack4things.io/v1alpha1
+    kind: XStackLoadBalancer
+  resources:
+  - name: gcp-lb
+    base:
+      apiVersion: compute.gcp.upbound.io/v1beta1
+      kind: GlobalAddress
+      spec:
+        forProvider:
+          addressType: EXTERNAL
+        providerConfigRef:
+          name: gcp-provider
+    patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: metadata.name
+      toFieldPath: spec.forProvider.name
+

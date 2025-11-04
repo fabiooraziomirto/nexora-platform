@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stack4things-admin
+  namespace: stack4things
+  labels:
+    app: stack4things
+    component: admin
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: stack4things-admin
+  labels:
+    app: stack4things
+rules:
+  - apiGroups: [""]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["*"]
+    verbs: ["*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: stack4things-admin-binding
+  labels:
+    app: stack4things
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: stack4things-admin
+subjects:
+  - kind: ServiceAccount
+    name: stack4things-admin
+    namespace: stack4things
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stack4things-developer
+  namespace: stack4things
+  labels:
+    app: stack4things
+    component: developer
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stack4things-developer
+  namespace: stack4things
+  labels:
+    app: stack4things
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stack4things-developer-binding
+  namespace: stack4things
+  labels:
+    app: stack4things
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: stack4things-developer
+subjects:
+  - kind: ServiceAccount
+    name: stack4things-developer
+    namespace: stack4things
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stack4things-readonly
+  namespace: stack4things
+  labels:
+    app: stack4things
+    component: readonly
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stack4things-readonly
+  namespace: stack4things
+  labels:
+    app: stack4things
+rules:
+  - apiGroups: [""]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stack4things-readonly-binding
+  namespace: stack4things
+  labels:
+    app: stack4things
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: stack4things-readonly
+subjects:
+  - kind: ServiceAccount
+    name: stack4things-readonly
+    namespace: stack4things
+

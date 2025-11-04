@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-ui-config
+  namespace: stack4things
+data:
+  ui-config.yaml: |
+    # RBAC UI Configuration
+    
+    features:
+      role_management: true
+      policy_management: true
+      audit_viewer: true
+      user_role_assignment: true
+      
+    permissions:
+      role_create: "role:admin"
+      role_update: "role:admin"
+      role_delete: "role:admin"
+      role_assign: "role:admin"
+      policy_view: "role:admin or role:auditor"
+      policy_update: "role:admin"
+      audit_view: "role:admin or role:auditor"
+

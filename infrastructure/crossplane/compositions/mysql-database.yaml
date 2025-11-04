@@ -1,0 +1,80 @@
+"""Example Crossplane composition for MySQL database."""
+
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: mysql-database
+  labels:
+    provider: gcp
+    service: mysql
+spec:
+  writeConnectionSecretsToRef:
+    name: mysql-connection-secret
+    namespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: database.stack4things.io/v1alpha1
+    kind: XDatabase
+  resources:
+    - name: cloudsql-instance
+      base:
+        apiVersion: sql.gcp.crossplane.io/v1beta1
+        kind: DatabaseInstance
+        spec:
+          forProvider:
+            databaseVersion: MYSQL_8_0
+            region: europe-west1
+            settings:
+              - tier: db-n1-standard-1
+                backupConfiguration:
+                  enabled: true
+                  startTime: "03:00"
+                ipConfiguration:
+                  authorizedNetworks:
+                    - value: "0.0.0.0/0"
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.instanceName
+          toFieldPath: metadata.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.region
+    - name: cloudsql-database
+      base:
+        apiVersion: sql.gcp.crossplane.io/v1beta1
+        kind: Database
+        spec:
+          forProvider:
+            instance: $(cloudsql-instance-name)
+            charset: utf8mb4
+            collation: utf8mb4_unicode_ci
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.databaseName
+          toFieldPath: spec.forProvider.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.databaseName
+          toFieldPath: metadata.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.resources[0].name
+          toFieldPath: spec.forProvider.instance
+          fromFieldPath: status.resources[0].name
+    - name: cloudsql-user
+      base:
+        apiVersion: sql.gcp.crossplane.io/v1beta1
+        kind: User
+        spec:
+          forProvider:
+            instance: $(cloudsql-instance-name)
+            host: "%"
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.username
+          toFieldPath: spec.forProvider.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.username
+          toFieldPath: metadata.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.resources[0].name
+          toFieldPath: spec.forProvider.instance
+          fromFieldPath: status.resources[0].name
+
