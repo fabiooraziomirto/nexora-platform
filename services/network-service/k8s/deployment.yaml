@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-service
+  namespace: stack4things
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: network-service
+  template:
+    metadata:
+      labels:
+        app: network-service
+    spec:
+      containers:
+        - name: network-service
+          image: ghcr.io/stack4things/network-service:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000

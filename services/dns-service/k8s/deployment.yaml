@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-service
+  namespace: stack4things
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-service
+  template:
+    metadata:
+      labels:
+        app: dns-service
+    spec:
+      containers:
+        - name: dns-service
+          image: ghcr.io/stack4things/dns-service:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000

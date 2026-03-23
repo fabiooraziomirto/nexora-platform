@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   mysql:
     image: mysql:8.0
@@ -51,13 +49,126 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  device-service:
+    build:
+      context: ./services/device-service
+      dockerfile: Dockerfile
+    container_name: stack4things-device-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      KAFKA_REQUIRED: "false"
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  plugin-service:
+    build:
+      context: ./services/plugin-service
+      dockerfile: Dockerfile
+    container_name: stack4things-plugin-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  execution-service:
+    build:
+      context: ./services/execution-service
+      dockerfile: Dockerfile
+    container_name: stack4things-execution-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+    ports:
+      - "8002:8000"
+
+  network-service:
+    build:
+      context: ./services/network-service
+      dockerfile: Dockerfile
+    container_name: stack4things-network-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+    ports:
+      - "8003:8000"
+
+  dns-service:
+    build:
+      context: ./services/dns-service
+      dockerfile: Dockerfile
+    container_name: stack4things-dns-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+    ports:
+      - "8004:8000"
+
+  webservice-service:
+    build:
+      context: ./services/webservice-service
+      dockerfile: Dockerfile
+    container_name: stack4things-webservice-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+    ports:
+      - "8005:8000"
+
+  fleet-service:
+    build:
+      context: ./services/fleet-service
+      dockerfile: Dockerfile
+    container_name: stack4things-fleet-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+    ports:
+      - "8006:8000"
 
 volumes:
   mysql_data:

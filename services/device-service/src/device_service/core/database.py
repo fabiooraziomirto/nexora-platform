@@ -3,10 +3,16 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import create_engine
 from device_service.core.config import settings
 
-# MySQL async engine with aiomysql
-# Note: For async operations, we use aiomysql
-# For sync operations (Alembic migrations), we use pymysql
-DATABASE_URL_ASYNC = settings.DATABASE_URL.replace("mysql+pymysql://", "mysql+aiomysql://")
+# MySQL async engine with aiomysql.
+# For sync operations (Alembic migrations), we use the sync URL.
+if settings.DATABASE_URL.startswith("mysql+pymysql://"):
+    DATABASE_URL_ASYNC = settings.DATABASE_URL.replace(
+        "mysql+pymysql://", "mysql+aiomysql://", 1
+    )
+elif settings.DATABASE_URL.startswith("sqlite:///"):
+    DATABASE_URL_ASYNC = settings.DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+else:
+    DATABASE_URL_ASYNC = settings.DATABASE_URL
 DATABASE_URL_SYNC = settings.DATABASE_URL  # Keep pymysql for sync operations
 
 engine = create_async_engine(

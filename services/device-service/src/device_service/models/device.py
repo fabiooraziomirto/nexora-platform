@@ -22,7 +22,7 @@ class Device(Base):
     last_seen = Column(DateTime, nullable=True, index=True)
     
     # Metadata
-    metadata = Column(JSON, nullable=True)
+    meta = Column("metadata", JSON, nullable=True)
     tags = Column(JSON, nullable=True)
     
     # Timestamps
@@ -34,6 +34,7 @@ class Device(Base):
         Index("idx_device_status_updated", "status", "updated_at"),
         Index("idx_device_name_type", "name", "device_type"),
     )
+
     
     def __repr__(self):
         return f"<Device(id={self.id}, name={self.name}, status={self.status})>"

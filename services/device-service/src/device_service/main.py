@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 import structlog
 
 from device_service.api import devices
@@ -66,8 +68,21 @@ async def health_check():
 @app.get("/ready")
 async def readiness_check():
     """Readiness check endpoint."""
-    # TODO: Check database connection, Redis, Kafka
-    return {"status": "ready", "service": "device-service"}
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"database not ready: {exc}")
+
+    if settings.KAFKA_REQUIRED and not event_bus.connected:
+        raise HTTPException(status_code=503, detail="kafka not ready")
+
+    return {
+        "status": "ready",
+        "service": "device-service",
+        "database": "ok",
+        "kafka_connected": event_bus.connected,
+    }
 
 
 @app.get("/metrics")

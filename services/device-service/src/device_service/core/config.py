@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = Field(
-        ...,
-        description="MySQL database connection string",
-        example="mysql+pymysql://user:password@localhost:3306/stack4things"
+        default="mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things",
+        description="Database connection string",
+        example="mysql+pymysql://user:password@localhost:3306/stack4things",
     )
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
@@ -28,10 +28,12 @@ class Settings(BaseSettings):
     
     # Kafka
     KAFKA_BOOTSTRAP_SERVERS: str = Field(
-        default="localhost:9092",
-        description="Kafka bootstrap servers"
+        default="kafka:9092",
+        description="Kafka bootstrap servers",
     )
     KAFKA_TOPIC_PREFIX: str = "stack4things"
+    KAFKA_ENABLED: bool = True
+    KAFKA_REQUIRED: bool = False
     
     # Logging
     LOG_LEVEL: str = "INFO"

@@ -2,7 +2,6 @@ from uuid import UUID, uuid4
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from sqlalchemy.orm import selectinload
 import structlog
 
 from device_service.models.device import Device
@@ -17,6 +16,21 @@ class DeviceService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _to_response(device: Device) -> DeviceResponse:
+        return DeviceResponse(
+            id=device.id,
+            name=device.name,
+            device_type=device.device_type,
+            description=device.description,
+            metadata=device.meta,
+            tags=device.tags,
+            status=device.status,
+            last_seen=device.last_seen,
+            created_at=device.created_at,
+            updated_at=device.updated_at,
+        )
     
     async def list_devices(
         self,
@@ -53,7 +67,7 @@ class DeviceService:
         devices = result.scalars().all()
         
         return DeviceListResponse(
-            items=[DeviceResponse.model_validate(d) for d in devices],
+            items=[self._to_response(d) for d in devices],
             total=total,
             page=page,
             page_size=page_size,
@@ -65,7 +79,7 @@ class DeviceService:
         result = await self.db.execute(query)
         device = result.scalar_one_or_none()
         if device:
-            return DeviceResponse.model_validate(device)
+            return self._to_response(device)
         return None
     
     async def create_device(self, device_data: DeviceCreate) -> DeviceResponse:
@@ -75,7 +89,7 @@ class DeviceService:
             name=device_data.name,
             device_type=device_data.device_type,
             description=device_data.description,
-            metadata=device_data.metadata,
+            meta=device_data.metadata,
             tags=device_data.tags,
             status="offline",
         )
@@ -96,7 +110,7 @@ class DeviceService:
             }
         )
         
-        return DeviceResponse.model_validate(device)
+        return self._to_response(device)
     
     async def update_device(
         self,
@@ -113,6 +127,8 @@ class DeviceService:
         
         # Update fields
         update_data = device_data.model_dump(exclude_unset=True)
+        if "metadata" in update_data:
+            update_data["meta"] = update_data.pop("metadata")
         for field, value in update_data.items():
             setattr(device, field, value)
         
@@ -130,7 +146,7 @@ class DeviceService:
             }
         )
         
-        return DeviceResponse.model_validate(device)
+        return self._to_response(device)
     
     async def delete_device(self, device_id: UUID) -> bool:
         """Delete device."""

@@ -1,42 +1,41 @@
 import pytest
 from httpx import AsyncClient
-from device_service.main import app
-from device_service.core.database import get_db, Base
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Set test env before importing app/settings.
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_device_service.db")
+os.environ.setdefault("KAFKA_ENABLED", "false")
+os.environ.setdefault("KAFKA_REQUIRED", "false")
 
-# Test database URL
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "mysql+pymysql://test:test@localhost:3306/test_stack4things"
-)
+from device_service.core.database import Base, get_db
+from device_service.main import app
+
+TEST_DATABASE_URL_SYNC = "sqlite:///./test_device_service.db"
+TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///./test_device_service.db"
 
 
 @pytest.fixture
 async def db_session():
     """Create test database session."""
-    # Create sync engine for testing
-    sync_engine = create_engine(TEST_DATABASE_URL)
+    sync_engine = create_engine(TEST_DATABASE_URL_SYNC)
     Base.metadata.create_all(sync_engine)
-    
-    # Create async engine
-    async_engine = create_async_engine(
-        TEST_DATABASE_URL.replace("mysql+pymysql://", "mysql+aiomysql://"),
-        pool_pre_ping=True,
+
+    async_engine = create_async_engine(TEST_DATABASE_URL_ASYNC, pool_pre_ping=True)
+    async_session = async_sessionmaker(
+        async_engine, class_=AsyncSession, expire_on_commit=False
     )
-    
-    async_session = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
-    
+
     async with async_session() as session:
         yield session
-    
+
     # Cleanup
     Base.metadata.drop_all(sync_engine)
     sync_engine.dispose()
     await async_engine.dispose()
+    if os.path.exists("./test_device_service.db"):
+        os.remove("./test_device_service.db")
 
 
 @pytest.fixture
@@ -168,4 +167,37 @@ async def test_health_check(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_not_found_returns_404(client):
+    """Test missing device returns 404."""
+    response = await client.get("/api/v2/devices/3b2bf08b-ec5e-4618-bf72-3b6e5f588888")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_devices_filter_and_pagination(client):
+    """Test filtering and pagination on list endpoint."""
+    await client.post(
+        "/api/v2/devices",
+        json={"name": "sensor-a", "device_type": "sensor", "description": "A"},
+    )
+    await client.post(
+        "/api/v2/devices",
+        json={"name": "camera-a", "device_type": "camera", "description": "B"},
+    )
+    await client.post(
+        "/api/v2/devices",
+        json={"name": "sensor-b", "device_type": "sensor", "description": "C"},
+    )
+
+    response = await client.get("/api/v2/devices?device_type=sensor&page=1&page_size=1")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page"] == 1
+    assert payload["page_size"] == 1
+    assert payload["total"] >= 2
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["device_type"] == "sensor"
 

@@ -1,8 +1,6 @@
-from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 import structlog
 
 from device_service.core.database import get_db
@@ -12,7 +10,6 @@ from device_service.api.schemas import (
     DeviceResponse,
     DeviceListResponse,
 )
-from device_service.models.device import Device
 from device_service.services.device_service import DeviceService
 
 logger = structlog.get_logger()

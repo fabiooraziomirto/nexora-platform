@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "execution-service"
+version = "0.1.0"
+description = "Stack4Things Execution Service"
+authors = ["Stack4Things Team"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+prometheus-client = "^0.19.0"
+sqlalchemy = "^2.0.23"
+pymysql = "^1.1.1"
+cryptography = "^41.0.7"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+httpx = "^0.25.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

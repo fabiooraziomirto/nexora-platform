@@ -1,148 +1,168 @@
 # Stack4Things v2.0
 
-**Modern IoT Device Management Platform** - Cloud-Native Microservices Architecture
+Cloud-native IoT platform re-engineering of IoTronic/Stack4Things, based on Docker microservices, with progressive OpenStack compatibility.
 
-## 🎯 Vision
+## Project Status
 
-Stack4Things v2.0 è una completa reingegnerizzazione della piattaforma IoTronic/Stack4Things con un'architettura moderna basata su microservizi cloud-native.
+- Version: `2.0.0-alpha`
+- Development stage: active
+- Runtime baseline: Python 3.11+, FastAPI, Docker Compose, Kubernetes
+- Current implementation focus: microservices stabilization, DB persistence, auth baseline, CI hardening
 
-## 🏗️ Architettura
+## Current Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     API Gateway (Kong)                      │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-┌───────▼────────┐  ┌────▼──────┐  ┌───────▼────────┐
-│  API Service   │  │  Web UI   │  │  gRPC Gateway  │
-│   (FastAPI)    │  │  (React)   │  │   (gRPC-Web)   │
-└───────┬────────┘  └───────────┘  └────────────────┘
-        │
-        │ Event Bus (Kafka/NATS)
-        │
-┌───────▼───────────────────────────────────────────────────┐
-│                    Core Microservices                     │
-├────────────────────────────────────────────────────────────┤
-│  Device │ Plugin │ Execution │ Network │ DNS │ Webservice│
-│  Fleet  │        │           │         │     │           │
-└───────┬───────────────────────────────────────────────────┘
-        │
-        │ WAMP Broker (Crossbar/NATS)
-        │
-┌───────▼───────────────────────────────────────────────────┐
-│          WAMP Agent Pool (Stateless, Auto-Scaling)        │
-└───────┬───────────────────────────────────────────────────┘
-        │
-        │ WSS/TLS
-        │
-┌───────▼───────────────────────────────────────────────────┐
-│              IoT Devices (Lightning Rod)                   │
-└────────────────────────────────────────────────────────────┘
-```
+- Core services:
+  - `device-service`
+  - `plugin-service`
+  - `execution-service`
+  - `network-service`
+  - `dns-service`
+  - `webservice-service`
+  - `fleet-service`
+- Shared libraries:
+  - `libraries/common` for shared utilities
+  - `libraries/sdk` for client-facing SDK work
+- Infrastructure:
+  - `docker-compose.dev.yml` for local orchestration
+  - Kubernetes manifests under `infrastructure/kubernetes`
 
-## 🛠️ Stack Tecnologico
+## Docker Runtime Map
 
-- **Runtime**: Python 3.11+
-- **Framework**: FastAPI
-- **Orchestration**: Kubernetes
-- **Infrastructure**: Crossplane (GitOps)
-- **Database**: MySQL/MariaDB 10.11+ (OpenStack Compatible)
-- **Cache**: Redis Cluster
-- **Message Broker**: Kafka / NATS
-- **API Gateway**: Kong / Envoy
-- **Authentication**: Keycloak (primary) + Keystone (fallback)
-- **OpenStack**: Full compatibility (2024.1 Antelope+)
-- **Monitoring**: Prometheus + Grafana + Tempo + Loki
-- **CI/CD**: GitLab CI / GitHub Actions
-- **Architectures**: AMD64 + ARM64 (multi-arch support)
+- `device-service` -> `http://localhost:8000`
+- `plugin-service` -> `http://localhost:8001`
+- `execution-service` -> `http://localhost:8002`
+- `network-service` -> `http://localhost:8003`
+- `dns-service` -> `http://localhost:8004`
+- `webservice-service` -> `http://localhost:8005`
+- `fleet-service` -> `http://localhost:8006`
 
-## 📁 Struttura Progetto
+Supporting services:
 
-```
-Stack4Things_v2.0/
-├── services/              # Microservizi
-│   ├── device-service/
-│   ├── plugin-service/
-│   ├── execution-service/
-│   ├── network-service/
-│   ├── dns-service/
-│   ├── webservice-service/
-│   └── fleet-service/
-├── libraries/            # Librerie condivise
-│   ├── common/           # Utilities comuni
-│   └── sdk/              # Client SDK
-├── infrastructure/       # Infrastructure as Code
-│   ├── kubernetes/      # K8s manifests
-│   ├── terraform/        # Terraform configs
-│   └── helm/            # Helm charts
-├── docs/                # Documentazione
-├── scripts/             # Utility scripts
-└── docker-compose.dev.yml  # Local development
-```
+- MySQL 8 (`localhost:3306`)
+- Redis 7 (`localhost:6379`)
+- Kafka + Zookeeper (`localhost:9092`, `localhost:2181`)
 
-## 🚀 Quick Start
+## API Baseline
 
-### Prerequisiti
+All core services expose:
 
+- `GET /health`
+- `GET /ready`
+- `GET /metrics`
+
+CRUD baseline endpoints:
+
+- Plugin: `POST/GET/DELETE /api/v2/plugins`
+- Execution: `POST/GET/DELETE /api/v2/executions`
+- Network: `POST/GET/DELETE /api/v2/ports`
+- DNS: `POST/GET/DELETE /api/v2/dns/records`
+- Webservice: `POST/GET/DELETE /api/v2/webservices`
+- Fleet: `POST/GET/DELETE /api/v2/fleets`
+
+Persistence status:
+
+- `device-service`: MySQL-backed
+- `plugin-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+- `execution-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+- `network-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+- `dns-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+- `webservice-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+- `fleet-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+
+## Auth and Access Baseline
+
+Implemented on core services:
+
+- Bearer token middleware (toggle via `AUTH_ENABLED`)
+- Development token support (`AUTH_DEV_TOKEN`)
+- JWT payload checks (`exp`, optional `iss` via `KEYCLOAK_ISSUER`)
+- Role gate for write operations (`AUTH_WRITE_ROLE`, default `writer`)
+
+Note: this is a baseline guardrail; full Keycloak validation, policy engine integration, and fine-grained RBAC are planned next.
+
+## Events Baseline
+
+Shared event contracts are defined in:
+
+- `libraries/common/src/common/events/contracts.py`
+
+Current contract model:
+
+- `ResourceEvent` with fields for source service, resource, action (`created|updated|deleted`), resource id, payload, timestamp
+
+## Shared Platform Utilities
+
+Database helpers:
+
+- Async/sync helpers in `libraries/common/src/common/database/database.py`
+- Service sync DB helpers in `libraries/common/src/common/database/service_db.py`
+
+Event bus helpers:
+
+- `libraries/common/src/common/events/event_bus.py`
+
+## Local Development
+
+Prerequisites:
+
+- Docker + Docker Compose
 - Python 3.11+
-- Docker & Docker Compose
-- Kubernetes cluster (minikube/kind per sviluppo)
-- kubectl
 
-### Setup Locale
+Run full stack:
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd Stack4Things_v2.0
-
-# Setup Python environment
-poetry install
-
-# Start local Kubernetes
-minikube start
-
-# Deploy infrastructure
-kubectl apply -f infrastructure/kubernetes/
-
-# Run services locally
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-## 📋 TODO List
+Quick smoke:
 
-Vedi [TODO_LIST.md](./TODO_LIST.md) per la lista completa delle attività.
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8001/health
+curl http://localhost:8002/health
+curl http://localhost:8003/health
+curl http://localhost:8004/health
+curl http://localhost:8005/health
+curl http://localhost:8006/health
+```
 
-## 📚 Documentazione
+Stop and clean:
 
-- [Architecture Decision Records](./docs/adr/)
-- [API Documentation](./docs/api/)
-- [Deployment Guide](./docs/deployment/)
-- [Developer Guide](./docs/developer/)
-- [Repository Setup Guide](./docs/REPOSITORY_SETUP.md)
+```bash
+docker compose -f docker-compose.dev.yml down -v
+```
 
-## 🤝 Contribuire
+## CI/CD
 
-1. Leggi [CONTRIBUTING.md](./CONTRIBUTING.md)
-2. Leggi [Repository Setup Guide](./docs/REPOSITORY_SETUP.md) per configurare il repository Git
-3. Crea un branch per la feature
-4. Commit changes seguendo [Conventional Commits](https://www.conventionalcommits.org/)
-5. Push e crea Pull Request/Merge Request
+Main workflow:
 
-## 📄 Licenza
+- Lint (`black`, `ruff`, `mypy`, pre-commit)
+- Test
+- Docker compose smoke
+- Build
+- Security scans
+- Deploy (main branch)
+
+Workflow file: `.github/workflows/ci.yml`
+
+## Contributing
+
+Recommended baseline workflow:
+
+1. Create a feature branch
+2. Implement incremental, testable changes
+3. Run local compose smoke before PR
+4. Keep commits coherent and reviewable
+5. Open PR with clear summary and test notes
+
+## Security Notes
+
+- Never commit secrets in repository files
+- Prefer env variables / secret managers
+- Keep dependency updates frequent
+- Use CI security scans as mandatory quality signal
+
+## License
 
 Apache License 2.0
-
-## 🔗 Link Utili
-
-- [Documentazione Completa](./docs/)
-- [TODO List](./TODO_LIST.md)
-- [Issue Tracker](link-to-issues)
-
----
-
-**Status**: 🚧 In Development
-**Version**: 2.0.0-alpha
 

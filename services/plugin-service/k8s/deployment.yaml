@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plugin-service
+  namespace: stack4things
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plugin-service
+  template:
+    metadata:
+      labels:
+        app: plugin-service
+    spec:
+      containers:
+        - name: plugin-service
+          image: ghcr.io/stack4things/plugin-service:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000

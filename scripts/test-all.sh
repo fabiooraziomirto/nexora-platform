@@ -237,6 +237,51 @@ for script in "${SETUP_SCRIPTS[@]}"; do
 done
 echo ""
 
+# 11. Docker Compose microservices smoke test
+echo "11. Docker Compose microservices smoke test..."
+if command -v docker &> /dev/null; then
+    cd "$PROJECT_ROOT"
+    if docker compose -f docker-compose.dev.yml up -d --build &>/dev/null; then
+        test_pass "Docker compose stack started"
+        sleep 10
+
+        SERVICES=(
+            "http://localhost:8000/health"
+            "http://localhost:8001/health"
+            "http://localhost:8002/health"
+            "http://localhost:8003/health"
+            "http://localhost:8004/health"
+            "http://localhost:8005/health"
+            "http://localhost:8006/health"
+        )
+
+        for endpoint in "${SERVICES[@]}"; do
+            if curl -fsS "$endpoint" &>/dev/null; then
+                test_pass "Service healthy: $endpoint"
+            else
+                test_fail "Service not healthy: $endpoint"
+            fi
+        done
+
+        if PLUGIN_ID=$(curl -fsS -X POST "http://localhost:8001/api/v2/plugins" -H "Content-Type: application/json" -d '{"name":"smoke-plugin"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null); then
+            if curl -fsS "http://localhost:8001/api/v2/plugins/$PLUGIN_ID" &>/dev/null; then
+                test_pass "Plugin CRUD smoke OK"
+            else
+                test_fail "Plugin CRUD smoke failed"
+            fi
+        else
+            test_fail "Plugin creation smoke failed"
+        fi
+
+        docker compose -f docker-compose.dev.yml down -v &>/dev/null || true
+    else
+        test_fail "Failed to start docker compose stack"
+    fi
+else
+    test_warn "Docker not installed, skipping compose smoke test"
+fi
+echo ""
+
 # Summary
 echo "=========================================="
 echo "Test Summary"

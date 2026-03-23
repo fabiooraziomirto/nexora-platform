@@ -5,6 +5,7 @@ Health check utilities.
 from typing import Dict, Any, Optional, Callable, List
 from enum import Enum
 import asyncio
+from sqlalchemy import text
 
 from common.logging import get_logger
 
@@ -117,7 +118,7 @@ async def check_database(db_session_factory) -> bool:
     """Check database connection."""
     try:
         async for session in db_session_factory():
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
             return True
     except Exception:
         return False

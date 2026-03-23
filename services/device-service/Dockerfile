@@ -23,7 +23,7 @@ COPY pyproject.toml poetry.lock* ./
 
 # Install dependencies
 RUN poetry config virtualenvs.create false \
-    && poetry install --no-dev --no-interaction --no-ansi
+    && poetry install --no-dev --no-interaction --no-ansi --no-root
 
 # Final stage
 FROM --platform=$TARGETPLATFORM python:3.11-slim
@@ -45,6 +45,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY . .
+ENV PYTHONPATH=/app/src
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
