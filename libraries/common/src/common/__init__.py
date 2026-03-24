@@ -26,6 +26,7 @@ from common.metrics import Metrics, get_metrics
 from common.tenancy import TenantContext, extract_tenant_id
 from common.api_versioning import DeprecationPolicy, build_deprecation_headers
 from common.audit import write_audit_event
+from common.openstack import KeystoneAdapter, KeystoneTokenInfo, NeutronAdapter, NovaAdapter, GlanceCinderAdapter
 
 __all__ = [
     "__version__",
@@ -59,4 +60,9 @@ __all__ = [
     "DeprecationPolicy",
     "build_deprecation_headers",
     "write_audit_event",
+    "KeystoneAdapter",
+    "KeystoneTokenInfo",
+    "NeutronAdapter",
+    "NovaAdapter",
+    "GlanceCinderAdapter",
 ]

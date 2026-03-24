@@ -17,10 +17,7 @@ jobs:
 
       - name: Validate OpenAPI files
         run: |
-          if ls docs/openapi/*.yaml >/dev/null 2>&1; then
-            for f in docs/openapi/*.yaml; do
-              redocly lint "$f"
-            done
-          else
-            echo "No OpenAPI files found in docs/openapi; skipping."
-          fi
+          ls docs/openapi/*.yaml >/dev/null 2>&1
+          for f in docs/openapi/*.yaml; do
+            redocly lint "$f"
+          done

@@ -8,12 +8,17 @@ on:
 jobs:
   synthetic-checks:
     runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ secrets.STACK4THINGS_SYNTHETIC_BASE_URL }}
     steps:
       - name: Basic uptime checks
         run: |
           set -e
+          test -n "${BASE_URL}"
           for url in \
-            https://example.invalid/api/v2/devices \
-            https://example.invalid/api/v2/plugins; do
-            curl -fsS "$url" || true
+            "${BASE_URL}/api/v2/devices" \
+            "${BASE_URL}/api/v2/plugins" \
+            "${BASE_URL}/api/v2/executions" \
+            "${BASE_URL}/api/v2/ports"; do
+            curl -fsS "$url" >/dev/null
           done

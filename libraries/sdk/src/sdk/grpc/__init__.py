@@ -1,12 +1,10 @@
 """
-gRPC proto definitions (placeholder).
+gRPC package entrypoint.
 
-This module will contain generated proto stubs once proto files are defined.
+Proto stubs can be generated under sdk.grpc.proto in a later phase.
+Current client exposes an HTTP fallback-compatible interface.
 """
 
-# TODO: Generate proto stubs from .proto files
-# Example:
-# from sdk.grpc.proto import device_pb2
-# from sdk.grpc.proto import device_pb2_grpc
+from sdk.grpc.client import Stack4ThingsGRPCClient
 
-__all__ = []
+__all__ = ["Stack4ThingsGRPCClient"]
