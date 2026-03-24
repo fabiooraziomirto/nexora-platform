@@ -26,6 +26,35 @@ Cloud-native IoT platform re-engineering of IoTronic/Stack4Things, based on Dock
   - `docker-compose.dev.yml` for local orchestration
   - Kubernetes manifests under `infrastructure/kubernetes`
 
+```mermaid
+flowchart LR
+    Client[Clients / Operators] --> Gateway[API Gateway]
+    Gateway --> Device[device-service]
+    Gateway --> Plugin[plugin-service]
+    Gateway --> Execution[execution-service]
+    Gateway --> Network[network-service]
+    Gateway --> DNS[dns-service]
+    Gateway --> Webservice[webservice-service]
+    Gateway --> Fleet[fleet-service]
+
+    Device --> MySQL[(MySQL)]
+    Plugin --> MySQL
+    Execution --> MySQL
+    Network --> MySQL
+    DNS --> MySQL
+    Webservice --> MySQL
+    Fleet --> MySQL
+
+    Device --> Kafka[(Kafka)]
+    Execution --> Kafka
+    Network --> Kafka
+    DNS --> Kafka
+    Webservice --> Kafka
+    Fleet --> Kafka
+
+    Device --> Redis[(Redis)]
+```
+
 ## Docker Runtime Map
 
 - `device-service` -> `http://localhost:8000`
@@ -90,6 +119,23 @@ Current contract model:
 
 - `ResourceEvent` with fields for source service, resource, action (`created|updated|deleted`), resource id, payload, timestamp
 
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as API Gateway
+    participant S as Core Service
+    participant DB as MySQL
+    participant K as Kafka
+
+    C->>G: POST /api/v2/<resource>
+    G->>S: Forward request
+    S->>DB: Persist entity
+    DB-->>S: Commit OK
+    S->>K: Publish ResourceEvent(created)
+    S-->>G: 201 + payload
+    G-->>C: 201 Created
+```
+
 ## Shared Platform Utilities
 
 Database helpers:
@@ -144,6 +190,41 @@ Main workflow:
 - Deploy (main branch)
 
 Workflow file: `.github/workflows/ci.yml`
+
+```mermaid
+flowchart TD
+    A[Push / PR] --> B[Lint]
+    A --> C[Service Lint Matrix]
+    A --> D[Test]
+    A --> E[Service Test Matrix]
+    B --> F[Compose Smoke]
+    C --> F
+    D --> F
+    E --> F
+    B --> G[Security Scans]
+    C --> H[Build Images]
+    D --> H
+    E --> H
+    G --> I{main branch push?}
+    H --> I
+    F --> I
+    I -->|yes| J[Deploy]
+    I -->|no| K[Stop at CI validation]
+```
+
+## Delivery Workflows
+
+```mermaid
+flowchart LR
+    Dev[Developer] --> Branch[Feature branch]
+    Branch --> LocalTest[Local compose + smoke]
+    LocalTest --> PR[Pull request]
+    PR --> CI[CI full pipeline]
+    CI --> Review[Code review]
+    Review --> Merge[Merge to main]
+    Merge --> Release[Alpha release checklist]
+    Release --> Deploy[Deploy to Kubernetes]
+```
 
 ## Contributing
 
