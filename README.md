@@ -301,4 +301,12 @@ Apache License 2.0
 - SLO alert rules in `infrastructure/kubernetes/monitoring/prometheus/slo-rules.yaml`.
 - Gateway rate-limit policy in `infrastructure/kubernetes/kong/kong-rate-limit.yaml`.
 - Chaos, backup/restore and performance scripts in `scripts/chaos-drill.sh`, `scripts/backup-restore-validate.sh`, `scripts/perf-baseline.sh`.
+- End-to-end post-alpha validation runner in `scripts/postalpha-validation.sh`.
+- Scheduled/manual CI suite in `.github/workflows/postalpha-validation.yml`.
+
+### Run Full Post-Alpha Suite Locally
+
+```bash
+bash scripts/postalpha-validation.sh
+```
 
