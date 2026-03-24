@@ -166,3 +166,47 @@ Recommended baseline workflow:
 
 Apache License 2.0
 
+## Operational Runbooks
+
+### Incident Response
+
+1. Identify impacted services with `/health`, `/ready`, `/metrics`.
+2. Verify dependencies in order: MySQL, Kafka, Redis, then core services.
+3. Inspect recent logs filtered by `x-correlation-id` and `x-trace-id`.
+4. Isolate failing component and execute targeted restart.
+5. Validate recovery with cross-service integration and contract tests.
+
+### Rollback Procedure
+
+1. Select previous stable image tag for impacted service.
+2. Roll back deployment in Kubernetes or compose tag override.
+3. Validate read/write endpoints and event publish after rollback.
+4. Re-run smoke and contract suites before closing incident.
+
+### Service Restart
+
+- Docker: `docker compose -f docker-compose.dev.yml restart <service>`
+- Kubernetes: `kubectl rollout restart deployment/<service> -n stack4things`
+- Always validate `/ready` before reopening traffic.
+
+### DB Migration Failure
+
+1. Stop write traffic to the impacted service.
+2. Check Alembic history and current revision.
+3. If partial migration: apply controlled downgrade to previous revision.
+4. Restore from latest snapshot if data integrity is at risk.
+5. Re-run migration in staging, then production with maintenance window.
+
+## Alpha Release Go/No-Go Checklist
+
+- [ ] All core services healthy in Docker and Kubernetes.
+- [ ] Cross-service flow (`device -> network -> dns -> webservice`) passes.
+- [ ] API contract tests pass for all `/api/v2` endpoints.
+- [ ] Security gates (Bandit, Safety, Snyk, Trivy) pass with high-severity blocking.
+- [ ] CI lint and tests pass (monorepo + service matrix).
+- [ ] Kafka event publishing validated with retry and traceability.
+- [ ] Alembic migrations validated on clean and existing databases.
+- [ ] Resource limits/probes/HPA applied to core deployments.
+- [ ] Runbook drills completed (incident, rollback, restart, migration failure).
+- [ ] Release notes and deployment approval signed off.
+

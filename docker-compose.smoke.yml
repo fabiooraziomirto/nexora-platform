@@ -1,0 +1,23 @@
+services:
+  mysql:
+    env_file: [.env.smoke]
+  redis:
+    env_file: [.env.smoke]
+  zookeeper:
+    env_file: [.env.smoke]
+  kafka:
+    env_file: [.env.smoke]
+  device-service:
+    env_file: [.env.smoke]
+  plugin-service:
+    env_file: [.env.smoke]
+  execution-service:
+    env_file: [.env.smoke]
+  network-service:
+    env_file: [.env.smoke]
+  dns-service:
+    env_file: [.env.smoke]
+  webservice-service:
+    env_file: [.env.smoke]
+  fleet-service:
+    env_file: [.env.smoke]

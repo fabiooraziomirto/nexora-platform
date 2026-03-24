@@ -3,11 +3,12 @@ from typing import Any
 import base64
 import json
 import time
+import logging
 from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.responses import JSONResponse
-from prometheus_client import generate_latest
+from prometheus_client import Counter, Histogram, generate_latest
 from sqlalchemy import Column, String, create_engine, func, select
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -17,13 +18,21 @@ app = FastAPI(
     version="0.1.0",
 )
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./plugin_service.db")
+DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
 Base = declarative_base()
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": DB_CONNECT_TIMEOUT_SECONDS} if "mysql" in DATABASE_URL else {"timeout": DB_CONNECT_TIMEOUT_SECONDS},
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 AUTH_DEV_TOKEN = os.getenv("AUTH_DEV_TOKEN", "dev-token")
 KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER", "")
 AUTH_WRITE_ROLE = os.getenv("AUTH_WRITE_ROLE", "writer")
+logger = logging.getLogger("plugin-service")
+HTTP_REQUESTS_TOTAL = Counter("s4t_http_requests_total", "Total HTTP requests", ["service", "method", "path", "status"])
+HTTP_REQUEST_DURATION_SECONDS = Histogram("s4t_http_request_duration_seconds", "HTTP request duration", ["service", "method", "path"])
 
 
 class Plugin(Base):
@@ -85,6 +94,21 @@ async def auth_middleware(request: Request, call_next):
             return JSONResponse(status_code=403, content={"detail": "forbidden"})
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def observability_middleware(request: Request, call_next):
+    trace_id = request.headers.get("x-trace-id") or uuid4().hex
+    correlation_id = request.headers.get("x-correlation-id", trace_id)
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - started
+    response.headers["x-trace-id"] = trace_id
+    response.headers["x-correlation-id"] = correlation_id
+    HTTP_REQUESTS_TOTAL.labels("plugin-service", request.method, request.url.path, str(response.status_code)).inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels("plugin-service", request.method, request.url.path).observe(elapsed)
+    logger.info(json.dumps({"service": "plugin-service", "trace_id": trace_id, "correlation_id": correlation_id, "method": request.method, "path": request.url.path, "status": response.status_code, "duration_s": round(elapsed, 6)}))
+    return response
 
 
 @app.get("/health")

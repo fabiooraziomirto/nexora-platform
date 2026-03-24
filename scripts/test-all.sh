@@ -273,6 +273,18 @@ if command -v docker &> /dev/null; then
             test_fail "Plugin creation smoke failed"
         fi
 
+        if bash "$PROJECT_ROOT/scripts/integration-cross-service.sh" &>/dev/null; then
+            test_pass "Cross-service integration flow OK"
+        else
+            test_fail "Cross-service integration flow failed"
+        fi
+
+        if python3 "$PROJECT_ROOT/scripts/contract-tests-api.py" &>/dev/null; then
+            test_pass "API contract tests OK"
+        else
+            test_fail "API contract tests failed"
+        fi
+
         docker compose -f docker-compose.dev.yml down -v &>/dev/null || true
     else
         test_fail "Failed to start docker compose stack"

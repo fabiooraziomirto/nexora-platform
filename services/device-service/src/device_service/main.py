@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 import structlog
+from uuid import uuid4
+import time
 
 from device_service.api import devices
 from device_service.core.config import settings
@@ -57,6 +60,27 @@ app.add_middleware(
 
 # Include routers
 app.include_router(devices.router, prefix="/api/v2", tags=["devices"])
+
+
+@app.middleware("http")
+async def trace_context_middleware(request: Request, call_next):
+    trace_id = request.headers.get("x-trace-id") or uuid4().hex
+    correlation_id = request.headers.get("x-correlation-id", trace_id)
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - started
+    response.headers["x-trace-id"] = trace_id
+    response.headers["x-correlation-id"] = correlation_id
+    logger.info(
+        "request_completed",
+        trace_id=trace_id,
+        correlation_id=correlation_id,
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_s=round(elapsed, 6),
+    )
+    return response
 
 
 @app.get("/health")

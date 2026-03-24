@@ -1,5 +1,8 @@
 services:
   mysql:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     image: mysql:8.0
     container_name: stack4things-mysql
     environment:
@@ -18,6 +21,9 @@ services:
       retries: 5
 
   redis:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     image: redis:7-alpine
     container_name: stack4things-redis
     ports:
@@ -31,6 +37,9 @@ services:
       retries: 5
 
   zookeeper:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: stack4things-zookeeper
     environment:
@@ -40,6 +49,9 @@ services:
       - "2181:2181"
 
   kafka:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     image: confluentinc/cp-kafka:7.5.0
     container_name: stack4things-kafka
     depends_on:
@@ -61,6 +73,9 @@ services:
       retries: 5
 
   device-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/device-service
       dockerfile: Dockerfile
@@ -88,6 +103,9 @@ services:
       retries: 5
 
   plugin-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/plugin-service
       dockerfile: Dockerfile
@@ -106,6 +124,9 @@ services:
       retries: 5
 
   execution-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/execution-service
       dockerfile: Dockerfile
@@ -119,6 +140,9 @@ services:
       - "8002:8000"
 
   network-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/network-service
       dockerfile: Dockerfile
@@ -132,6 +156,9 @@ services:
       - "8003:8000"
 
   dns-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/dns-service
       dockerfile: Dockerfile
@@ -145,6 +172,9 @@ services:
       - "8004:8000"
 
   webservice-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/webservice-service
       dockerfile: Dockerfile
@@ -158,6 +188,9 @@ services:
       - "8005:8000"
 
   fleet-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
     build:
       context: ./services/fleet-service
       dockerfile: Dockerfile

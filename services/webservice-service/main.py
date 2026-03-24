@@ -3,23 +3,41 @@ from typing import Any
 import base64
 import json
 import time
+import asyncio
+import logging
 from uuid import uuid4
+import aiokafka
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.responses import JSONResponse
-from prometheus_client import generate_latest
+from prometheus_client import Counter, Histogram, generate_latest
 from sqlalchemy import Column, Integer, String, create_engine, func, select
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 app = FastAPI(title="Webservice Service", version="0.1.0")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./webservice_service.db")
+DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
 Base = declarative_base()
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": DB_CONNECT_TIMEOUT_SECONDS} if "mysql" in DATABASE_URL else {"timeout": DB_CONNECT_TIMEOUT_SECONDS},
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 AUTH_DEV_TOKEN = os.getenv("AUTH_DEV_TOKEN", "dev-token")
 KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER", "")
 AUTH_WRITE_ROLE = os.getenv("AUTH_WRITE_ROLE", "writer")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
+KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
+KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
+KAFKA_REQUIRED = os.getenv("KAFKA_REQUIRED", "false").lower() == "true"
+KAFKA_RETRY_ATTEMPTS = int(os.getenv("KAFKA_RETRY_ATTEMPTS", "3"))
+KAFKA_RETRY_DELAY_SECONDS = float(os.getenv("KAFKA_RETRY_DELAY_SECONDS", "0.5"))
+logger = logging.getLogger("webservice-service")
+producer: aiokafka.AIOKafkaProducer | None = None
+HTTP_REQUESTS_TOTAL = Counter("s4t_http_requests_total", "Total HTTP requests", ["service", "method", "path", "status"])
+HTTP_REQUEST_DURATION_SECONDS = Histogram("s4t_http_request_duration_seconds", "HTTP request duration", ["service", "method", "path"])
 
 
 class Webservice(Base):
@@ -32,8 +50,56 @@ class Webservice(Base):
 
 
 @app.on_event("startup")
-def startup() -> None:
+async def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    global producer
+    if not KAFKA_ENABLED:
+        logger.info("Kafka publisher disabled by configuration")
+        return
+    producer = aiokafka.AIOKafkaProducer(
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS.split(","),
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+    )
+    try:
+        await producer.start()
+    except Exception:
+        logger.exception("Failed to connect Kafka producer")
+        producer = None
+        if KAFKA_REQUIRED:
+            raise
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    global producer
+    if producer:
+        await producer.stop()
+        producer = None
+
+
+async def _publish_event(action: str, resource_id: str, payload: dict[str, Any]) -> None:
+    if not producer:
+        logger.warning("Kafka producer not available, skipping event", extra={"action": action, "resource_id": resource_id})
+        return
+    event_type = f"webservice.{action}"
+    topic = f"{KAFKA_TOPIC_PREFIX}.{event_type}"
+    event = {
+        "event_type": event_type,
+        "service": "webservice-service",
+        "resource": "webservice",
+        "action": action,
+        "resource_id": resource_id,
+        "payload": payload,
+        "occurred_at": time.time(),
+    }
+    for attempt in range(1, KAFKA_RETRY_ATTEMPTS + 1):
+        try:
+            await producer.send_and_wait(topic, event, key=resource_id.encode("utf-8"))
+            return
+        except Exception:
+            logger.exception("Kafka publish failed", extra={"attempt": attempt, "topic": topic, "resource_id": resource_id})
+            if attempt < KAFKA_RETRY_ATTEMPTS:
+                await asyncio.sleep(KAFKA_RETRY_DELAY_SECONDS * attempt)
 
 
 def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
@@ -84,6 +150,21 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def observability_middleware(request: Request, call_next):
+    trace_id = request.headers.get("x-trace-id") or uuid4().hex
+    correlation_id = request.headers.get("x-correlation-id", trace_id)
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - started
+    response.headers["x-trace-id"] = trace_id
+    response.headers["x-correlation-id"] = correlation_id
+    HTTP_REQUESTS_TOTAL.labels("webservice-service", request.method, request.url.path, str(response.status_code)).inc()
+    HTTP_REQUEST_DURATION_SECONDS.labels("webservice-service", request.method, request.url.path).observe(elapsed)
+    logger.info(json.dumps({"service": "webservice-service", "trace_id": trace_id, "correlation_id": correlation_id, "method": request.method, "path": request.url.path, "status": response.status_code, "duration_s": round(elapsed, 6)}))
+    return response
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "healthy", "service": "webservice-service"}
@@ -121,7 +202,9 @@ async def create_webservice(payload: dict[str, Any]) -> dict[str, Any]:
     with SessionLocal() as db:
         db.add(webservice)
         db.commit()
-    return {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+    response = {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+    await _publish_event("created", webservice.id, response)
+    return response
 
 
 @app.get("/api/v2/webservices/{webservice_id}")
@@ -139,5 +222,7 @@ async def delete_webservice(webservice_id: str) -> None:
         webservice = db.get(Webservice, webservice_id)
         if not webservice:
             raise HTTPException(status_code=404, detail="webservice not found")
+        deleted_payload = {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
         db.delete(webservice)
         db.commit()
+    await _publish_event("deleted", webservice_id, deleted_payload)

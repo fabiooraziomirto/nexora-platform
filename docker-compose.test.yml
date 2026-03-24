@@ -1,0 +1,23 @@
+services:
+  mysql:
+    env_file: [.env.test]
+  redis:
+    env_file: [.env.test]
+  zookeeper:
+    env_file: [.env.test]
+  kafka:
+    env_file: [.env.test]
+  device-service:
+    env_file: [.env.test]
+  plugin-service:
+    env_file: [.env.test]
+  execution-service:
+    env_file: [.env.test]
+  network-service:
+    env_file: [.env.test]
+  dns-service:
+    env_file: [.env.test]
+  webservice-service:
+    env_file: [.env.test]
+  fleet-service:
+    env_file: [.env.test]

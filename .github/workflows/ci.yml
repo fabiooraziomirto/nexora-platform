@@ -47,6 +47,38 @@ jobs:
       - name: Run pre-commit hooks
         run: poetry run pre-commit run --all-files
 
+  service-lint:
+    name: Service Lint (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - services/device-service
+          - services/plugin-service
+          - services/execution-service
+          - services/network-service
+          - services/dns-service
+          - services/webservice-service
+          - services/fleet-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+      - name: Install service deps
+        working-directory: ${{ matrix.service }}
+        run: poetry install --no-interaction --no-ansi
+      - name: Run ruff
+        working-directory: ${{ matrix.service }}
+        run: poetry run ruff check .
+
   test:
     name: Testing
     runs-on: ubuntu-latest
@@ -131,10 +163,47 @@ jobs:
           flags: common-library
           name: common-library-coverage
 
+  service-tests:
+    name: Service Tests (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: services/plugin-service
+            test_cmd: poetry run pytest -q
+          - service: services/execution-service
+            test_cmd: poetry run pytest -q
+          - service: services/network-service
+            test_cmd: poetry run pytest -q
+          - service: services/dns-service
+            test_cmd: poetry run pytest -q
+          - service: services/webservice-service
+            test_cmd: poetry run pytest -q
+          - service: services/fleet-service
+            test_cmd: poetry run pytest -q
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+      - name: Install deps
+        working-directory: ${{ matrix.service }}
+        run: poetry install --no-interaction --no-ansi
+      - name: Run tests
+        working-directory: ${{ matrix.service }}
+        run: ${{ matrix.test_cmd }}
+
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, service-tests, service-lint]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     strategy:
       matrix:
@@ -224,7 +293,6 @@ jobs:
 
       - name: Run Snyk security scan
         uses: snyk/actions/python@master
-        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
@@ -237,7 +305,6 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-        continue-on-error: true
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v2
@@ -248,7 +315,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: [lint, test, build, security]
+    needs: [lint, test, service-tests, service-lint, build, security]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
@@ -273,7 +340,7 @@ jobs:
   compose-smoke:
     name: Docker Compose Smoke
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, service-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -319,6 +386,12 @@ jobs:
 
           fleet_id=$(curl -fsS -X POST http://localhost:8006/api/v2/fleets -H 'Content-Type: application/json' -d '{"name":"ci-fleet"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
           curl -fsS "http://localhost:8006/api/v2/fleets/${fleet_id}" >/dev/null
+
+      - name: Run cross-service integration flow
+        run: bash scripts/integration-cross-service.sh
+
+      - name: Run API contract tests
+        run: python3 scripts/contract-tests-api.py
 
       - name: Show compose status
         if: always()
