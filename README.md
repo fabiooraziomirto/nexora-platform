@@ -1,30 +1,25 @@
 # Stack4Things v2.0
 
-Cloud-native IoT platform re-engineering of IoTronic/Stack4Things, based on Docker microservices, with progressive OpenStack compatibility.
+Stack4Things v2.0 is a cloud-native re-engineering of IoTronic/Stack4Things: microservice-first, Docker/Kubernetes native, event-driven, and designed to preserve OpenStack interoperability where needed.
 
-## Project Status
+This README is intentionally detailed to support handover and onboarding of external contributors without prior project context.
+
+## 1) Mission and Scope
+
+- Build a modular IoT control platform that can run independently or integrate with OpenStack ecosystems.
+- Replace tightly coupled legacy patterns with service boundaries, explicit contracts, CI/CD quality gates, and operational runbooks.
+- Keep an architecture that is evolvable: every major capability should be implementable as an adapter or independent service.
+
+## 2) Current Maturity
 
 - Version: `2.0.0-alpha`
-- Development stage: active
-- Runtime baseline: Python 3.11+, FastAPI, Docker Compose, Kubernetes
-- Current implementation focus: microservices stabilization, DB persistence, auth baseline, CI hardening
+- Runtime: `Python 3.11+`, `FastAPI`, `Docker Compose`, `Kubernetes`
+- Core posture: DB-backed services, health/readiness/metrics endpoints, event contracts, CI baseline, deployment manifests.
+- OpenStack posture: adapter and integration scaffolding present; full production parity with original Stack4Things still requires iterative hardening.
 
-## Current Architecture
+## 3) System Architecture
 
-- Core services:
-  - `device-service`
-  - `plugin-service`
-  - `execution-service`
-  - `network-service`
-  - `dns-service`
-  - `webservice-service`
-  - `fleet-service`
-- Shared libraries:
-  - `libraries/common` for shared utilities
-  - `libraries/sdk` for client-facing SDK work
-- Infrastructure:
-  - `docker-compose.dev.yml` for local orchestration
-  - Kubernetes manifests under `infrastructure/kubernetes`
+### Logical View
 
 ```mermaid
 flowchart LR
@@ -55,7 +50,7 @@ flowchart LR
     Device --> Redis[(Redis)]
 ```
 
-## Docker Runtime Map
+### Runtime Topology (Local)
 
 - `device-service` -> `http://localhost:8000`
 - `plugin-service` -> `http://localhost:8001`
@@ -64,14 +59,54 @@ flowchart LR
 - `dns-service` -> `http://localhost:8004`
 - `webservice-service` -> `http://localhost:8005`
 - `fleet-service` -> `http://localhost:8006`
+- `mysql` -> `localhost:3306`
+- `redis` -> `localhost:6379`
+- `kafka` -> `localhost:9092`
+- `zookeeper` -> `localhost:2181`
 
-Supporting services:
+### Request-to-Event Flow
 
-- MySQL 8 (`localhost:3306`)
-- Redis 7 (`localhost:6379`)
-- Kafka + Zookeeper (`localhost:9092`, `localhost:2181`)
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as API Gateway
+    participant S as Service
+    participant DB as MySQL
+    participant K as Kafka
 
-## API Baseline
+    C->>G: POST /api/v2/<resource>
+    G->>S: Forward request
+    S->>DB: Persist transaction
+    DB-->>S: Commit OK
+    S->>K: Publish ResourceEvent(created)
+    S-->>G: 201 + payload
+    G-->>C: 201 Created
+```
+
+## 4) Service Catalog
+
+### Core Services
+
+- `device-service`: device inventory and lifecycle primitives.
+- `plugin-service`: plugin metadata lifecycle.
+- `execution-service`: command/execution orchestration primitives.
+- `network-service`: network port abstractions.
+- `dns-service`: DNS record lifecycle.
+- `webservice-service`: endpoint publication metadata.
+- `fleet-service`: grouping and fleet metadata.
+
+### Shared Libraries
+
+- `libraries/common`: configuration, DB helpers, events, metrics, logging, auth/policy adapters, OpenStack adapters.
+- `libraries/sdk`: client-side SDK primitives (REST + evolving gRPC support).
+
+### Platform Assets
+
+- `infrastructure/kubernetes`: deployment manifests, monitoring, policy, gateway, mesh, secrets, progressive rollout assets.
+- `scripts`: setup/testing/operations automation.
+- `.github/workflows`: CI/CD and governance pipelines.
+
+## 5) API Contract Baseline
 
 All core services expose:
 
@@ -81,115 +116,112 @@ All core services expose:
 
 CRUD baseline endpoints:
 
-- Plugin: `POST/GET/DELETE /api/v2/plugins`
-- Execution: `POST/GET/DELETE /api/v2/executions`
-- Network: `POST/GET/DELETE /api/v2/ports`
-- DNS: `POST/GET/DELETE /api/v2/dns/records`
-- Webservice: `POST/GET/DELETE /api/v2/webservices`
-- Fleet: `POST/GET/DELETE /api/v2/fleets`
+- `plugin-service`: `POST/GET/DELETE /api/v2/plugins`
+- `execution-service`: `POST/GET/DELETE /api/v2/executions`
+- `network-service`: `POST/GET/DELETE /api/v2/ports`
+- `dns-service`: `POST/GET/DELETE /api/v2/dns/records`
+- `webservice-service`: `POST/GET/DELETE /api/v2/webservices`
+- `fleet-service`: `POST/GET/DELETE /api/v2/fleets`
 
-Persistence status:
+## 6) Data, Events, and Reliability
 
-- `device-service`: MySQL-backed
-- `plugin-service`: DB-backed (MySQL in Docker, SQLite fallback local)
-- `execution-service`: DB-backed (MySQL in Docker, SQLite fallback local)
-- `network-service`: DB-backed (MySQL in Docker, SQLite fallback local)
-- `dns-service`: DB-backed (MySQL in Docker, SQLite fallback local)
-- `webservice-service`: DB-backed (MySQL in Docker, SQLite fallback local)
-- `fleet-service`: DB-backed (MySQL in Docker, SQLite fallback local)
+### Persistence
 
-## Auth and Access Baseline
+- Core services run MySQL-backed in Docker/K8s environments.
+- Local fallback paths may use SQLite for fast testing.
 
-Implemented on core services:
+### Eventing
 
-- Bearer token middleware (toggle via `AUTH_ENABLED`)
-- Development token support (`AUTH_DEV_TOKEN`)
-- JWT payload checks (`exp`, optional `iss` via `KEYCLOAK_ISSUER`)
-- Role gate for write operations (`AUTH_WRITE_ROLE`, default `writer`)
+- Shared event contract in `libraries/common/src/common/events/contracts.py`.
+- Contract includes `event_type`, `service`, `resource`, `action`, `resource_id`, `payload`, `occurred_at`.
+- Publish retry and structured logging are present on core publishers.
 
-Note: this is a baseline guardrail; full Keycloak validation, policy engine integration, and fine-grained RBAC are planned next.
+### Reliability Building Blocks
 
-## Events Baseline
+- Idempotency, outbox, and DLQ primitives exist in `libraries/common/src/common/events`.
+- Replay tooling exists in `scripts/event-replay.py`.
+- Runtime hardening should continue by wiring these primitives into all write/event paths.
 
-Shared event contracts are defined in:
+## 7) Auth, Policy, and OpenStack Interop
 
-- `libraries/common/src/common/events/contracts.py`
+### Current Auth Baseline
 
-Current contract model:
+- Bearer middleware in core services.
+- Dev token fallback is available for local workflows.
+- JWT payload checks and write-role guardrail implemented.
 
-- `ResourceEvent` with fields for source service, resource, action (`created|updated|deleted`), resource id, payload, timestamp
+### Shared Auth/Policy Modules
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant G as API Gateway
-    participant S as Core Service
-    participant DB as MySQL
-    participant K as Kafka
+- `libraries/common/src/common/auth/oidc.py`
+- `libraries/common/src/common/auth/policy_engine.py`
 
-    C->>G: POST /api/v2/<resource>
-    G->>S: Forward request
-    S->>DB: Persist entity
-    DB-->>S: Commit OK
-    S->>K: Publish ResourceEvent(created)
-    S-->>G: 201 + payload
-    G-->>C: 201 Created
-```
+### OpenStack Adapter Layer
 
-## Shared Platform Utilities
+- `libraries/common/src/common/openstack/keystone_adapter.py`
+- `libraries/common/src/common/openstack/neutron_adapter.py`
+- `libraries/common/src/common/openstack/nova_adapter.py`
+- `libraries/common/src/common/openstack/glance_cinder_adapter.py`
 
-Database helpers:
+These adapters provide interoperability hooks while preserving service modularity.
 
-- Async/sync helpers in `libraries/common/src/common/database/database.py`
-- Service sync DB helpers in `libraries/common/src/common/database/service_db.py`
+## 8) Local Development Guide
 
-Event bus helpers:
-
-- `libraries/common/src/common/events/event_bus.py`
-
-## Local Development
-
-Prerequisites:
+### Prerequisites
 
 - Docker + Docker Compose
 - Python 3.11+
+- Optional: Poetry, `hey`, kubectl
 
-Run full stack:
+### Start Stack
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-Quick smoke:
+### Smoke Check
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8001/health
-curl http://localhost:8002/health
-curl http://localhost:8003/health
-curl http://localhost:8004/health
-curl http://localhost:8005/health
-curl http://localhost:8006/health
+curl -fsS http://localhost:8000/health
+curl -fsS http://localhost:8001/health
+curl -fsS http://localhost:8002/health
+curl -fsS http://localhost:8003/health
+curl -fsS http://localhost:8004/health
+curl -fsS http://localhost:8005/health
+curl -fsS http://localhost:8006/health
 ```
 
-Stop and clean:
+### Stop/Clean
 
 ```bash
 docker compose -f docker-compose.dev.yml down -v
 ```
 
-## CI/CD
+## 9) Validation and Test Entry Points
 
-Main workflow:
+### Primary Validation Scripts
 
-- Lint (`black`, `ruff`, `mypy`, pre-commit)
-- Test
-- Docker compose smoke
-- Build
-- Security scans
-- Deploy (main branch)
+- Full local baseline: `scripts/test-all.sh`
+- Cross-service flow: `scripts/integration-cross-service.sh`
+- API contract checks: `scripts/contract-tests-api.py`
+- Post-alpha suite: `scripts/postalpha-validation.sh`
+- Chaos drill: `scripts/chaos-drill.sh`
+- Backup/restore validation: `scripts/backup-restore-validate.sh`
+- Performance baseline: `scripts/perf-baseline.sh`
+- Load catalog: `scripts/load-profile-catalog.sh`
+- DR game day: `scripts/dr-gameday.sh`
 
-Workflow file: `.github/workflows/ci.yml`
+### Recommended Validation Sequence (Local)
+
+1. `docker compose -f docker-compose.dev.yml up -d --build`
+2. `bash scripts/test-all.sh`
+3. `bash scripts/postalpha-validation.sh`
+4. targeted script(s) for the component you changed
+
+## 10) CI/CD and Governance Workflows
+
+### Main Pipeline
+
+- `.github/workflows/ci.yml`: lint, test, compose smoke, security scans, build, deploy path.
 
 ```mermaid
 flowchart TD
@@ -205,122 +237,126 @@ flowchart TD
     C --> H[Build Images]
     D --> H
     E --> H
-    G --> I{main branch push?}
+    G --> I{main push?}
     H --> I
     F --> I
     I -->|yes| J[Deploy]
-    I -->|no| K[Stop at CI validation]
+    I -->|no| K[Stop at validation]
 ```
 
-## Delivery Workflows
+### Extended Governance/Operations Pipelines
 
-```mermaid
-flowchart LR
-    Dev[Developer] --> Branch[Feature branch]
-    Branch --> LocalTest[Local compose + smoke]
-    LocalTest --> PR[Pull request]
-    PR --> CI[CI full pipeline]
-    CI --> Review[Code review]
-    Review --> Merge[Merge to main]
-    Merge --> Release[Alpha release checklist]
-    Release --> Deploy[Deploy to Kubernetes]
-```
+- OpenAPI governance: `.github/workflows/openapi-contract.yml`
+- DB schema contracts: `.github/workflows/db-schema-contract.yml`
+- Kafka schema compatibility: `.github/workflows/kafka-schema-compatibility.yml`
+- SBOM/provenance: `.github/workflows/sbom-supply-chain.yml`
+- Synthetic monitoring: `.github/workflows/synthetic-monitoring.yml`
+- Promotion: `.github/workflows/promotion.yml`
+- SDK stability: `.github/workflows/sdk-stability.yml`
+- Release cadence gate: `.github/workflows/release-train.yml`
+- Post-alpha scheduled suite: `.github/workflows/postalpha-validation.yml`
 
-## Contributing
+## 11) Kubernetes/Platform Assets
 
-Recommended baseline workflow:
+### Key Areas
 
-1. Create a feature branch
-2. Implement incremental, testable changes
-3. Run local compose smoke before PR
-4. Keep commits coherent and reviewable
-5. Open PR with clear summary and test notes
+- Gateway routing/rate limits: `infrastructure/kubernetes/kong`
+- Monitoring/alerts/SLO rules: `infrastructure/kubernetes/monitoring`
+- Mesh mTLS baseline: `infrastructure/kubernetes/mesh/istio-mtls.yaml`
+- External secrets baseline: `infrastructure/kubernetes/secrets/external-secrets.yaml`
+- Policy enforcement baseline: `infrastructure/kubernetes/policies/kyverno-security.yaml`
+- Progressive delivery baseline: `infrastructure/kubernetes/progressive-delivery/rollout-device.yaml`
+- Schema registry baseline: `infrastructure/kubernetes/kafka/schema-registry.yaml`
 
-## Security Notes
+### Important Note
 
-- Never commit secrets in repository files
-- Prefer env variables / secret managers
-- Keep dependency updates frequent
-- Use CI security scans as mandatory quality signal
+Some assets are intentionally baseline-level. They provide a concrete start, but each target environment should enforce stricter secrets, identities, network policies, and rollout criteria.
 
-## License
+## 12) Troubleshooting Cheat Sheet
 
-Apache License 2.0
+### Service Not Ready
 
-## Operational Runbooks
+1. Check `/health` then `/ready`.
+2. Check MySQL/Kafka/Redis readiness.
+3. Verify service logs with `x-trace-id` or `x-correlation-id`.
+
+### Event Publish Missing
+
+1. Verify Kafka connectivity and topic prefix env vars.
+2. Confirm producer startup logs.
+3. Inspect retry logs for publish failures.
+
+### Migration Failures
+
+1. Check `alembic current` and `alembic history`.
+2. Validate DB URL and credentials.
+3. Roll back controlled revision if needed, then re-run.
+
+### CI Failures
+
+1. Identify failing workflow category (lint, test, schema, security, deploy).
+2. Run equivalent local script.
+3. Reproduce with same env vars/profile.
+
+## 13) Operational Runbooks (Condensed)
 
 ### Incident Response
 
-1. Identify impacted services with `/health`, `/ready`, `/metrics`.
-2. Verify dependencies in order: MySQL, Kafka, Redis, then core services.
-3. Inspect recent logs filtered by `x-correlation-id` and `x-trace-id`.
-4. Isolate failing component and execute targeted restart.
-5. Validate recovery with cross-service integration and contract tests.
+1. Triage impact by service and endpoint.
+2. Validate dependencies first (DB/Kafka/Redis).
+3. Isolate faulty change.
+4. Restart/rollback narrowly.
+5. Re-run smoke + integration + contract checks.
 
-### Rollback Procedure
+### Rollback
 
-1. Select previous stable image tag for impacted service.
-2. Roll back deployment in Kubernetes or compose tag override.
-3. Validate read/write endpoints and event publish after rollback.
-4. Re-run smoke and contract suites before closing incident.
-
-### Service Restart
-
-- Docker: `docker compose -f docker-compose.dev.yml restart <service>`
-- Kubernetes: `kubectl rollout restart deployment/<service> -n stack4things`
-- Always validate `/ready` before reopening traffic.
+1. Select prior stable artifact.
+2. Apply rollback via deployment channel.
+3. Verify write/read paths and event pipeline.
+4. Close only after post-rollback checks pass.
 
 ### DB Migration Failure
 
-1. Stop write traffic to the impacted service.
-2. Check Alembic history and current revision.
-3. If partial migration: apply controlled downgrade to previous revision.
-4. Restore from latest snapshot if data integrity is at risk.
-5. Re-run migration in staging, then production with maintenance window.
+1. Freeze writes.
+2. Inspect revision mismatch.
+3. Controlled downgrade or restore path.
+4. Re-test in staging before production retry.
 
-## Alpha Release Go/No-Go Checklist
+## 14) Handover Guide for New Contributors
 
-- [ ] All core services healthy in Docker and Kubernetes.
-- [ ] Cross-service flow (`device -> network -> dns -> webservice`) passes.
-- [ ] API contract tests pass for all `/api/v2` endpoints.
-- [ ] Security gates (Bandit, Safety, Snyk, Trivy) pass with high-severity blocking.
-- [ ] CI lint and tests pass (monorepo + service matrix).
-- [ ] Kafka event publishing validated with retry and traceability.
-- [ ] Alembic migrations validated on clean and existing databases.
-- [ ] Resource limits/probes/HPA applied to core deployments.
-- [ ] Runbook drills completed (incident, rollback, restart, migration failure).
-- [ ] Release notes and deployment approval signed off.
+If you are picking up development from this repository:
 
-## Post-Alpha Implementation Assets
+1. Read sections 3, 8, 9, and 10 first.
+2. Start stack locally and run `scripts/test-all.sh`.
+3. Choose one service and trace its full path (API -> DB -> event publish).
+4. When adding features:
+   - update API contract and tests,
+   - preserve observability headers/metrics,
+   - keep changes backward-compatible where possible,
+   - wire any new dependency into compose and CI.
+5. Before pushing:
+   - run local validation scripts relevant to your change,
+   - ensure workflow parity (what you ran locally maps to CI jobs).
 
-- OIDC/policy engine baseline in `libraries/common/src/common/auth`.
-- Idempotency/outbox/DLQ primitives in `libraries/common/src/common/events`.
-- OpenAPI contract governance workflow in `.github/workflows/openapi-contract.yml`.
-- SBOM + provenance workflow in `.github/workflows/sbom-supply-chain.yml`.
-- Environment promotion workflow in `.github/workflows/promotion.yml`.
-- SLO alert rules in `infrastructure/kubernetes/monitoring/prometheus/slo-rules.yaml`.
-- Gateway rate-limit policy in `infrastructure/kubernetes/kong/kong-rate-limit.yaml`.
-- Chaos, backup/restore and performance scripts in `scripts/chaos-drill.sh`, `scripts/backup-restore-validate.sh`, `scripts/perf-baseline.sh`.
-- End-to-end post-alpha validation runner in `scripts/postalpha-validation.sh`.
-- Scheduled/manual CI suite in `.github/workflows/postalpha-validation.yml`.
+## 15) Roadmap Reality and Gaps
 
-### Run Full Post-Alpha Suite Locally
+This repository contains both production-facing implementations and baseline/scaffolding assets.  
+When planning next iterations, classify each item as:
 
-```bash
-bash scripts/postalpha-validation.sh
-```
+- `runtime-wired`: actively used by services in production path
+- `platform-baseline`: deployable infra primitive not fully wired end-to-end
+- `governance-baseline`: policy/process/workflow ready, needing environment secrets and rollout hardening
 
-## Next-Horizon Assets
+This classification prevents “false done” and helps prioritize what still needs runtime closure.
 
-- Service mesh mTLS baseline: `infrastructure/kubernetes/mesh/istio-mtls.yaml`
-- External Secrets baseline: `infrastructure/kubernetes/secrets/external-secrets.yaml`
-- DB schema contracts in CI: `.github/workflows/db-schema-contract.yml`
-- Kafka schema compatibility in CI: `.github/workflows/kafka-schema-compatibility.yml`
-- Event replay tooling: `scripts/event-replay.py`
-- Tenancy/versioning/audit shared modules: `libraries/common/src/common/tenancy.py`, `libraries/common/src/common/api_versioning.py`, `libraries/common/src/common/audit.py`
-- Synthetic monitoring: `.github/workflows/synthetic-monitoring.yml`
-- Error budget and FinOps policies: `docs/error-budget-policy.yaml`, `docs/finops-cost-model.yaml`
-- DR, load catalog and migration strategy: `scripts/dr-gameday.sh`, `scripts/load-profile-catalog.sh`, `docs/zero-downtime-migrations.yaml`
-- Progressive delivery and policy enforcement: `infrastructure/kubernetes/progressive-delivery/rollout-device.yaml`, `infrastructure/kubernetes/policies/kyverno-security.yaml`
-- SDK stability and release train: `.github/workflows/sdk-stability.yml`, `.github/workflows/release-train.yml`, `libraries/sdk/CHANGELOG.json`
+## 16) Security Notes
+
+- Never commit secrets in repository files.
+- Prefer secret stores and runtime injection.
+- Keep dependencies and images patched.
+- Treat CI security scans as release gates.
+
+## 17) License
+
+Apache License 2.0
 
