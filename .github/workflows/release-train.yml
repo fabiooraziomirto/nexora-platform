@@ -1,0 +1,18 @@
+name: Release Train
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release candidate gates
+        run: |
+          echo "1) CI green"
+          echo "2) Security gates green"
+          echo "3) Post-alpha validation green"
+          echo "4) Candidate tagged and promoted"

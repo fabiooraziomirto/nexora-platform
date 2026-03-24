@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "project": "stack4things-sdk",
+  "releases": [
+    {
+      "version": "0.1.0",
+      "date": "2026-03-23",
+      "changes": [
+        "Initial SDK release baseline"
+      ],
+      "compatibility": {
+        "breaking": false,
+        "api": "v2"
+      }
+    }
+  ]
+}

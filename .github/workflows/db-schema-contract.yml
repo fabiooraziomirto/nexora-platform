@@ -1,0 +1,25 @@
+name: DB Schema Contract Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  alembic-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+      - name: Verify Alembic upgrade/downgrade contracts
+        run: |
+          for svc in execution-service network-service dns-service webservice-service fleet-service; do
+            if [ -f "services/$svc/alembic.ini" ]; then
+              (cd "services/$svc" && poetry install --no-interaction --no-ansi && poetry run alembic upgrade head && poetry run alembic downgrade base)
+            fi
+          done

@@ -1,0 +1,17 @@
+strategy: expand-contract
+phases:
+  - expand:
+      actions:
+        - add_new_nullable_columns
+        - dual_write_old_and_new
+  - migrate:
+      actions:
+        - backfill_new_columns
+        - switch_reads_to_new
+  - contract:
+      actions:
+        - remove_old_columns
+        - disable_dual_write
+guards:
+  - rollout_canary
+  - migration_smoke_test

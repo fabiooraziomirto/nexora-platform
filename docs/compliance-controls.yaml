@@ -1,0 +1,14 @@
+controls:
+  - id: SEC-001
+    description: "Access control and least privilege"
+    evidence:
+      - ".github/workflows/ci.yml"
+      - "infrastructure/kubernetes/policies/kyverno-security.yaml"
+  - id: OPS-002
+    description: "Backup and restore procedure validated"
+    evidence:
+      - "scripts/backup-restore-validate.sh"
+  - id: REL-003
+    description: "Disaster recovery tested"
+    evidence:
+      - "scripts/dr-gameday.sh"

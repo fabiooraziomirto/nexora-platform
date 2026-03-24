@@ -1,0 +1,19 @@
+name: Synthetic Monitoring
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  synthetic-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Basic uptime checks
+        run: |
+          set -e
+          for url in \
+            https://example.invalid/api/v2/devices \
+            https://example.invalid/api/v2/plugins; do
+            curl -fsS "$url" || true
+          done

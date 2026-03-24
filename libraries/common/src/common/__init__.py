@@ -23,6 +23,9 @@ from common.errors import (
 )
 from common.health import HealthChecker, HealthStatus, check_health
 from common.metrics import Metrics, get_metrics
+from common.tenancy import TenantContext, extract_tenant_id
+from common.api_versioning import DeprecationPolicy, build_deprecation_headers
+from common.audit import write_audit_event
 
 __all__ = [
     "__version__",
@@ -51,4 +54,9 @@ __all__ = [
     "check_health",
     "Metrics",
     "get_metrics",
+    "TenantContext",
+    "extract_tenant_id",
+    "DeprecationPolicy",
+    "build_deprecation_headers",
+    "write_audit_event",
 ]

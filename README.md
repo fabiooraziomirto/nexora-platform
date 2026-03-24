@@ -310,3 +310,17 @@ Apache License 2.0
 bash scripts/postalpha-validation.sh
 ```
 
+## Next-Horizon Assets
+
+- Service mesh mTLS baseline: `infrastructure/kubernetes/mesh/istio-mtls.yaml`
+- External Secrets baseline: `infrastructure/kubernetes/secrets/external-secrets.yaml`
+- DB schema contracts in CI: `.github/workflows/db-schema-contract.yml`
+- Kafka schema compatibility in CI: `.github/workflows/kafka-schema-compatibility.yml`
+- Event replay tooling: `scripts/event-replay.py`
+- Tenancy/versioning/audit shared modules: `libraries/common/src/common/tenancy.py`, `libraries/common/src/common/api_versioning.py`, `libraries/common/src/common/audit.py`
+- Synthetic monitoring: `.github/workflows/synthetic-monitoring.yml`
+- Error budget and FinOps policies: `docs/error-budget-policy.yaml`, `docs/finops-cost-model.yaml`
+- DR, load catalog and migration strategy: `scripts/dr-gameday.sh`, `scripts/load-profile-catalog.sh`, `docs/zero-downtime-migrations.yaml`
+- Progressive delivery and policy enforcement: `infrastructure/kubernetes/progressive-delivery/rollout-device.yaml`, `infrastructure/kubernetes/policies/kyverno-security.yaml`
+- SDK stability and release train: `.github/workflows/sdk-stability.yml`, `.github/workflows/release-train.yml`, `libraries/sdk/CHANGELOG.json`
+

@@ -1,0 +1,8 @@
+service_level_objectives:
+  availability_target: 99.9
+  error_rate_target: 0.1
+  p95_latency_ms_target: 700
+governance:
+  burn_rate_freeze_threshold: 2.0
+  freeze_action: "feature-freeze"
+  recovery_action: "reliability-only-sprints"

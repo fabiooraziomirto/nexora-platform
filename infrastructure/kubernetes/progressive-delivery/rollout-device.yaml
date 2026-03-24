@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: device-service
+  namespace: stack4things
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: device-service
+  template:
+    metadata:
+      labels:
+        app: device-service
+    spec:
+      containers:
+        - name: device-service
+          image: stack4things/device-service:latest
+          ports:
+            - containerPort: 8000
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {duration: 120}
+        - setWeight: 50
+        - pause: {duration: 120}

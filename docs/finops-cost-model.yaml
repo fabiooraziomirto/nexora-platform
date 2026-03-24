@@ -1,0 +1,13 @@
+dimensions:
+  - service
+  - environment
+  - namespace
+  - team
+metrics:
+  - cost_per_service_daily
+  - cost_per_request
+  - idle_cost_ratio
+alerts:
+  - name: sudden_cost_spike
+    threshold_percent: 25
+    window: 24h
