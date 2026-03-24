@@ -1,0 +1,39 @@
+_format_version: "3.0"
+_transform: true
+
+plugins:
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: device-route
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: plugin-route
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: execution-route
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: network-route
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: dns-route
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: webservice-route
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: local
+    route: fleet-route

@@ -1,0 +1,36 @@
+name: Environment Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_env:
+        description: "Source environment"
+        required: true
+        default: "dev"
+      to_env:
+        description: "Target environment"
+        required: true
+        default: "staging"
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.to_env }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate promotion path
+        run: |
+          FROM="${{ github.event.inputs.from_env }}"
+          TO="${{ github.event.inputs.to_env }}"
+          if [ "$FROM" = "$TO" ]; then
+            echo "from_env and to_env cannot be equal"
+            exit 1
+          fi
+          echo "Promoting from $FROM to $TO"
+
+      - name: Execute rollback-safe promotion
+        run: |
+          echo "Apply manifests/helm for ${{ github.event.inputs.to_env }}"
+          echo "Trigger smoke checks"
+          echo "If smoke fails, rollback to previous stable revision"

@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: Plugin Service API
+  version: 1.0.0
+paths:
+  /api/v2/plugins:
+    post:
+      summary: Create plugin
+      requestBody:
+        required: true
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List plugins
+      responses:
+        "200":
+          description: OK

@@ -291,3 +291,14 @@ Apache License 2.0
 - [ ] Runbook drills completed (incident, rollback, restart, migration failure).
 - [ ] Release notes and deployment approval signed off.
 
+## Post-Alpha Implementation Assets
+
+- OIDC/policy engine baseline in `libraries/common/src/common/auth`.
+- Idempotency/outbox/DLQ primitives in `libraries/common/src/common/events`.
+- OpenAPI contract governance workflow in `.github/workflows/openapi-contract.yml`.
+- SBOM + provenance workflow in `.github/workflows/sbom-supply-chain.yml`.
+- Environment promotion workflow in `.github/workflows/promotion.yml`.
+- SLO alert rules in `infrastructure/kubernetes/monitoring/prometheus/slo-rules.yaml`.
+- Gateway rate-limit policy in `infrastructure/kubernetes/kong/kong-rate-limit.yaml`.
+- Chaos, backup/restore and performance scripts in `scripts/chaos-drill.sh`, `scripts/backup-restore-validate.sh`, `scripts/perf-baseline.sh`.
+

@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Execution Service API
+  version: 1.0.0
+paths:
+  /api/v2/executions:
+    post:
+      summary: Create execution
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List executions
+      responses:
+        "200":
+          description: OK
