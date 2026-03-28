@@ -1,5 +1,5 @@
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_device_service.db")
 os.environ.setdefault("KAFKA_ENABLED", "false")
 os.environ.setdefault("KAFKA_REQUIRED", "false")
+os.environ.setdefault(
+    "AGENT_BOOTSTRAP_TOKENS", "test-bootstrap:test-secret:4102444800,expired:expired-secret:1"
+)
 
 from device_service.core.database import Base, get_db
 from device_service.main import app
@@ -45,8 +48,9 @@ async def client(db_session):
         yield db_session
     
     app.dependency_overrides[get_db] = override_get_db
-    
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     
     app.dependency_overrides.clear()
@@ -200,4 +204,111 @@ async def test_list_devices_filter_and_pagination(client):
     assert payload["total"] >= 2
     assert len(payload["items"]) == 1
     assert payload["items"][0]["device_type"] == "sensor"
+
+
+# ---------------------------------------------------------------------------
+# Agent endpoint tests
+# ---------------------------------------------------------------------------
+
+BOOTSTRAP_HEADER = {"X-Bootstrap-Token": "test-bootstrap:test-secret"}
+
+
+@pytest.mark.asyncio
+async def test_agent_register_creates_online_device(client):
+    """Register should create a new device with status=online."""
+    response = await client.post(
+        "/api/v2/agents/register",
+        json={"name": "agent-1", "device_type": "raspberry-pi"},
+        headers=BOOTSTRAP_HEADER,
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "online"
+    assert "device_id" in data
+    assert "last_seen" in data
+
+
+@pytest.mark.asyncio
+async def test_agent_register_updates_existing(client):
+    """Register with an existing device_id should update, not duplicate."""
+    resp1 = await client.post(
+        "/api/v2/agents/register",
+        json={"name": "agent-2", "device_type": "sensor"},
+        headers=BOOTSTRAP_HEADER,
+    )
+    device_id = resp1.json()["device_id"]
+
+    resp2 = await client.post(
+        "/api/v2/agents/register",
+        json={"device_id": device_id, "name": "agent-2-updated", "device_type": "sensor"},
+        headers=BOOTSTRAP_HEADER,
+    )
+    assert resp2.status_code == 201
+    assert resp2.json()["device_id"] == device_id
+
+    get_resp = await client.get(f"/api/v2/devices/{device_id}")
+    assert get_resp.json()["name"] == "agent-2-updated"
+
+
+@pytest.mark.asyncio
+async def test_agent_heartbeat_updates_last_seen(client):
+    """Heartbeat should update last_seen and return status."""
+    reg = await client.post(
+        "/api/v2/agents/register",
+        json={"name": "hb-agent", "device_type": "camera"},
+        headers=BOOTSTRAP_HEADER,
+    )
+    device_id = reg.json()["device_id"]
+
+    hb = await client.post(
+        f"/api/v2/agents/{device_id}/heartbeat",
+        json={"status": "online"},
+    )
+    assert hb.status_code == 200
+    data = hb.json()
+    assert data["device_id"] == device_id
+    assert data["status"] == "online"
+    assert data["last_seen"] >= reg.json()["last_seen"]
+
+
+@pytest.mark.asyncio
+async def test_agent_heartbeat_missing_device_404(client):
+    """Heartbeat for non-existent device should return 404."""
+    response = await client.post(
+        "/api/v2/agents/00000000-0000-0000-0000-000000000000/heartbeat",
+        json={"status": "online"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_agent_register_without_token_401(client):
+    """Register without X-Bootstrap-Token should return 422 (missing header)."""
+    response = await client.post(
+        "/api/v2/agents/register",
+        json={"name": "no-token", "device_type": "sensor"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_agent_register_invalid_token_401(client):
+    """Register with a wrong secret should return 401."""
+    response = await client.post(
+        "/api/v2/agents/register",
+        json={"name": "bad-token", "device_type": "sensor"},
+        headers={"X-Bootstrap-Token": "test-bootstrap:wrong-secret"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_agent_register_expired_token_401(client):
+    """Register with an expired token should return 401."""
+    response = await client.post(
+        "/api/v2/agents/register",
+        json={"name": "expired", "device_type": "sensor"},
+        headers={"X-Bootstrap-Token": "expired:expired-secret"},
+    )
+    assert response.status_code == 401
 

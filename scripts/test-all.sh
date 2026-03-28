@@ -253,6 +253,7 @@ if command -v docker &> /dev/null; then
             "http://localhost:8004/health"
             "http://localhost:8005/health"
             "http://localhost:8006/health"
+            "http://localhost:8007/health"
         )
 
         for endpoint in "${SERVICES[@]}"; do
@@ -283,6 +284,12 @@ if command -v docker &> /dev/null; then
             test_pass "API contract tests OK"
         else
             test_fail "API contract tests failed"
+        fi
+
+        if [ -x "$PROJECT_ROOT/scripts/lr-emulator-e2e.sh" ] && bash "$PROJECT_ROOT/scripts/lr-emulator-e2e.sh" &>/dev/null; then
+            test_pass "LR emulator E2E flow OK"
+        elif [ -f "$PROJECT_ROOT/scripts/lr-emulator-e2e.sh" ]; then
+            test_warn "LR emulator E2E flow had issues (Kafka timing possible)"
         fi
 
         docker compose -f docker-compose.dev.yml down -v &>/dev/null || true

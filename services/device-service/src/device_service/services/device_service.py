@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,7 +6,15 @@ from sqlalchemy import select, func, and_
 import structlog
 
 from device_service.models.device import Device
-from device_service.api.schemas import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceListResponse
+from device_service.api.schemas import (
+    AgentHeartbeatRequest,
+    AgentRegisterRequest,
+    AgentStatusResponse,
+    DeviceCreate,
+    DeviceUpdate,
+    DeviceResponse,
+    DeviceListResponse,
+)
 from device_service.core.events import event_bus
 
 logger = structlog.get_logger()
@@ -172,4 +181,79 @@ class DeviceService:
         )
         
         return True
+
+    # ------------------------------------------------------------------
+    # Agent lifecycle (IoTronic-parity)
+    # ------------------------------------------------------------------
+
+    async def register_agent(self, data: AgentRegisterRequest) -> AgentStatusResponse:
+        """Register or re-register an agent device."""
+        now = datetime.now(timezone.utc)
+
+        if data.device_id:
+            query = select(Device).where(Device.id == str(data.device_id))
+            result = await self.db.execute(query)
+            device = result.scalar_one_or_none()
+        else:
+            device = None
+
+        if device:
+            device.name = data.name
+            device.device_type = data.device_type
+            if data.metadata is not None:
+                device.meta = data.metadata
+            device.status = "online"
+            device.last_seen = now
+        else:
+            device = Device(
+                id=str(data.device_id) if data.device_id else str(uuid4()),
+                name=data.name,
+                device_type=data.device_type,
+                meta=data.metadata,
+                status="online",
+                last_seen=now,
+            )
+            self.db.add(device)
+
+        await self.db.commit()
+        await self.db.refresh(device)
+
+        logger.info("Agent registered", device_id=device.id, name=device.name)
+
+        await event_bus.publish(
+            "agent.registered",
+            {"device_id": device.id, "name": device.name},
+        )
+
+        return AgentStatusResponse(
+            device_id=UUID(device.id),
+            status=device.status,
+            last_seen=device.last_seen,
+        )
+
+    async def heartbeat_agent(
+        self, device_id: UUID, data: AgentHeartbeatRequest
+    ) -> Optional[AgentStatusResponse]:
+        """Process an agent heartbeat."""
+        query = select(Device).where(Device.id == str(device_id))
+        result = await self.db.execute(query)
+        device = result.scalar_one_or_none()
+
+        if not device:
+            return None
+
+        now = datetime.now(timezone.utc)
+        device.last_seen = now
+        device.status = data.status or "online"
+
+        await self.db.commit()
+        await self.db.refresh(device)
+
+        logger.info("Agent heartbeat", device_id=device.id)
+
+        return AgentStatusResponse(
+            device_id=UUID(device.id),
+            status=device.status,
+            last_seen=device.last_seen,
+        )
 

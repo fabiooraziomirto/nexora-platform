@@ -1,12 +1,14 @@
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 import pytest
 
 from plugin_service.main import app
 
+transport = ASGITransport(app=app)
+
 
 @pytest.mark.asyncio
 async def test_health() -> None:
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")
     assert response.status_code == 200
     assert response.json()["service"] == "plugin-service"
@@ -14,7 +16,7 @@ async def test_health() -> None:
 
 @pytest.mark.asyncio
 async def test_plugin_crud_minimal() -> None:
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         create_resp = await client.post("/api/v2/plugins", json={"name": "demo-plugin"})
         assert create_resp.status_code == 201
         plugin_id = create_resp.json()["id"]

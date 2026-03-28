@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "lightningrod-gateway"
+version = "0.1.0"
+description = "Stack4Things Lightningrod Gateway – HTTP+Kafka bridge between cloud execution and edge agents"
+authors = ["Stack4Things Team"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+prometheus-client = "^0.19.0"
+aiokafka = "^0.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+httpx = "^0.25.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

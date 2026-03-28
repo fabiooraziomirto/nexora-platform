@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     KEYSTONE_USERNAME: str | None = None
     KEYSTONE_PASSWORD: str | None = None
     
+    # Agent bootstrap tokens (format: "id:secret:exp_epoch,id2:secret2:exp_epoch2")
+    AGENT_BOOTSTRAP_TOKENS: str = "dev-bootstrap:dev-bootstrap-token:4102444800"
+    AGENT_BOOTSTRAP_REVOKED_TOKEN_IDS: str = ""
+    AGENT_BOOTSTRAP_REVOKED_SOURCE: str = "env:AGENT_BOOTSTRAP_REVOKED_TOKEN_IDS"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

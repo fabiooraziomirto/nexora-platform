@@ -45,3 +45,24 @@ class DeviceListResponse(BaseModel):
     page: int
     page_size: int
 
+
+class AgentRegisterRequest(BaseModel):
+    """Schema for agent registration (IoTronic board registration parity)."""
+    device_id: Optional[UUID] = None
+    name: str = Field(..., min_length=1, max_length=255)
+    device_type: str = Field(..., min_length=1, max_length=100)
+    metadata: Optional[dict] = None
+
+
+class AgentHeartbeatRequest(BaseModel):
+    """Schema for agent heartbeat (Lightning-Rod connection lifecycle parity)."""
+    status: Optional[str] = Field(default="online", min_length=1, max_length=50)
+    telemetry: Optional[dict] = None
+
+
+class AgentStatusResponse(BaseModel):
+    """Response returned after agent register / heartbeat."""
+    device_id: UUID
+    status: str
+    last_seen: datetime
+

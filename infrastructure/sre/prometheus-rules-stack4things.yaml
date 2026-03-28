@@ -1,0 +1,38 @@
+groups:
+  - name: stack4things.execution_pipeline
+    rules:
+      - alert: Stack4ThingsExecutionTimeoutRate
+        expr: rate(s4t_http_requests_total{service="execution-service",path=~".*timeout.*"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Execution timeout rate elevated"
+          description: "More than 0.1 timeout transitions/s over 5 minutes."
+
+      - alert: Stack4ThingsGatewayDeliveryFailures
+        expr: rate(s4t_lr_delivery_failures_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Lightningrod gateway delivery failures elevated"
+          description: "More than 0.05 delivery failures/s — agents may be unreachable."
+
+      - alert: Stack4ThingsQueueRejects
+        expr: rate(s4t_http_requests_total{service="execution-service",status="429"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Per-device execution queue full (429s)"
+          description: "Devices hitting the per-device execution limit."
+
+      - alert: Stack4ThingsKafkaProducerDown
+        expr: absent(s4t_http_requests_total{service="execution-service"}) == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Execution service appears down"
+          description: "No request metrics from execution-service in 2 min."

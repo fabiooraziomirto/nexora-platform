@@ -1,12 +1,14 @@
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 import pytest
 
 from main import app
 
+transport = ASGITransport(app=app)
+
 
 @pytest.mark.asyncio
 async def test_webservice_crud() -> None:
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         create_resp = await client.post("/api/v2/webservices", json={"device_id": "d1", "port": 8443})
         assert create_resp.status_code == 201
         webservice_id = create_resp.json()["id"]

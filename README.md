@@ -32,6 +32,11 @@ flowchart LR
     Gateway --> Webservice[webservice-service]
     Gateway --> Fleet[fleet-service]
 
+    Execution -->|dispatch events| Kafka[(Kafka)]
+    Kafka -->|consume| LRGateway[lightningrod-gateway]
+    LRGateway -->|deliver| Agent[Edge Agent / LR]
+    Agent -->|callback| Execution
+
     Device --> MySQL[(MySQL)]
     Plugin --> MySQL
     Execution --> MySQL
@@ -40,25 +45,24 @@ flowchart LR
     Webservice --> MySQL
     Fleet --> MySQL
 
-    Device --> Kafka[(Kafka)]
+    Device --> Kafka
     Execution --> Kafka
-    Network --> Kafka
-    DNS --> Kafka
-    Webservice --> Kafka
-    Fleet --> Kafka
 
     Device --> Redis[(Redis)]
 ```
 
+> **IoTronic / Lightning Rod Parity**: This architecture provides functional equivalence with the legacy IoTronic + Lightning Rod stack. The same operational concepts (board registration, heartbeat, remote command dispatch, result callback) are implemented using HTTP REST APIs and Apache Kafka instead of WAMP/Crossbar.io. See [docs/deployment/iotronic-parity-matrix.md](docs/deployment/iotronic-parity-matrix.md) for the detailed mapping.
+
 ### Runtime Topology (Local)
 
-- `device-service` -> `http://localhost:8000`
+- `device-service` -> `http://localhost:8000` (CRUD + agent register/heartbeat)
 - `plugin-service` -> `http://localhost:8001`
-- `execution-service` -> `http://localhost:8002`
+- `execution-service` -> `http://localhost:8002` (command pipeline: queued→dispatched→running→succeeded/failed/timeout)
 - `network-service` -> `http://localhost:8003`
 - `dns-service` -> `http://localhost:8004`
 - `webservice-service` -> `http://localhost:8005`
 - `fleet-service` -> `http://localhost:8006`
+- `lightningrod-gateway` -> `http://localhost:8007` (Kafka consumer, agent sessions, delivery)
 - `mysql` -> `localhost:3306`
 - `redis` -> `localhost:6379`
 - `kafka` -> `localhost:9092`

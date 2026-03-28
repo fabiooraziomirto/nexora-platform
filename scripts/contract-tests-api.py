@@ -1,17 +1,45 @@
 #!/usr/bin/env python3
 import json
 import urllib.request
+import urllib.error
 
 
-def _request_json(url: str, method: str = "GET", payload: dict | None = None) -> dict:
+def _request_json(
+    url: str,
+    method: str = "GET",
+    payload: dict | None = None,
+    headers: dict | None = None,
+) -> dict:
     body = None
-    headers = {}
+    hdrs = dict(headers) if headers else {}
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(url=url, data=body, headers=headers, method=method)
+        hdrs["Content-Type"] = "application/json"
+    request = urllib.request.Request(url=url, data=body, headers=hdrs, method=method)
     with urllib.request.urlopen(request, timeout=15) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _expect_http_error(
+    url: str,
+    expected_code: int,
+    method: str = "GET",
+    payload: dict | None = None,
+    headers: dict | None = None,
+) -> None:
+    body = None
+    hdrs = dict(headers) if headers else {}
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        hdrs["Content-Type"] = "application/json"
+    req = urllib.request.Request(url=url, data=body, headers=hdrs, method=method)
+    try:
+        urllib.request.urlopen(req, timeout=15)
+        raise AssertionError(f"{url}: expected HTTP {expected_code} but got 2xx")
+    except urllib.error.HTTPError as exc:
+        assert exc.code == expected_code, (
+            f"{url}: expected HTTP {expected_code}, got {exc.code}"
+        )
 
 
 def _assert_fields(name: str, data: dict, expected: dict[str, type]) -> None:
@@ -83,7 +111,41 @@ def main() -> None:
         {"id": str, "name": str},
     )
 
-    print("API contract tests passed")
+    _negative_contract_checks()
+
+    print("API contract tests passed (positive + negative)")
+
+
+def _negative_contract_checks() -> None:
+    _expect_http_error(
+        "http://localhost:8002/api/v2/executions/00000000-0000-0000-0000-000000000000",
+        404,
+    )
+
+    _expect_http_error(
+        "http://localhost:8001/api/v2/plugins/00000000-0000-0000-0000-000000000000",
+        404,
+    )
+
+    _expect_http_error(
+        "http://localhost:8000/api/v2/agents/register",
+        401,
+        method="POST",
+        payload={"name": "bad", "device_type": "sensor"},
+        headers={"X-Bootstrap-Token": "dev-bootstrap:WRONG-SECRET"},
+    )
+
+    _expect_http_error(
+        "http://localhost:8002/api/v2/executions/00000000-0000-0000-0000-000000000000/callback",
+        404,
+        method="POST",
+        payload={"status": "succeeded"},
+    )
+
+    _expect_http_error(
+        "http://localhost:8007/api/v2/agents/sessions/nonexistent",
+        404,
+    )
 
 
 if __name__ == "__main__":

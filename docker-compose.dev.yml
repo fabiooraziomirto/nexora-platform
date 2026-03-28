@@ -93,6 +93,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_ENABLED: "true"
       KAFKA_REQUIRED: "false"
+      AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800"
       LOG_LEVEL: INFO
     ports:
       - "8000:8000"
@@ -134,10 +135,44 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     environment:
       DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      KAFKA_REQUIRED: "false"
+      MAX_EXECUTIONS_PER_DEVICE: "32"
     ports:
       - "8002:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  lightningrod-gateway:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
+    build:
+      context: ./services/lightningrod-gateway
+      dockerfile: Dockerfile
+    container_name: stack4things-lightningrod-gateway
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      KAFKA_REQUIRED: "false"
+    ports:
+      - "8007:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
 
   network-service:
     profiles: ["dev", "test", "smoke"]
