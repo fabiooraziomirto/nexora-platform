@@ -9,7 +9,7 @@ This README is intentionally detailed to support handover and onboarding of exte
 ## 1) Mission and Scope
 
 - Build a modular IoT control platform that can run independently or integrate with OpenStack ecosystems.
-- Replace tightly coupled legacy patterns with service boundaries, explicit contracts, CI/CD quality gates, and operational runbooks.
+- Replace tightly coupled legacy patterns with service boundaries, explicit contracts, local quality gates, and operational runbooks.
 - Keep an architecture that is evolvable: every major capability should be implementable as an adapter or independent service.
 
 ## 2) Current Maturity
@@ -112,7 +112,6 @@ sequenceDiagram
 
 - `infrastructure/kubernetes`: deployment manifests, monitoring, policy, gateway, mesh, secrets, progressive rollout assets.
 - `scripts`: setup/testing/operations automation.
-- `.github/workflows`: CI/CD and governance pipelines.
 
 ## 5) API Contract Baseline
 
@@ -225,44 +224,16 @@ docker compose -f docker-compose.dev.yml down -v
 3. `bash scripts/postalpha-validation.sh`
 4. targeted script(s) for the component you changed
 
-## 10) CI/CD and Governance Workflows
+## 10) Local Validation and Release Discipline
 
-### Main Pipeline
+This repository currently uses local validation only (no active CI/CD pipeline in-hosted repository).
 
-- `.github/workflows/ci.yml`: lint, test, compose smoke, security scans, build, deploy path.
+Recommended release discipline:
 
-```mermaid
-flowchart TD
-    A[Push / PR] --> B[Lint]
-    A --> C[Service Lint Matrix]
-    A --> D[Test]
-    A --> E[Service Test Matrix]
-    B --> F[Compose Smoke]
-    C --> F
-    D --> F
-    E --> F
-    B --> G[Security Scans]
-    C --> H[Build Images]
-    D --> H
-    E --> H
-    G --> I{main push?}
-    H --> I
-    F --> I
-    I -->|yes| J[Deploy]
-    I -->|no| K[Stop at validation]
-```
-
-### Extended Governance/Operations Pipelines
-
-- OpenAPI governance: `.github/workflows/openapi-contract.yml`
-- DB schema contracts: `.github/workflows/db-schema-contract.yml`
-- Kafka schema compatibility: `.github/workflows/kafka-schema-compatibility.yml`
-- SBOM/provenance: `.github/workflows/sbom-supply-chain.yml`
-- Synthetic monitoring: `.github/workflows/synthetic-monitoring.yml`
-- Promotion: `.github/workflows/promotion.yml`
-- SDK stability: `.github/workflows/sdk-stability.yml`
-- Release cadence gate: `.github/workflows/release-train.yml`
-- Post-alpha scheduled suite: `.github/workflows/postalpha-validation.yml`
+- run service unit tests (`pytest`) for touched services
+- run `scripts/test-all.sh` and `scripts/postalpha-validation.sh`
+- run targeted integration scripts for changed paths
+- tag only after local validation is green
 
 ## 11) Kubernetes/Platform Assets
 
@@ -302,8 +273,8 @@ Some assets are intentionally baseline-level. They provide a concrete start, but
 
 ### CI Failures
 
-1. Identify failing workflow category (lint, test, schema, security, deploy).
-2. Run equivalent local script.
+1. Identify the failing local validation step.
+2. Re-run equivalent local script.
 3. Reproduce with same env vars/profile.
 
 ## 13) Operational Runbooks (Condensed)
@@ -344,7 +315,7 @@ If you are picking up development from this repository:
    - wire any new dependency into compose and CI.
 5. Before pushing:
    - run local validation scripts relevant to your change,
-   - ensure workflow parity (what you ran locally maps to CI jobs).
+   - record which checks you executed and their outcome.
 
 ## 15) Roadmap Reality and Gaps
 

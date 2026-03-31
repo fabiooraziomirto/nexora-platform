@@ -2,7 +2,7 @@ controls:
   - id: SEC-001
     description: "Access control and least privilege"
     evidence:
-      - ".github/workflows/ci.yml"
+      - "scripts/test-all.sh"
       - "infrastructure/kubernetes/policies/kyverno-security.yaml"
   - id: OPS-002
     description: "Backup and restore procedure validated"
