@@ -238,6 +238,62 @@ services:
     ports:
       - "8006:8000"
 
+  keycloak:
+    profiles: ["auth"]
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: stack4things-keycloak
+    command: ["start-dev", "--http-port=8080"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "18080:8080"
+
+  iotronic-ui:
+    profiles: ["ui"]
+    env_file:
+      - .env.dev
+    build:
+      context: ./services/iotronic-ui
+      dockerfile: Dockerfile
+    container_name: stack4things-iotronic-ui
+    depends_on:
+      device-service:
+        condition: service_started
+      plugin-service:
+        condition: service_started
+      execution-service:
+        condition: service_started
+      network-service:
+        condition: service_started
+      dns-service:
+        condition: service_started
+      webservice-service:
+        condition: service_started
+      fleet-service:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: stack4things
+      S4T_DEVICE_URL: http://device-service:8000
+      S4T_PLUGIN_URL: http://plugin-service:8000
+      S4T_EXECUTION_URL: http://execution-service:8000
+      S4T_NETWORK_URL: http://network-service:8000
+      S4T_DNS_URL: http://dns-service:8000
+      S4T_WEBSERVICE_URL: http://webservice-service:8000
+      S4T_FLEET_URL: http://fleet-service:8000
+      S4T_TENANT_ID: ${S4T_TENANT_ID:-}
+      S4T_AUTH_TOKEN: ${S4T_AUTH_TOKEN:-}
+    ports:
+      - "18088:8088"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8088/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
 volumes:
   mysql_data:
   redis_data:
