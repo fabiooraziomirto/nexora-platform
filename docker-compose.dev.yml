@@ -294,7 +294,92 @@ services:
       timeout: 5s
       retries: 5
 
+  legacy-keystone:
+    profiles: ["legacy"]
+    build:
+      context: ./services/legacy-keystone
+      dockerfile: Dockerfile
+    container_name: nexora-legacy-keystone
+    environment:
+      KEYSTONE_ADMIN_PASSWORD: admin
+    volumes:
+      - ./services/legacy-keystone/config:/config:ro
+      - legacy_keystone_data:/var/lib/keystone
+    ports:
+      - "15000:5000"
+
+  legacy-horizon:
+    profiles: ["legacy"]
+    build:
+      context: ./services/legacy-horizon
+      dockerfile: Dockerfile
+    container_name: nexora-legacy-horizon
+    depends_on:
+      legacy-keystone:
+        condition: service_started
+    environment:
+      S4T_DEVICE_URL: http://device-service:8000
+      S4T_PLUGIN_URL: http://plugin-service:8000
+      S4T_EXECUTION_URL: http://execution-service:8000
+      S4T_NETWORK_URL: http://network-service:8000
+      S4T_DNS_URL: http://dns-service:8000
+      S4T_WEBSERVICE_URL: http://webservice-service:8000
+      S4T_FLEET_URL: http://fleet-service:8000
+      S4T_TENANT_ID: ${S4T_TENANT_ID:-}
+      S4T_AUTH_TOKEN: ${S4T_AUTH_TOKEN:-}
+    volumes:
+      - ./tools/iotronic-ui-adapter:/adapter:ro
+    ports:
+      - "18089:8080"
+
+  lr-board-emulator-1:
+    profiles: ["emulator"]
+    build:
+      context: ./services/lr-board-emulator
+      dockerfile: Dockerfile
+    container_name: nexora-lr-board-emulator-1
+    depends_on:
+      device-service:
+        condition: service_started
+      execution-service:
+        condition: service_started
+      lightningrod-gateway:
+        condition: service_started
+    environment:
+      DEVICE_URL: http://device-service:8000
+      EXEC_URL: http://execution-service:8000
+      GW_URL: http://lightningrod-gateway:8000
+      BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
+      BOARD_NAME: lr-board-1
+      BOARD_TYPE: lightningrod-emulator
+      HEARTBEAT_SECONDS: "10"
+      POLL_SECONDS: "4"
+
+  lr-board-emulator-2:
+    profiles: ["emulator"]
+    build:
+      context: ./services/lr-board-emulator
+      dockerfile: Dockerfile
+    container_name: nexora-lr-board-emulator-2
+    depends_on:
+      device-service:
+        condition: service_started
+      execution-service:
+        condition: service_started
+      lightningrod-gateway:
+        condition: service_started
+    environment:
+      DEVICE_URL: http://device-service:8000
+      EXEC_URL: http://execution-service:8000
+      GW_URL: http://lightningrod-gateway:8000
+      BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
+      BOARD_NAME: lr-board-2
+      BOARD_TYPE: lightningrod-emulator
+      HEARTBEAT_SECONDS: "10"
+      POLL_SECONDS: "4"
+
 volumes:
   mysql_data:
   redis_data:
+  legacy_keystone_data:
 

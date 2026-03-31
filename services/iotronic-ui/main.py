@@ -6,7 +6,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-APP_TITLE = "Stack4Things UI (IoTronic-compatible)"
+APP_TITLE = "Nexora UI (legacy-compatible)"
 
 SERVICE_URLS = {
     "device": os.getenv("S4T_DEVICE_URL", "http://device-service:8000"),
@@ -19,9 +19,13 @@ SERVICE_URLS = {
 }
 
 KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
-KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "stack4things")
+KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "nexora")
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "nexora-ui")
+KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "")
 DEFAULT_TOKEN = os.getenv("S4T_AUTH_TOKEN", "")
 TENANT_ID = os.getenv("S4T_TENANT_ID", "")
+LOCAL_ADMIN_USER = os.getenv("S4T_UI_LOCAL_ADMIN_USER", "admin")
+LOCAL_ADMIN_PASSWORD = os.getenv("S4T_UI_LOCAL_ADMIN_PASSWORD", "admin")
 
 app = FastAPI(title=APP_TITLE, version="0.1.0")
 templates = Jinja2Templates(directory="templates")
@@ -47,9 +51,44 @@ async def _safe_get(url: str, token: str) -> tuple[bool, Any]:
         return False, str(exc)
 
 
+async def _fetch_keycloak_token(username: str, password: str) -> tuple[bool, str]:
+    candidate_realms = [KEYCLOAK_REALM]
+    if KEYCLOAK_REALM != "master":
+        candidate_realms.append("master")
+    candidate_client_ids = [KEYCLOAK_CLIENT_ID]
+    if KEYCLOAK_CLIENT_ID != "admin-cli":
+        candidate_client_ids.append("admin-cli")
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        for realm in candidate_realms:
+            for client_id in candidate_client_ids:
+                token_url = f"{KEYCLOAK_URL}/realms/{realm}/protocol/openid-connect/token"
+                form = {
+                    "grant_type": "password",
+                    "client_id": client_id,
+                    "username": username,
+                    "password": password,
+                }
+                if KEYCLOAK_CLIENT_SECRET and client_id == KEYCLOAK_CLIENT_ID:
+                    form["client_secret"] = KEYCLOAK_CLIENT_SECRET
+                try:
+                    resp = await client.post(
+                        token_url,
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        data=form,
+                    )
+                    if resp.status_code < 400:
+                        access_token = resp.json().get("access_token", "")
+                        if access_token:
+                            return True, access_token
+                except Exception:
+                    continue
+    return False, ""
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "iotronic-ui"}
+    return {"status": "healthy", "service": "nexora-ui"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -94,7 +133,7 @@ async def index(request: Request):
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request, error: str = ""):
     return templates.TemplateResponse(
         "login.html",
         {
@@ -102,13 +141,22 @@ async def login_page(request: Request):
             "title": APP_TITLE,
             "keycloak_url": KEYCLOAK_URL,
             "realm": KEYCLOAK_REALM,
-            "default_token": DEFAULT_TOKEN,
+            "default_username": os.getenv("S4T_UI_DEFAULT_USERNAME", "admin"),
+            "default_password": os.getenv("S4T_UI_DEFAULT_PASSWORD", "admin"),
+            "error": error,
         },
     )
 
 
 @app.post("/login")
-async def login(token: str = Form(...)):
+async def login(username: str = Form(...), password: str = Form(...)):
+    ok, token = await _fetch_keycloak_token(username=username, password=password)
+    # Local fallback for development environments.
+    if not ok and username == LOCAL_ADMIN_USER and password == LOCAL_ADMIN_PASSWORD:
+        token = DEFAULT_TOKEN or os.getenv("AUTH_DEV_TOKEN", "dev-token")
+        ok = True
+    if not ok:
+        return RedirectResponse(url="/login?error=Credenziali+non+valide", status_code=302)
     resp = RedirectResponse(url="/", status_code=302)
     resp.set_cookie("s4t_token", token, httponly=True, samesite="lax")
     return resp

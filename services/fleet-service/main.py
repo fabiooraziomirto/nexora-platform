@@ -214,6 +214,23 @@ async def get_fleet(fleet_id: str) -> dict[str, Any]:
     return {"id": fleet.id, "name": fleet.name, "description": fleet.description}
 
 
+@app.patch("/api/v2/fleets/{fleet_id}")
+async def update_fleet(fleet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    with SessionLocal() as db:
+        fleet = db.get(Fleet, fleet_id)
+        if not fleet:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        if "name" in payload and payload["name"]:
+            fleet.name = payload["name"]
+        if "description" in payload:
+            fleet.description = payload.get("description")
+        db.commit()
+        db.refresh(fleet)
+    response = {"id": fleet.id, "name": fleet.name, "description": fleet.description}
+    await _publish_event("updated", fleet.id, response)
+    return response
+
+
 @app.delete("/api/v2/fleets/{fleet_id}", status_code=204)
 async def delete_fleet(fleet_id: str) -> None:
     with SessionLocal() as db:

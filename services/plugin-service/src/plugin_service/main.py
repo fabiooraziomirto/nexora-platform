@@ -157,6 +157,21 @@ async def get_plugin(plugin_id: str) -> dict[str, Any]:
     return {"id": plugin.id, "name": plugin.name, "version": plugin.version}
 
 
+@app.patch("/api/v2/plugins/{plugin_id}")
+async def update_plugin(plugin_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    with SessionLocal() as db:
+        plugin = db.get(Plugin, plugin_id)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="plugin not found")
+        if "name" in payload and payload["name"]:
+            plugin.name = payload["name"]
+        if "version" in payload and payload["version"]:
+            plugin.version = payload["version"]
+        db.commit()
+        db.refresh(plugin)
+    return {"id": plugin.id, "name": plugin.name, "version": plugin.version}
+
+
 @app.delete("/api/v2/plugins/{plugin_id}", status_code=204)
 async def delete_plugin(plugin_id: str) -> None:
     with SessionLocal() as db:

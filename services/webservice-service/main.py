@@ -216,6 +216,25 @@ async def get_webservice(webservice_id: str) -> dict[str, Any]:
     return {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
 
 
+@app.patch("/api/v2/webservices/{webservice_id}")
+async def update_webservice(webservice_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    with SessionLocal() as db:
+        webservice = db.get(Webservice, webservice_id)
+        if not webservice:
+            raise HTTPException(status_code=404, detail="webservice not found")
+        if "device_id" in payload:
+            webservice.device_id = payload.get("device_id")
+        if "port" in payload and payload.get("port") is not None:
+            webservice.port = int(payload["port"])
+        if "status" in payload and payload.get("status"):
+            webservice.status = payload["status"]
+        db.commit()
+        db.refresh(webservice)
+    response = {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+    await _publish_event("updated", webservice.id, response)
+    return response
+
+
 @app.delete("/api/v2/webservices/{webservice_id}", status_code=204)
 async def delete_webservice(webservice_id: str) -> None:
     with SessionLocal() as db:

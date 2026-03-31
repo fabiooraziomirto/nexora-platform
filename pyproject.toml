@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "stack4things-v2"
+name = "nexora-platform"
 version = "2.0.0-alpha"
 description = "Modern IoT Device Management Platform - Cloud-Native Microservices Architecture"
-authors = ["Stack4Things Team"]
+authors = ["Nexora Platform Team"]
 readme = "README.md"
 packages = []
 

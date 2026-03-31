@@ -1,6 +1,6 @@
-# Stack4Things v2.0
+# Nexora Platform v2.0
 
-Stack4Things v2.0 is a cloud-native re-engineering of IoTronic/Stack4Things: microservice-first, Docker/Kubernetes native, event-driven, and designed to preserve OpenStack interoperability where needed.
+Nexora Platform v2.0 is a cloud-native IoT platform: microservice-first, Docker/Kubernetes native, event-driven, and designed to preserve OpenStack interoperability where needed.
 
 This README is intentionally detailed to support handover and onboarding of external contributors without prior project context.
 
@@ -15,7 +15,7 @@ This README is intentionally detailed to support handover and onboarding of exte
 - Version: `2.0.0-alpha`
 - Runtime: `Python 3.11+`, `FastAPI`, `Docker Compose`, `Kubernetes`
 - Core posture: DB-backed services, health/readiness/metrics endpoints, event contracts, CI baseline, deployment manifests.
-- OpenStack posture: adapter and integration scaffolding present; full production parity with original Stack4Things still requires iterative hardening.
+- OpenStack posture: adapter and integration scaffolding present; full production parity with the original legacy platform still requires iterative hardening.
 
 ## 3) System Architecture
 
@@ -51,7 +51,7 @@ flowchart LR
     Device --> Redis[(Redis)]
 ```
 
-> **IoTronic / Lightning Rod Parity**: This architecture provides functional equivalence with the legacy IoTronic + Lightning Rod stack. The same operational concepts (board registration, heartbeat, remote command dispatch, result callback) are implemented using HTTP REST APIs and Apache Kafka instead of WAMP/Crossbar.io. See [docs/deployment/iotronic-parity-matrix.md](docs/deployment/iotronic-parity-matrix.md) for the detailed mapping.
+> **Legacy Lightning Rod Parity**: This architecture provides functional equivalence with the legacy control stack. The same operational concepts (board registration, heartbeat, remote command dispatch, result callback) are implemented using HTTP REST APIs and Apache Kafka instead of WAMP/Crossbar.io. See [docs/deployment/iotronic-parity-matrix.md](docs/deployment/iotronic-parity-matrix.md) for the detailed mapping.
 
 ### Runtime Topology (Local)
 
@@ -63,6 +63,8 @@ flowchart LR
 - `webservice-service` -> `http://localhost:8005`
 - `fleet-service` -> `http://localhost:8006`
 - `lightningrod-gateway` -> `http://localhost:8007` (Kafka consumer, agent sessions, delivery)
+- `legacy-keystone` -> `http://localhost:15000/v3` (optional `legacy` profile)
+- `legacy-horizon` -> `http://localhost:18089` (optional `legacy` profile with Nexora compatibility plugin)
 - `mysql` -> `localhost:3306`
 - `redis` -> `localhost:6379`
 - `kafka` -> `localhost:9092`
