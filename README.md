@@ -1,6 +1,8 @@
-# Nexora Platform v2.0
+![Nexora Logo](nexora.png)
 
-Nexora Platform v2.0 is a cloud-native IoT platform: microservice-first, Docker/Kubernetes native, event-driven, and designed to preserve OpenStack interoperability where needed.
+# Nexora
+
+Nexora is a cloud-native IoT platform: microservice-first, Docker/Kubernetes native, event-driven, and designed to preserve OpenStack interoperability where needed.
 
 This README is intentionally detailed to support handover and onboarding of external contributors without prior project context.
 
@@ -12,7 +14,7 @@ This README is intentionally detailed to support handover and onboarding of exte
 
 ## 2) Current Maturity
 
-- Version: `2.0.0-alpha`
+- Version: `Nexora`
 - Runtime: `Python 3.11+`, `FastAPI`, `Docker Compose`, `Kubernetes`
 - Core posture: DB-backed services, health/readiness/metrics endpoints, event contracts, CI baseline, deployment manifests.
 - OpenStack posture: adapter and integration scaffolding present; full production parity with the original legacy platform still requires iterative hardening.

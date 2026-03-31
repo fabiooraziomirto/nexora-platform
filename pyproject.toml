@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nexora-platform"
-version = "2.0.0-alpha"
+version = "1.0.0"
 description = "Modern IoT Device Management Platform - Cloud-Native Microservices Architecture"
 authors = ["Nexora Platform Team"]
 readme = "README.md"
