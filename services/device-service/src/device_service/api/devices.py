@@ -194,3 +194,29 @@ async def agent_heartbeat(
     if not result:
         raise HTTPException(status_code=404, detail="Device not found")
     return result
+
+
+@router.post("/devices/{device_id}/runtime-config", status_code=200)
+async def set_device_runtime_config(
+    device_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set runtime env vars for the FaaS nexora-function-runtime on this device.
+
+    Values are stored server-side only — never included in dispatch payloads.
+    The edge agent reads this config at bootstrap and applies it to the runtime process.
+    """
+    import json as _json
+    from sqlalchemy import select as _select
+    from device_service.models.device import Device
+    result = await db.execute(_select(Device).where(Device.id == str(device_id)))
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    env = payload.get("env")
+    if env is None or not isinstance(env, dict):
+        raise HTTPException(status_code=400, detail="'env' dict is required")
+    device.runtime_env = _json.dumps(env)
+    await db.commit()
+    return {"device_id": str(device_id), "env_keys": list(env.keys())}

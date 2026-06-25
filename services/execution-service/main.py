@@ -55,6 +55,7 @@ from execution_service.core.config import (
     _CALLBACK_ALLOWED_FIELDS,
     PLUGIN_SERVICE_URL,
     DEVICE_SERVICE_URL,
+    FLEET_SERVICE_URL,
 )
 from execution_service.core.database import Base, engine, SessionLocal, ensure_execution_columns
 from execution_service.core.metrics import (
@@ -72,6 +73,7 @@ from execution_service.models.execution import (
     check_and_store_callback_key,
     audit_log,
 )
+from execution_service.models.trigger import FunctionTrigger
 
 # ── Aliases for backward compatibility with tests that import these names ─────
 # Tests do: from main import app, SessionLocal, Execution, ACTIVE_STATUSES
@@ -136,6 +138,103 @@ async def _timeout_loop() -> None:
             logger.exception("Timeout check iteration failed")
 
 
+def _trigger_matches_filter(filter_expr: str | None, event_payload: dict) -> bool:
+    if not filter_expr:
+        return True
+    try:
+        conditions = json.loads(filter_expr)
+        return all(event_payload.get(k) == v for k, v in conditions.items())
+    except Exception:
+        return True
+
+
+async def _fire_trigger(trigger: FunctionTrigger, event_payload: dict) -> None:
+    device_id: str | None = None
+    if trigger.target_type == "same_device":
+        device_id = event_payload.get("device_id") or event_payload.get("payload", {}).get("device_id")
+    elif trigger.target_type == "device":
+        device_id = trigger.target_id
+    # fleet type: handled via fleet deploy endpoint; skip here for v1
+
+    if not device_id and trigger.target_type in {"same_device", "device"}:
+        logger.warning("trigger %s: cannot determine device_id, skipping", trigger.id)
+        return
+
+    try:
+        fake_payload: dict[str, Any] = {
+            "type": "function.invoke",
+            "plugin_id": trigger.function_id,
+            "device_id": device_id,
+            "args": {},
+            "mode": "async",
+            "command": f"trigger:{trigger.id}",
+        }
+        now = datetime.now(timezone.utc)
+        execution_id = str(uuid4())
+        with SessionLocal() as db:
+            execution = Execution(
+                id=execution_id,
+                device_id=device_id,
+                command=f"trigger:{trigger.id}",
+                status="queued",
+                correlation_id=str(uuid4()),
+                tenant_id=trigger.tenant_id,
+                owner_id="trigger-system",
+                created_at=now,
+                execution_type="function.invoke",
+                plugin_id=trigger.function_id,
+                args=json.dumps({}),
+                invocation_mode="async",
+            )
+            db.add(execution)
+            db.commit()
+        await dispatch_execution(execution_id)
+        logger.info("trigger %s fired execution %s for event %s", trigger.id, execution_id, trigger.event_type)
+    except Exception:
+        logger.exception("trigger %s: failed to fire for event %s", trigger.id, trigger.event_type)
+
+
+async def _trigger_consumer_loop() -> None:
+    if not KAFKA_ENABLED:
+        return
+    topics = [
+        f"{KAFKA_TOPIC_PREFIX}.execution.succeeded",
+        f"{KAFKA_TOPIC_PREFIX}.execution.failed",
+        f"{KAFKA_TOPIC_PREFIX}.device.registered",
+    ]
+    consumer = aiokafka.AIOKafkaConsumer(
+        *topics,
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS.split(","),
+        group_id="execution-service-trigger-consumer",
+        auto_offset_reset="latest",
+    )
+    try:
+        await consumer.start()
+    except Exception:
+        logger.exception("Trigger consumer failed to start — event triggers disabled")
+        return
+    try:
+        async for msg in consumer:
+            try:
+                event = json.loads(msg.value)
+                # event_type is last component of topic, e.g. "device.registered"
+                topic_suffix = msg.topic.replace(f"{KAFKA_TOPIC_PREFIX}.", "", 1)
+                with SessionLocal() as db:
+                    triggers = db.execute(
+                        select(FunctionTrigger).where(
+                            FunctionTrigger.event_type == topic_suffix,
+                            FunctionTrigger.is_active.is_(True),
+                        )
+                    ).scalars().all()
+                for trigger in triggers:
+                    if _trigger_matches_filter(trigger.filter_expr, event):
+                        await _fire_trigger(trigger, event)
+            except Exception:
+                logger.exception("Error processing trigger event from %s", msg.topic)
+    finally:
+        await consumer.stop()
+
+
 # ── Alias for internal backward compat (_ensure_execution_columns still in tests?) ──
 def _ensure_execution_columns() -> None:
     ensure_execution_columns()
@@ -152,6 +251,7 @@ async def startup() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_execution_columns()
     asyncio.create_task(_timeout_loop())
+    asyncio.create_task(_trigger_consumer_loop())
     if not KAFKA_ENABLED:
         logger.info("Kafka publisher disabled by configuration")
         return
@@ -580,3 +680,303 @@ async def cancel_execution(execution_id: str) -> dict[str, Any]:
     audit_log("cancelled", execution_id)
     await _events.publish_event("cancelled", execution.id, response)
     return response
+
+
+# ── Function Trigger CRUD ─────────────────────────────────────────────────────
+
+def _trigger_to_dict(t: FunctionTrigger) -> dict[str, Any]:
+    return {
+        "id": t.id,
+        "event_type": t.event_type,
+        "function_id": t.function_id,
+        "target_type": t.target_type,
+        "target_id": t.target_id,
+        "filter_expr": json.loads(t.filter_expr) if t.filter_expr else None,
+        "is_active": t.is_active,
+        "tenant_id": t.tenant_id,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+@app.post("/api/v2/triggers", status_code=201)
+async def create_trigger(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    if not payload.get("event_type"):
+        raise HTTPException(status_code=400, detail="event_type is required")
+    if not payload.get("function_id"):
+        raise HTTPException(status_code=400, detail="function_id is required")
+    trigger = FunctionTrigger(
+        id=str(uuid4()),
+        event_type=payload["event_type"],
+        function_id=payload["function_id"],
+        target_type=payload.get("target_type", "same_device"),
+        target_id=payload.get("target_id"),
+        filter_expr=json.dumps(payload["filter_expr"]) if payload.get("filter_expr") else None,
+        is_active=True,
+        tenant_id=getattr(request.state, "tenant_id", None),
+        created_at=datetime.now(timezone.utc),
+    )
+    with SessionLocal() as db:
+        db.add(trigger)
+        db.commit()
+        db.refresh(trigger)
+    return _trigger_to_dict(trigger)
+
+
+@app.get("/api/v2/triggers")
+async def list_triggers(request: Request, event_type: str | None = None) -> dict[str, Any]:
+    with SessionLocal() as db:
+        q = select(FunctionTrigger)
+        if event_type:
+            q = q.where(FunctionTrigger.event_type == event_type)
+        items = db.execute(q).scalars().all()
+    return {"items": [_trigger_to_dict(t) for t in items], "total": len(items)}
+
+
+@app.get("/api/v2/triggers/{trigger_id}")
+async def get_trigger(trigger_id: str) -> dict[str, Any]:
+    with SessionLocal() as db:
+        trigger = db.get(FunctionTrigger, trigger_id)
+    if not trigger:
+        raise HTTPException(status_code=404, detail="trigger not found")
+    return _trigger_to_dict(trigger)
+
+
+@app.delete("/api/v2/triggers/{trigger_id}", status_code=204)
+async def delete_trigger(trigger_id: str) -> None:
+    with SessionLocal() as db:
+        trigger = db.get(FunctionTrigger, trigger_id)
+        if not trigger:
+            raise HTTPException(status_code=404, detail="trigger not found")
+        db.delete(trigger)
+        db.commit()
+
+
+@app.patch("/api/v2/triggers/{trigger_id}/enable")
+async def enable_trigger(trigger_id: str) -> dict[str, Any]:
+    with SessionLocal() as db:
+        trigger = db.get(FunctionTrigger, trigger_id)
+        if not trigger:
+            raise HTTPException(status_code=404, detail="trigger not found")
+        trigger.is_active = True
+        db.commit()
+        db.refresh(trigger)
+    return _trigger_to_dict(trigger)
+
+
+@app.patch("/api/v2/triggers/{trigger_id}/disable")
+async def disable_trigger(trigger_id: str) -> dict[str, Any]:
+    with SessionLocal() as db:
+        trigger = db.get(FunctionTrigger, trigger_id)
+        if not trigger:
+            raise HTTPException(status_code=404, detail="trigger not found")
+        trigger.is_active = False
+        db.commit()
+        db.refresh(trigger)
+    return _trigger_to_dict(trigger)
+
+
+# ── Fleet Deploy / Invoke (Feature 8) ────────────────────────────────────────
+
+async def _get_fleet_members(fleet_id: str) -> list[str]:
+    import httpx as _httpx
+    try:
+        resp = _httpx.get(
+            f"{FLEET_SERVICE_URL}/api/v2/fleets/{fleet_id}/members",
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        resp.raise_for_status()
+        return [m["device_id"] for m in resp.json().get("items", [])]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"fleet-service unavailable: {exc}") from exc
+
+
+@app.post("/api/v2/fleets/{fleet_id}/functions/{function_id}/deploy", status_code=202)
+async def deploy_function_to_fleet(
+    fleet_id: str,
+    function_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Deploy (install) a function on all devices in a fleet."""
+    stop_on_failure = payload.get("stop_on_failure", False)
+    device_ids = await _get_fleet_members(fleet_id)
+    if not device_ids:
+        raise HTTPException(status_code=400, detail="fleet has no members")
+
+    deployment_id = str(uuid4())
+    created_ids: list[str] = []
+    for device_id in device_ids:
+        try:
+            fake_payload: dict[str, Any] = {
+                "type": "function.install",
+                "plugin_id": function_id,
+                "device_id": device_id,
+                "command": f"function.install:{function_id}",
+            }
+            created = await create_execution(fake_payload, request, x_tenant_id=None)
+            exec_id = created["id"]
+            await dispatch_execution(exec_id)
+            created_ids.append(exec_id)
+        except HTTPException as exc:
+            if stop_on_failure:
+                # Cancel already-dispatched executions
+                for eid in created_ids:
+                    try:
+                        await cancel_execution(eid)
+                    except Exception:
+                        pass
+                raise HTTPException(
+                    status_code=exc.status_code,
+                    detail=f"deploy stopped at device {device_id}: {exc.detail}",
+                )
+
+    return {
+        "deployment_id": deployment_id,
+        "fleet_id": fleet_id,
+        "function_id": function_id,
+        "total": len(device_ids),
+        "dispatched": len(created_ids),
+        "execution_ids": created_ids,
+        "status": "deploying",
+    }
+
+
+@app.get("/api/v2/fleets/{fleet_id}/functions/{function_id}/deploy/status")
+async def fleet_deploy_status(fleet_id: str, function_id: str) -> dict[str, Any]:
+    """Aggregate install status for a function across all fleet devices."""
+    device_ids = await _get_fleet_members(fleet_id)
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Execution).where(
+                Execution.plugin_id == function_id,
+                Execution.execution_type == "function.install",
+                Execution.device_id.in_(device_ids),
+            )
+        ).scalars().all()
+    counts: dict[str, int] = {}
+    for ex in rows:
+        counts[ex.status] = counts.get(ex.status, 0) + 1
+    return {
+        "fleet_id": fleet_id,
+        "function_id": function_id,
+        "total": len(device_ids),
+        "installed": counts.get("succeeded", 0),
+        "pending": counts.get("queued", 0) + counts.get("dispatched", 0) + counts.get("running", 0),
+        "failed": counts.get("failed", 0),
+        "by_status": counts,
+    }
+
+
+@app.post("/api/v2/fleets/{fleet_id}/functions/{function_id}/invoke", status_code=202)
+async def invoke_function_on_fleet(
+    fleet_id: str,
+    function_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Invoke a function on every device in a fleet concurrently."""
+    device_ids = await _get_fleet_members(fleet_id)
+    if not device_ids:
+        raise HTTPException(status_code=400, detail="fleet has no members")
+
+    results = []
+    for device_id in device_ids:
+        try:
+            dispatched = await _create_and_dispatch_function(
+                plugin_id=function_id,
+                device_id=device_id,
+                args=payload.get("args"),
+                mode=payload.get("mode", "async"),
+                request=request,
+            )
+            results.append({"device_id": device_id, "execution_id": dispatched["id"], "status": "dispatched"})
+        except HTTPException as exc:
+            results.append({"device_id": device_id, "execution_id": None, "status": "error", "detail": exc.detail})
+
+    return {
+        "fleet_id": fleet_id,
+        "function_id": function_id,
+        "total": len(device_ids),
+        "results": results,
+    }
+
+
+# ── Operator Aggregation APIs (Feature 10) ───────────────────────────────────
+
+def _require_operator(request: Request) -> None:
+    if not getattr(request.state, "is_operator", False):
+        raise HTTPException(status_code=403, detail="operator role required")
+
+
+@app.get("/api/v2/operator/functions/deployments")
+async def operator_function_deployments(request: Request) -> dict[str, Any]:
+    """Count function installs grouped by plugin_id + status."""
+    _require_operator(request)
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Execution.plugin_id, Execution.status, func.count().label("count"))
+            .where(Execution.execution_type == "function.install")
+            .group_by(Execution.plugin_id, Execution.status)
+        ).all()
+    return {
+        "items": [{"plugin_id": r.plugin_id, "status": r.status, "count": r.count} for r in rows],
+        "total": len(rows),
+    }
+
+
+@app.get("/api/v2/operator/functions/invocations")
+async def operator_function_invocations(
+    request: Request,
+    plugin_id: str | None = None,
+    device_id: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """List function invocations with optional filters."""
+    _require_operator(request)
+    with SessionLocal() as db:
+        q = select(Execution).where(Execution.execution_type == "function.invoke")
+        if plugin_id:
+            q = q.where(Execution.plugin_id == plugin_id)
+        if device_id:
+            q = q.where(Execution.device_id == device_id)
+        if status:
+            q = q.where(Execution.status == status)
+        q = q.order_by(Execution.created_at.desc()).limit(limit)
+        items = db.execute(q).scalars().all()
+    return {"items": [execution_to_dict(e) for e in items], "total": len(items)}
+
+
+@app.get("/api/v2/operator/functions/failures")
+async def operator_function_failures(request: Request, days: int = 7) -> dict[str, Any]:
+    """List failed function deploy/invoke executions in the last N days."""
+    _require_operator(request)
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    with SessionLocal() as db:
+        items = db.execute(
+            select(Execution).where(
+                Execution.execution_type.in_({"function.install", "function.invoke"}),
+                Execution.status == "failed",
+                Execution.created_at >= cutoff,
+            ).order_by(Execution.created_at.desc())
+        ).scalars().all()
+    return {"items": [execution_to_dict(e) for e in items], "total": len(items), "days": days}
+
+
+@app.get("/api/v2/operator/runtime/health")
+async def operator_runtime_health(request: Request) -> dict[str, Any]:
+    """Probe nexora-function-runtime health endpoint and return status."""
+    _require_operator(request)
+    import httpx as _httpx
+    runtime_url = os.getenv("FUNCTION_RUNTIME_URL", "http://nexora-function-runtime:9000")
+    try:
+        resp = _httpx.get(f"{runtime_url}/health", timeout=3.0)
+        return {"runtime_url": runtime_url, "status": "healthy" if resp.status_code == 200 else "unhealthy",
+                "detail": resp.json()}
+    except Exception as exc:
+        return {"runtime_url": runtime_url, "status": "unreachable", "detail": str(exc)}

@@ -32,6 +32,10 @@ class Device(Base):
     # JSON: {"wasm_wasi": true, "arch": "arm64", "agent_version": "1.0", "available_memory_mb": 256, "supported_runtimes": ["wasm-wasi"]}
     capabilities = Column(Text, nullable=True)
 
+    # Runtime env vars for FaaS secrets; pre-configured by operator, NOT included in dispatch payloads.
+    # JSON: {"VAR_NAME": "value"} — applied by edge agent to nexora-function-runtime at bootstrap.
+    runtime_env = Column(Text, nullable=True)
+
     # Metadata
     meta = Column("metadata", JSON, nullable=True)
     tags = Column(JSON, nullable=True)

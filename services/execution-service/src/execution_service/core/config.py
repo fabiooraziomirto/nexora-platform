@@ -15,6 +15,7 @@ AUTH_OPERATOR_ROLE = os.getenv("AUTH_OPERATOR_ROLE", "platform-operator")
 # FaaS: URLs for capability/plugin validation during dispatch
 PLUGIN_SERVICE_URL = os.getenv("PLUGIN_SERVICE_URL", "http://plugin-service:8000")
 DEVICE_SERVICE_URL = os.getenv("DEVICE_SERVICE_URL", "http://device-service:8000")
+FLEET_SERVICE_URL = os.getenv("FLEET_SERVICE_URL", "http://fleet-service:8000")
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
