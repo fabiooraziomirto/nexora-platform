@@ -24,6 +24,7 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("result_stdout", "TEXT"),
     ("result_stderr", "TEXT"),
     ("tenant_id", "VARCHAR(64)"),
+    ("owner_id", "VARCHAR(64)"),
     ("created_at", "TIMESTAMP"),
     ("dispatched_at", "TIMESTAMP"),
     ("running_at", "TIMESTAMP"),
