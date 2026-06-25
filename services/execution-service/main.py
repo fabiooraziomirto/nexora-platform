@@ -27,6 +27,8 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 AUTH_DEV_TOKEN = os.getenv("AUTH_DEV_TOKEN", "dev-token")
+AUTH_DEV_BYPASS_ENABLED = os.getenv("AUTH_DEV_BYPASS_ENABLED", "false").lower() == "true"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER", "")
 AUTH_WRITE_ROLE = os.getenv("AUTH_WRITE_ROLE", "writer")
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
@@ -119,6 +121,14 @@ def _transition_allowed(from_status: str, to_status: str) -> bool:
 
 
 def _execution_to_dict(e: Execution) -> dict[str, Any]:
+    # Per-execution dispatch latency proxy: time from dispatched_at to running_at.
+    # Populated once the agent has reported back "running" via callback.
+    # Captures the full pipeline (Kafka + gateway queue + agent startup handshake).
+    dispatch_latency_seconds: float | None = None
+    if e.dispatched_at and e.running_at:
+        dispatch_latency_seconds = round(
+            (_make_aware(e.running_at) - _make_aware(e.dispatched_at)).total_seconds(), 6
+        )
     return {
         "id": e.id,
         "device_id": e.device_id,
@@ -133,6 +143,7 @@ def _execution_to_dict(e: Execution) -> dict[str, Any]:
         "created_at": e.created_at.isoformat() if e.created_at else None,
         "dispatched_at": e.dispatched_at.isoformat() if e.dispatched_at else None,
         "running_at": e.running_at.isoformat() if e.running_at else None,
+        "dispatch_latency_seconds": dispatch_latency_seconds,
     }
 
 
@@ -211,6 +222,10 @@ async def _timeout_loop() -> None:
 
 @app.on_event("startup")
 async def startup() -> None:
+    if AUTH_DEV_BYPASS_ENABLED:
+        if ENVIRONMENT == "production":
+            raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
+        logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
     Base.metadata.create_all(bind=engine)
     _ensure_execution_columns()
     asyncio.create_task(_timeout_loop())
@@ -289,7 +304,7 @@ async def auth_middleware(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "missing bearer token"})
 
     token = auth.split(" ", 1)[1]
-    if token == AUTH_DEV_TOKEN:
+    if AUTH_DEV_BYPASS_ENABLED and token == AUTH_DEV_TOKEN:
         return await call_next(request)
 
     payload = _decode_jwt_payload(token)
@@ -453,6 +468,9 @@ async def dispatch_execution(execution_id: str) -> dict[str, Any]:
         "device_id": execution.device_id,
         "command": execution.command,
         "correlation_id": execution.correlation_id,
+        # High-precision epoch timestamp captured right before Kafka publish.
+        # Used by lightningrod-gateway to measure end-to-end dispatch latency.
+        "kafka_dispatched_at": time.time(),
     }
     _audit_log("dispatched", execution_id)
     await _publish_event("dispatched", execution.id, envelope)

@@ -28,6 +28,8 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 AUTH_DEV_TOKEN = os.getenv("AUTH_DEV_TOKEN", "dev-token")
+AUTH_DEV_BYPASS_ENABLED = os.getenv("AUTH_DEV_BYPASS_ENABLED", "false").lower() == "true"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER", "")
 AUTH_WRITE_ROLE = os.getenv("AUTH_WRITE_ROLE", "writer")
 logger = logging.getLogger("plugin-service")
@@ -45,6 +47,10 @@ class Plugin(Base):
 
 @app.on_event("startup")
 def startup() -> None:
+    if AUTH_DEV_BYPASS_ENABLED:
+        if ENVIRONMENT == "production":
+            raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
+        logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
     Base.metadata.create_all(bind=engine)
 
 
@@ -73,7 +79,7 @@ async def auth_middleware(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "missing bearer token"})
 
     token = auth.split(" ", 1)[1]
-    if token == AUTH_DEV_TOKEN:
+    if AUTH_DEV_BYPASS_ENABLED and token == AUTH_DEV_TOKEN:
         return await call_next(request)
 
     payload = _decode_jwt_payload(token)
