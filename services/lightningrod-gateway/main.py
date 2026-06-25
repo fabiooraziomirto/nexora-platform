@@ -1,4 +1,10 @@
 import os
+import sys
+
+_SRC = os.path.join(os.path.dirname(__file__), "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
 import json
 import time
 import asyncio
@@ -10,24 +16,36 @@ import aiokafka
 import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from prometheus_client import generate_latest
+
+from lightningrod_gateway.core.config import (
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_TOPIC_PREFIX,
+    KAFKA_ENABLED,
+    KAFKA_REQUIRED,
+    MAX_DELIVERY_ATTEMPTS,
+    DELIVERY_BACKOFF_SECONDS,
+    REDIS_URL,
+    REDIS_ENABLED,
+    REDIS_REQUIRED,
+    SESSION_TTL_SECONDS,
+    DISPATCH_TTL_SECONDS,
+)
+from lightningrod_gateway.core.metrics import (
+    DISPATCH_EVENTS_TOTAL,
+    DELIVERY_ATTEMPTS_TOTAL,
+    DELIVERY_FAILURES_TOTAL,
+    AGENT_SESSIONS_GAUGE,
+    PENDING_DISPATCH_GAUGE,
+    PER_DEVICE_PENDING_GAUGE,
+    REQUEST_DURATION,
+    DISPATCH_LATENCY,
+    BROKER_COMMIT_LAG,
+    KAFKA_INGESTION_LATENCY,
+    QUEUE_WAIT,
+)
 
 app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
-
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
-KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
-KAFKA_REQUIRED = os.getenv("KAFKA_REQUIRED", "false").lower() == "true"
-MAX_DELIVERY_ATTEMPTS = int(os.getenv("MAX_DELIVERY_ATTEMPTS", "3"))
-DELIVERY_BACKOFF_SECONDS = float(os.getenv("DELIVERY_BACKOFF_SECONDS", "0.5"))
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true"
-REDIS_REQUIRED = os.getenv("REDIS_REQUIRED", "false").lower() == "true"
-# Heartbeat-based TTL: session expires if not refreshed within this window.
-SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "300"))
-# Dispatch TTL matches EXECUTION_RUNNING_TIMEOUT_SECONDS in execution-service.
-DISPATCH_TTL_SECONDS = int(os.getenv("DISPATCH_TTL_SECONDS", "3600"))
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("lightningrod-gateway")
@@ -41,79 +59,6 @@ redis_client: aioredis.Redis | None = None
 # With fallback active the gateway is NOT horizontally scalable (single-instance only).
 _local_sessions: dict[str, dict[str, Any]] = {}
 _local_dispatches: dict[str, dict[str, Any]] = {}
-
-DISPATCH_EVENTS_TOTAL = Counter(
-    "s4t_lr_dispatch_events_total",
-    "Total dispatch events consumed from Kafka",
-    ["service"],
-)
-DELIVERY_ATTEMPTS_TOTAL = Counter(
-    "s4t_lr_delivery_attempts_total",
-    "Total delivery attempts to edge agents",
-    ["service", "device_id"],
-)
-DELIVERY_FAILURES_TOTAL = Counter(
-    "s4t_lr_delivery_failures_total",
-    "Total delivery failures after retries exhausted",
-    ["service", "device_id"],
-)
-AGENT_SESSIONS_GAUGE = Gauge(
-    "s4t_lr_agent_sessions",
-    "Number of currently registered agent sessions",
-    ["service"],
-)
-PENDING_DISPATCH_GAUGE = Gauge(
-    "s4t_lr_pending_dispatches",
-    "Number of pending dispatches in cache",
-    ["service"],
-)
-PER_DEVICE_PENDING_GAUGE = Gauge(
-    "s4t_lr_per_device_pending_dispatches",
-    "Pending dispatches per device",
-    ["service", "device_id"],
-)
-REQUEST_DURATION = Histogram(
-    "s4t_lr_request_duration_seconds",
-    "HTTP request duration",
-    ["service", "method", "path"],
-)
-# End-to-end dispatch latency: from kafka_dispatched_at in the event envelope
-# to the moment the gateway successfully delivers to the agent via /deliver.
-# Buckets tuned for IoT command dispatch (expected range: 10ms–10s).
-DISPATCH_LATENCY = Histogram(
-    "s4t_execution_dispatch_latency_seconds",
-    "End-to-end dispatch latency from Kafka publish to agent delivery",
-    ["service"],
-    buckets=(0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, float("inf")),
-)
-# Phase 1a: time from Kafka publish (producer-side) to broker timestamp on the record.
-# With default CreateTime this reflects producer serialisation time (~sub-ms).
-# Enable LogAppendTime on the topic for true network+commit lag measurement:
-#   kafka-configs.sh --bootstrap-server kafka:29092 --entity-type topics \
-#     --entity-name stack4things.execution.dispatched --alter \
-#     --add-config message.timestamp.type=LogAppendTime
-# Negative values indicate clock skew between producer host and broker; they are
-# recorded (not dropped) so operators can detect and quantify systematic skew.
-BROKER_COMMIT_LAG = Histogram(
-    "s4t_lr_kafka_broker_lag_seconds",
-    "Lag between producer kafka_dispatched_at and Kafka broker record timestamp (msg.timestamp)",
-    ["service"],
-    buckets=(-0.1, -0.025, -0.005, -0.001, 0.0, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, float("inf")),
-)
-# Phase 1b: time from Kafka publish to gateway consumer receiving the message.
-KAFKA_INGESTION_LATENCY = Histogram(
-    "s4t_lr_kafka_ingestion_latency_seconds",
-    "Kafka broker-to-consumer ingestion latency for dispatch events",
-    ["service"],
-    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, float("inf")),
-)
-# Phase 2: time the dispatch event waits in the gateway cache before delivery.
-QUEUE_WAIT = Histogram(
-    "s4t_lr_dispatch_queue_wait_seconds",
-    "Time a dispatch event waits in the gateway cache before agent delivery",
-    ["service"],
-    buckets=(0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, float("inf")),
-)
 
 
 # ---------------------------------------------------------------------------
