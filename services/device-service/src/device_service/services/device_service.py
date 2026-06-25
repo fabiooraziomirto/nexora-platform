@@ -28,6 +28,13 @@ class DeviceService:
 
     @staticmethod
     def _to_response(device: Device) -> DeviceResponse:
+        import json as _json
+        caps = None
+        if device.capabilities:
+            try:
+                caps = _json.loads(device.capabilities)
+            except (ValueError, TypeError):
+                caps = None
         return DeviceResponse(
             id=device.id,
             name=device.name,
@@ -42,6 +49,7 @@ class DeviceService:
             owner_id=device.owner_id,
             tenant_id=device.tenant_id,
             privacy_level=device.privacy_level,
+            capabilities=caps,
         )
 
     async def list_devices(
@@ -217,11 +225,16 @@ class DeviceService:
         else:
             device = None
 
+        import json as _json
+        capabilities_json = _json.dumps(data.capabilities) if data.capabilities else None
+
         if device:
             device.name = data.name
             device.device_type = data.device_type
             if data.metadata is not None:
                 device.meta = data.metadata
+            if data.capabilities is not None:
+                device.capabilities = capabilities_json
             device.status = "online"
             device.last_seen = now
         else:
@@ -230,6 +243,7 @@ class DeviceService:
                 name=data.name,
                 device_type=data.device_type,
                 meta=data.metadata,
+                capabilities=capabilities_json,
                 status="online",
                 last_seen=now,
             )
@@ -262,9 +276,12 @@ class DeviceService:
         if not device:
             return None
 
+        import json as _json
         now = datetime.now(timezone.utc)
         device.last_seen = now
         device.status = data.status or "online"
+        if data.capabilities is not None:
+            device.capabilities = _json.dumps(data.capabilities)
 
         await self.db.commit()
         await self.db.refresh(device)

@@ -17,7 +17,7 @@ from plugin_service.core.config import (
     ENVIRONMENT,
     KEYCLOAK_ISSUER,
 )
-from plugin_service.core.database import Base, engine, SessionLocal
+from plugin_service.core.database import Base, engine, SessionLocal, ensure_plugin_columns
 from plugin_service.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 from plugin_service.api.plugins import router as plugins_router
 
@@ -37,6 +37,7 @@ def startup() -> None:
             raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
         logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
     Base.metadata.create_all(bind=engine)
+    ensure_plugin_columns()
 
 
 def _decode_jwt_payload(token: str) -> dict[str, Any] | None:

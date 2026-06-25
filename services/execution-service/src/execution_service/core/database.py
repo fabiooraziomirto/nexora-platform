@@ -28,6 +28,12 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("created_at", "TIMESTAMP"),
     ("dispatched_at", "TIMESTAMP"),
     ("running_at", "TIMESTAMP"),
+    # FaaS columns
+    ("execution_type", "VARCHAR(30)"),
+    ("plugin_id", "VARCHAR(36)"),
+    ("args", "TEXT"),
+    ("function_result", "TEXT"),
+    ("invocation_mode", "VARCHAR(10)"),
 ]
 
 

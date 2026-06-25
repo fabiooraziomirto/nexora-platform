@@ -12,6 +12,10 @@ AUTH_WRITE_ROLE = os.getenv("AUTH_WRITE_ROLE", "writer")
 # Role that grants platform-operator privileges (sees all executions, full payload)
 AUTH_OPERATOR_ROLE = os.getenv("AUTH_OPERATOR_ROLE", "platform-operator")
 
+# FaaS: URLs for capability/plugin validation during dispatch
+PLUGIN_SERVICE_URL = os.getenv("PLUGIN_SERVICE_URL", "http://plugin-service:8000")
+DEVICE_SERVICE_URL = os.getenv("DEVICE_SERVICE_URL", "http://device-service:8000")
+
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
 KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
@@ -40,4 +44,4 @@ _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "running": {"succeeded", "failed", "timeout", "cancelled"},
 }
 
-_CALLBACK_ALLOWED_FIELDS = frozenset({"status", "exit_code", "stdout", "stderr", "callback_key"})
+_CALLBACK_ALLOWED_FIELDS = frozenset({"status", "exit_code", "stdout", "stderr", "callback_key", "function_result"})
