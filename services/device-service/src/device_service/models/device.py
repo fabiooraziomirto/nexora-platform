@@ -1,38 +1,46 @@
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text, JSON, Index
-from sqlalchemy.dialects.mysql import CHAR, INTEGER
+from sqlalchemy import Column, String, DateTime, Text, JSON, Index, Integer
+from sqlalchemy.dialects.mysql import CHAR
 from device_service.core.database import Base
 
 
 class Device(Base):
     """Device model."""
-    
+
     __tablename__ = "devices"
-    
+
     # Primary key (UUID as CHAR(36) for MySQL compatibility)
     id = Column(CHAR(36), primary_key=True, index=True)
-    
+
     # Device identification
     name = Column(String(255), nullable=False, index=True)
     device_type = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    
+
+    # Ownership — physical owner (Keycloak sub) and tenant (Keycloak group)
+    owner_id = Column(CHAR(36), nullable=True, index=True)
+    tenant_id = Column(String(255), nullable=True, index=True)
+
+    # Privacy level configured by owner (0=operational only, 1-4=opt-in tiers)
+    privacy_level = Column(Integer, nullable=False, default=0)
+
     # Status
     status = Column(String(50), nullable=False, default="offline", index=True)
     last_seen = Column(DateTime, nullable=True, index=True)
-    
+
     # Metadata
     meta = Column("metadata", JSON, nullable=True)
     tags = Column(JSON, nullable=True)
-    
+
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Indexes for common queries
     __table_args__ = (
         Index("idx_device_status_updated", "status", "updated_at"),
         Index("idx_device_name_type", "name", "device_type"),
+        Index("idx_device_owner_tenant", "owner_id", "tenant_id"),
     )
 
     
