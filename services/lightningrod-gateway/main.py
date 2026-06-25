@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 import aiokafka
+import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
@@ -20,16 +21,25 @@ KAFKA_REQUIRED = os.getenv("KAFKA_REQUIRED", "false").lower() == "true"
 MAX_DELIVERY_ATTEMPTS = int(os.getenv("MAX_DELIVERY_ATTEMPTS", "3"))
 DELIVERY_BACKOFF_SECONDS = float(os.getenv("DELIVERY_BACKOFF_SECONDS", "0.5"))
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true"
+REDIS_REQUIRED = os.getenv("REDIS_REQUIRED", "false").lower() == "true"
+# Heartbeat-based TTL: session expires if not refreshed within this window.
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "300"))
+# Dispatch TTL matches EXECUTION_RUNNING_TIMEOUT_SECONDS in execution-service.
+DISPATCH_TTL_SECONDS = int(os.getenv("DISPATCH_TTL_SECONDS", "3600"))
+
 logger = logging.getLogger("lightningrod-gateway")
 
 producer: aiokafka.AIOKafkaProducer | None = None
 consumer: aiokafka.AIOKafkaConsumer | None = None
 _consumer_task: asyncio.Task | None = None
+redis_client: aioredis.Redis | None = None
 
-agent_sessions: dict[str, dict[str, Any]] = {}
-dispatch_cache: dict[str, dict[str, Any]] = {}
-delivery_attempts: dict[str, int] = {}
-delivery_last_error: dict[str, str] = {}
+# Local in-memory fallback — used only when Redis is disabled or unreachable.
+# With fallback active the gateway is NOT horizontally scalable (single-instance only).
+_local_sessions: dict[str, dict[str, Any]] = {}
+_local_dispatches: dict[str, dict[str, Any]] = {}
 
 DISPATCH_EVENTS_TOTAL = Counter(
     "s4t_lr_dispatch_events_total",
@@ -68,6 +78,112 @@ REQUEST_DURATION = Histogram(
 )
 
 
+# ---------------------------------------------------------------------------
+# Redis-backed store helpers
+# Each helper falls back to the local dicts on any Redis error so the gateway
+# degrades gracefully instead of crashing. A warning is emitted on each
+# fallback so the condition is visible in logs/alerts.
+# ---------------------------------------------------------------------------
+
+def _rkey_session(device_id: str) -> str:
+    return f"gateway:session:{device_id}"
+
+
+def _rkey_dispatch(execution_id: str) -> str:
+    return f"gateway:dispatch:{execution_id}"
+
+
+async def _session_get(device_id: str) -> dict[str, Any] | None:
+    if redis_client is not None:
+        try:
+            raw = await redis_client.get(_rkey_session(device_id))
+            return json.loads(raw) if raw else None
+        except Exception:
+            logger.warning("Redis error in _session_get device=%s, falling back to local", device_id)
+    return _local_sessions.get(device_id)
+
+
+async def _session_set(device_id: str, session: dict[str, Any]) -> None:
+    if redis_client is not None:
+        try:
+            await redis_client.setex(_rkey_session(device_id), SESSION_TTL_SECONDS, json.dumps(session))
+            return
+        except Exception:
+            logger.warning("Redis error in _session_set device=%s, falling back to local", device_id)
+    _local_sessions[device_id] = session
+
+
+async def _session_count() -> int:
+    if redis_client is not None:
+        try:
+            return len(await redis_client.keys("gateway:session:*"))
+        except Exception:
+            logger.warning("Redis error in _session_count, falling back to local")
+    return len(_local_sessions)
+
+
+async def _dispatch_get(execution_id: str) -> dict[str, Any] | None:
+    if redis_client is not None:
+        try:
+            raw = await redis_client.get(_rkey_dispatch(execution_id))
+            return json.loads(raw) if raw else None
+        except Exception:
+            logger.warning("Redis error in _dispatch_get exec=%s, falling back to local", execution_id)
+    return _local_dispatches.get(execution_id)
+
+
+async def _dispatch_set(execution_id: str, data: dict[str, Any]) -> None:
+    if redis_client is not None:
+        try:
+            await redis_client.setex(_rkey_dispatch(execution_id), DISPATCH_TTL_SECONDS, json.dumps(data))
+            return
+        except Exception:
+            logger.warning("Redis error in _dispatch_set exec=%s, falling back to local", execution_id)
+    _local_dispatches[execution_id] = data
+
+
+async def _dispatch_delete(execution_id: str) -> None:
+    if redis_client is not None:
+        try:
+            await redis_client.delete(_rkey_dispatch(execution_id))
+            return
+        except Exception:
+            logger.warning("Redis error in _dispatch_delete exec=%s, falling back to local", execution_id)
+    _local_dispatches.pop(execution_id, None)
+
+
+async def _dispatch_count() -> int:
+    if redis_client is not None:
+        try:
+            return len(await redis_client.keys("gateway:dispatch:*"))
+        except Exception:
+            logger.warning("Redis error in _dispatch_count, falling back to local")
+    return len(_local_dispatches)
+
+
+async def _dispatch_count_for_device(device_id: str) -> int:
+    # O(N dispatches) — acceptable for research/emulator scale.
+    # For production at scale, maintain a per-device set in Redis instead.
+    if redis_client is not None:
+        try:
+            keys = await redis_client.keys("gateway:dispatch:*")
+            count = 0
+            for key in keys:
+                raw = await redis_client.get(key)
+                if raw:
+                    data = json.loads(raw)
+                    if data.get("device_id") == device_id:
+                        count += 1
+            return count
+        except Exception:
+            logger.warning("Redis error in _dispatch_count_for_device device=%s, falling back to local", device_id)
+    return sum(1 for d in _local_dispatches.values() if d.get("device_id") == device_id)
+
+
+# ---------------------------------------------------------------------------
+# Kafka consumer
+# ---------------------------------------------------------------------------
+
 async def _consume_dispatched() -> None:
     global consumer
     topic = f"{KAFKA_TOPIC_PREFIX}.execution.dispatched"
@@ -94,22 +210,22 @@ async def _consume_dispatched() -> None:
             execution_id = event.get("resource_id") or event.get("execution_id") or str(uuid4())
             device_id = event.get("payload", {}).get("device_id")
 
-            dispatch_cache[execution_id] = {
+            dispatch_data = {
                 "execution_id": execution_id,
                 "device_id": device_id,
                 "event": event,
                 "received_at": time.time(),
+                "delivery_attempts": 0,
+                "delivery_last_error": "",
             }
-            delivery_attempts[execution_id] = 0
-            delivery_last_error[execution_id] = ""
+            await _dispatch_set(execution_id, dispatch_data)
 
             DISPATCH_EVENTS_TOTAL.labels("lightningrod-gateway").inc()
-            PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(len(dispatch_cache))
+            PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
             if device_id:
-                device_pending = sum(
-                    1 for d in dispatch_cache.values() if d.get("device_id") == device_id
+                PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
+                    await _dispatch_count_for_device(device_id)
                 )
-                PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(device_pending)
 
             logger.info("Dispatch event cached: execution_id=%s device_id=%s", execution_id, device_id)
     except asyncio.CancelledError:
@@ -143,9 +259,31 @@ async def _publish_event(action: str, resource_id: str, payload: dict[str, Any])
         logger.exception("Failed to publish %s event for %s", action, resource_id)
 
 
+# ---------------------------------------------------------------------------
+# Lifecycle
+# ---------------------------------------------------------------------------
+
 @app.on_event("startup")
 async def startup() -> None:
-    global producer, _consumer_task
+    global producer, _consumer_task, redis_client
+
+    if REDIS_ENABLED:
+        try:
+            redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+            await redis_client.ping()
+            logger.info("Redis connected: %s", REDIS_URL)
+        except Exception:
+            logger.exception("Failed to connect to Redis")
+            redis_client = None
+            if REDIS_REQUIRED:
+                raise
+            logger.warning(
+                "Redis unavailable — using in-memory fallback. "
+                "Gateway is NOT horizontally scalable in this mode."
+            )
+    else:
+        logger.info("Redis disabled by configuration — using in-memory store (single-instance only)")
+
     if not KAFKA_ENABLED:
         logger.info("Kafka disabled by configuration")
         return
@@ -167,7 +305,7 @@ async def startup() -> None:
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    global producer, _consumer_task
+    global producer, _consumer_task, redis_client
     if _consumer_task and not _consumer_task.done():
         _consumer_task.cancel()
         try:
@@ -178,7 +316,14 @@ async def shutdown() -> None:
     if producer:
         await producer.stop()
         producer = None
+    if redis_client:
+        await redis_client.aclose()
+        redis_client = None
 
+
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
 
 @app.middleware("http")
 async def observability_middleware(request: Request, call_next):
@@ -206,6 +351,10 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "healthy", "service": "lightningrod-gateway"}
@@ -216,11 +365,14 @@ async def ready() -> dict[str, Any]:
     kafka_ok = producer is not None or not KAFKA_ENABLED
     if not kafka_ok:
         raise HTTPException(status_code=503, detail="Kafka producer not available")
+    sessions = await _session_count()
+    redis_status = "ok" if redis_client is not None else ("disabled" if not REDIS_ENABLED else "degraded")
     return {
         "status": "ready",
         "service": "lightningrod-gateway",
         "kafka": "ok" if producer else "disabled",
-        "sessions": len(agent_sessions),
+        "redis": redis_status,
+        "sessions": sessions,
     }
 
 
@@ -242,24 +394,26 @@ async def register_agent_session(payload: dict[str, Any]) -> dict[str, Any]:
         "last_seen": now,
         "metadata": {k: v for k, v in payload.items() if k != "device_id"},
     }
-    agent_sessions[device_id] = session
-    AGENT_SESSIONS_GAUGE.labels("lightningrod-gateway").set(len(agent_sessions))
+    await _session_set(device_id, session)
+    AGENT_SESSIONS_GAUGE.labels("lightningrod-gateway").set(await _session_count())
     logger.info("Agent session registered: device_id=%s", device_id)
     return session
 
 
 @app.post("/api/v2/agents/sessions/{device_id}/heartbeat")
 async def heartbeat(device_id: str) -> dict[str, Any]:
-    session = agent_sessions.get(device_id)
+    session = await _session_get(device_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     session["last_seen"] = time.time()
+    # _session_set also resets the Redis TTL, keeping the session alive.
+    await _session_set(device_id, session)
     return {"device_id": device_id, "last_seen": session["last_seen"]}
 
 
 @app.get("/api/v2/agents/sessions/{device_id}")
 async def get_session(device_id: str) -> dict[str, Any]:
-    session = agent_sessions.get(device_id)
+    session = await _session_get(device_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     return session
@@ -267,29 +421,26 @@ async def get_session(device_id: str) -> dict[str, Any]:
 
 @app.post("/api/v2/deliver/{execution_id}")
 async def deliver(execution_id: str) -> dict[str, Any]:
-    cached = dispatch_cache.get(execution_id)
+    cached = await _dispatch_get(execution_id)
     if not cached:
         raise HTTPException(status_code=404, detail="dispatch not found in cache")
 
     device_id = cached.get("device_id", "unknown")
-    session = agent_sessions.get(device_id) if device_id != "unknown" else None
-
-    attempts = delivery_attempts.get(execution_id, 0)
+    session = await _session_get(device_id) if device_id != "unknown" else None
+    attempts = cached.get("delivery_attempts", 0)
 
     for attempt in range(attempts + 1, MAX_DELIVERY_ATTEMPTS + 1):
-        delivery_attempts[execution_id] = attempt
+        cached["delivery_attempts"] = attempt
+        await _dispatch_set(execution_id, cached)
         DELIVERY_ATTEMPTS_TOTAL.labels("lightningrod-gateway", device_id).inc()
 
         if session:
-            dispatch_cache.pop(execution_id, None)
-            delivery_attempts.pop(execution_id, None)
-            delivery_last_error.pop(execution_id, None)
-            PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(len(dispatch_cache))
+            await _dispatch_delete(execution_id)
+            PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
             if device_id != "unknown":
-                device_pending = sum(
-                    1 for d in dispatch_cache.values() if d.get("device_id") == device_id
+                PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
+                    await _dispatch_count_for_device(device_id)
                 )
-                PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(device_pending)
             return {
                 "execution_id": execution_id,
                 "device_id": device_id,
@@ -298,7 +449,8 @@ async def deliver(execution_id: str) -> dict[str, Any]:
             }
 
         error_msg = f"no active session for device {device_id}"
-        delivery_last_error[execution_id] = error_msg
+        cached["delivery_last_error"] = error_msg
+        await _dispatch_set(execution_id, cached)
         logger.warning(
             "Delivery attempt %d/%d failed for execution %s: %s",
             attempt, MAX_DELIVERY_ATTEMPTS, execution_id, error_msg,
@@ -307,23 +459,22 @@ async def deliver(execution_id: str) -> dict[str, Any]:
         if attempt < MAX_DELIVERY_ATTEMPTS:
             await asyncio.sleep(DELIVERY_BACKOFF_SECONDS * attempt)
 
+    last_error = cached.get("delivery_last_error", "")
     DELIVERY_FAILURES_TOTAL.labels("lightningrod-gateway", device_id).inc()
 
     await _publish_event("delivery_failed", execution_id, {
         "execution_id": execution_id,
         "device_id": device_id,
         "attempts": MAX_DELIVERY_ATTEMPTS,
-        "last_error": delivery_last_error.get(execution_id, ""),
+        "last_error": last_error,
     })
 
-    dispatch_cache.pop(execution_id, None)
-    delivery_attempts.pop(execution_id, None)
-    PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(len(dispatch_cache))
+    await _dispatch_delete(execution_id)
+    PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
     if device_id != "unknown":
-        device_pending = sum(
-            1 for d in dispatch_cache.values() if d.get("device_id") == device_id
+        PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
+            await _dispatch_count_for_device(device_id)
         )
-        PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(device_pending)
 
     raise HTTPException(
         status_code=502,
@@ -332,6 +483,6 @@ async def deliver(execution_id: str) -> dict[str, Any]:
             "device_id": device_id,
             "status": "delivery_failed",
             "attempts": MAX_DELIVERY_ATTEMPTS,
-            "last_error": delivery_last_error.get(execution_id, ""),
+            "last_error": last_error,
         },
     )

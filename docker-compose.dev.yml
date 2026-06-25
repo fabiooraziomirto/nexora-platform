@@ -162,10 +162,17 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_ENABLED: "true"
       KAFKA_REQUIRED: "false"
+      REDIS_URL: redis://redis:6379/0
+      REDIS_ENABLED: "true"
+      REDIS_REQUIRED: "false"
+      SESSION_TTL_SECONDS: "300"
+      DISPATCH_TTL_SECONDS: "3600"
     ports:
       - "8007:8000"
     healthcheck:
