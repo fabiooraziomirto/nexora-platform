@@ -148,12 +148,24 @@ async def metrics() -> PlainTextResponse:
     return PlainTextResponse(content=generate_latest(), media_type="text/plain")
 
 
+_VALID_PORT_STATUSES = {"created", "attached", "detached", "failed"}
+
+
+def _port_to_dict(p: Port) -> dict[str, Any]:
+    return {
+        "id": p.id,
+        "device_id": p.device_id,
+        "network_id": p.network_id,
+        "status": p.status,
+        "ip_address": p.ip_address,
+    }
+
+
 @app.get("/api/v2/ports")
 async def list_ports() -> dict[str, Any]:
     with SessionLocal() as db:
         items = db.execute(select(Port)).scalars().all()
-        payload = [{"id": p.id, "device_id": p.device_id, "network_id": p.network_id, "status": p.status} for p in items]
-    return {"items": payload, "total": len(payload)}
+    return {"items": [_port_to_dict(p) for p in items], "total": len(items)}
 
 
 @app.post("/api/v2/ports", status_code=201)
@@ -164,11 +176,12 @@ async def create_port(payload: dict[str, Any]) -> dict[str, Any]:
         device_id=payload.get("device_id"),
         network_id=payload.get("network_id"),
         status="created",
+        ip_address=payload.get("ip_address"),
     )
     with SessionLocal() as db:
         db.add(port)
         db.commit()
-    response = {"id": port.id, "device_id": port.device_id, "network_id": port.network_id, "status": port.status}
+    response = _port_to_dict(port)
     await _events.publish_event("created", port.id, response)
     return response
 
@@ -179,7 +192,28 @@ async def get_port(port_id: str) -> dict[str, Any]:
         port = db.get(Port, port_id)
     if not port:
         raise HTTPException(status_code=404, detail="port not found")
-    return {"id": port.id, "device_id": port.device_id, "network_id": port.network_id, "status": port.status}
+    return _port_to_dict(port)
+
+
+@app.patch("/api/v2/ports/{port_id}")
+async def update_port(port_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    with SessionLocal() as db:
+        port = db.get(Port, port_id)
+        if not port:
+            raise HTTPException(status_code=404, detail="port not found")
+        if "status" in payload and payload["status"]:
+            if payload["status"] not in _VALID_PORT_STATUSES:
+                raise HTTPException(status_code=400, detail=f"invalid status, must be one of {sorted(_VALID_PORT_STATUSES)}")
+            port.status = payload["status"]
+        if "ip_address" in payload:
+            port.ip_address = payload["ip_address"]
+        if "network_id" in payload:
+            port.network_id = payload["network_id"]
+        db.commit()
+        db.refresh(port)
+    response = _port_to_dict(port)
+    await _events.publish_event("updated", port_id, response)
+    return response
 
 
 @app.delete("/api/v2/ports/{port_id}", status_code=204)
@@ -188,7 +222,7 @@ async def delete_port(port_id: str) -> None:
         port = db.get(Port, port_id)
         if not port:
             raise HTTPException(status_code=404, detail="port not found")
-        deleted_payload = {"id": port.id, "device_id": port.device_id, "network_id": port.network_id, "status": port.status}
+        deleted_payload = _port_to_dict(port)
         db.delete(port)
         db.commit()
     await _events.publish_event("deleted", port_id, deleted_payload)

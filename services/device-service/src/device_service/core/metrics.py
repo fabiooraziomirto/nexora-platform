@@ -21,9 +21,8 @@ active_devices = Gauge(
 )
 
 
-def setup_metrics():
-    """Setup Prometheus metrics."""
-    pass
+def setup_metrics() -> None:
+    active_devices.set(0)
 
 
 def get_metrics_response() -> Response:

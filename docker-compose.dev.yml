@@ -245,6 +245,25 @@ services:
     ports:
       - "8006:8000"
 
+  nexora-function-runtime:
+    profiles: ["dev", "emulator"]
+    build:
+      context: ./services/nexora-function-runtime
+      dockerfile: Dockerfile
+    container_name: nexora-function-runtime
+    environment:
+      RUNTIME_PORT: "9000"
+      FUNCTION_INSTALL_DIR: /var/nexora/functions
+    volumes:
+      - function_artifacts:/var/nexora/functions
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
   keycloak:
     profiles: ["auth"]
     image: quay.io/keycloak/keycloak:24.0
@@ -389,4 +408,5 @@ volumes:
   mysql_data:
   redis_data:
   legacy_keystone_data:
+  function_artifacts:
 

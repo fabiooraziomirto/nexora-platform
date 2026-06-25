@@ -148,12 +148,15 @@ async def metrics() -> PlainTextResponse:
     return PlainTextResponse(content=generate_latest(), media_type="text/plain")
 
 
+def _record_to_dict(r: DNSRecord) -> dict[str, Any]:
+    return {"id": r.id, "name": r.name, "type": r.type, "value": r.value, "ttl": r.ttl or 300}
+
+
 @app.get("/api/v2/dns/records")
 async def list_records() -> dict[str, Any]:
     with SessionLocal() as db:
         items = db.execute(select(DNSRecord)).scalars().all()
-        payload = [{"id": r.id, "name": r.name, "type": r.type, "value": r.value} for r in items]
-    return {"items": payload, "total": len(payload)}
+    return {"items": [_record_to_dict(r) for r in items], "total": len(items)}
 
 
 @app.post("/api/v2/dns/records", status_code=201)
@@ -164,11 +167,12 @@ async def create_record(payload: dict[str, Any]) -> dict[str, Any]:
         name=payload.get("name"),
         type=payload.get("type", "A"),
         value=payload.get("value"),
+        ttl=payload.get("ttl", 300),
     )
     with SessionLocal() as db:
         db.add(record)
         db.commit()
-    response = {"id": record.id, "name": record.name, "type": record.type, "value": record.value}
+    response = _record_to_dict(record)
     await _events.publish_event("created", record.id, response)
     return response
 
@@ -179,7 +183,26 @@ async def get_record(record_id: str) -> dict[str, Any]:
         record = db.get(DNSRecord, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="record not found")
-    return {"id": record.id, "name": record.name, "type": record.type, "value": record.value}
+    return _record_to_dict(record)
+
+
+@app.patch("/api/v2/dns/records/{record_id}")
+async def update_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    with SessionLocal() as db:
+        record = db.get(DNSRecord, record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="record not found")
+        if "value" in payload:
+            record.value = payload["value"]
+        if "type" in payload and payload["type"]:
+            record.type = payload["type"]
+        if "ttl" in payload and payload["ttl"] is not None:
+            record.ttl = int(payload["ttl"])
+        db.commit()
+        db.refresh(record)
+    response = _record_to_dict(record)
+    await _events.publish_event("updated", record_id, response)
+    return response
 
 
 @app.delete("/api/v2/dns/records/{record_id}", status_code=204)
@@ -188,7 +211,7 @@ async def delete_record(record_id: str) -> None:
         record = db.get(DNSRecord, record_id)
         if not record:
             raise HTTPException(status_code=404, detail="record not found")
-        deleted_payload = {"id": record.id, "name": record.name, "type": record.type, "value": record.value}
+        deleted_payload = _record_to_dict(record)
         db.delete(record)
         db.commit()
     await _events.publish_event("deleted", record_id, deleted_payload)

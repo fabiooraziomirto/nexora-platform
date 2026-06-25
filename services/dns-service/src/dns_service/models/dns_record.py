@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String
+from sqlalchemy import Column, Integer, String
 
 from dns_service.core.database import Base
 
@@ -10,3 +10,4 @@ class DNSRecord(Base):
     name = Column(String(255), nullable=False, index=True)
     type = Column(String(16), nullable=False, default="A")
     value = Column(String(255), nullable=True)
+    ttl = Column(Integer, nullable=True, default=300)

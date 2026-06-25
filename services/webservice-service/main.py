@@ -26,7 +26,7 @@ from webservice_service.core.config import (
 from webservice_service.core.database import Base, engine, SessionLocal
 from webservice_service.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 import webservice_service.core.events as _events
-from webservice_service.models.webservice import Webservice
+from webservice_service.models.webservice import Webservice, _VALID_STATUSES as _VALID_WS_STATUSES
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("webservice-service")
@@ -148,27 +148,42 @@ async def metrics() -> PlainTextResponse:
     return PlainTextResponse(content=generate_latest(), media_type="text/plain")
 
 
+def _ws_to_dict(w: Webservice) -> dict[str, Any]:
+    return {
+        "id": w.id,
+        "device_id": w.device_id,
+        "port": w.port,
+        "status": w.status,
+        "hostname": w.hostname,
+        "tls_enabled": w.tls_enabled if w.tls_enabled is not None else True,
+    }
+
+
 @app.get("/api/v2/webservices")
 async def list_webservices() -> dict[str, Any]:
     with SessionLocal() as db:
         items = db.execute(select(Webservice)).scalars().all()
-        payload = [{"id": w.id, "device_id": w.device_id, "port": w.port, "status": w.status} for w in items]
-    return {"items": payload, "total": len(payload)}
+    return {"items": [_ws_to_dict(w) for w in items], "total": len(items)}
 
 
 @app.post("/api/v2/webservices", status_code=201)
 async def create_webservice(payload: dict[str, Any]) -> dict[str, Any]:
+    status = payload.get("status", "enabled")
+    if status not in _VALID_WS_STATUSES:
+        raise HTTPException(status_code=400, detail=f"invalid status, must be one of {sorted(_VALID_WS_STATUSES)}")
     webservice_id = str(uuid4())
     webservice = Webservice(
         id=webservice_id,
         device_id=payload.get("device_id"),
         port=payload.get("port", 443),
-        status="enabled",
+        status=status,
+        hostname=payload.get("hostname"),
+        tls_enabled=payload.get("tls_enabled", True),
     )
     with SessionLocal() as db:
         db.add(webservice)
         db.commit()
-    response = {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+    response = _ws_to_dict(webservice)
     await _events.publish_event("created", webservice.id, response)
     return response
 
@@ -179,7 +194,7 @@ async def get_webservice(webservice_id: str) -> dict[str, Any]:
         webservice = db.get(Webservice, webservice_id)
     if not webservice:
         raise HTTPException(status_code=404, detail="webservice not found")
-    return {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+    return _ws_to_dict(webservice)
 
 
 @app.patch("/api/v2/webservices/{webservice_id}")
@@ -193,10 +208,16 @@ async def update_webservice(webservice_id: str, payload: dict[str, Any]) -> dict
         if "port" in payload and payload.get("port") is not None:
             webservice.port = int(payload["port"])
         if "status" in payload and payload.get("status"):
+            if payload["status"] not in _VALID_WS_STATUSES:
+                raise HTTPException(status_code=400, detail=f"invalid status, must be one of {sorted(_VALID_WS_STATUSES)}")
             webservice.status = payload["status"]
+        if "hostname" in payload:
+            webservice.hostname = payload["hostname"]
+        if "tls_enabled" in payload:
+            webservice.tls_enabled = bool(payload["tls_enabled"])
         db.commit()
         db.refresh(webservice)
-    response = {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+    response = _ws_to_dict(webservice)
     await _events.publish_event("updated", webservice.id, response)
     return response
 
@@ -207,7 +228,7 @@ async def delete_webservice(webservice_id: str) -> None:
         webservice = db.get(Webservice, webservice_id)
         if not webservice:
             raise HTTPException(status_code=404, detail="webservice not found")
-        deleted_payload = {"id": webservice.id, "device_id": webservice.device_id, "port": webservice.port, "status": webservice.status}
+        deleted_payload = _ws_to_dict(webservice)
         db.delete(webservice)
         db.commit()
     await _events.publish_event("deleted", webservice_id, deleted_payload)
