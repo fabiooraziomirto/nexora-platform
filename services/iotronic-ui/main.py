@@ -26,9 +26,23 @@ DEFAULT_TOKEN = os.getenv("S4T_AUTH_TOKEN", "")
 TENANT_ID = os.getenv("S4T_TENANT_ID", "")
 LOCAL_ADMIN_USER = os.getenv("S4T_UI_LOCAL_ADMIN_USER", "admin")
 LOCAL_ADMIN_PASSWORD = os.getenv("S4T_UI_LOCAL_ADMIN_PASSWORD", "admin")
+AUTH_DEV_BYPASS_ENABLED = os.getenv("AUTH_DEV_BYPASS_ENABLED", "false").lower() == "true"
+AUTH_DEV_TOKEN = os.getenv("AUTH_DEV_TOKEN", "dev-token")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 app = FastAPI(title=APP_TITLE, version="0.1.0")
 templates = Jinja2Templates(directory="templates")
+
+import logging as _logging
+_logger = _logging.getLogger("nexora-ui")
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    if AUTH_DEV_BYPASS_ENABLED:
+        if ENVIRONMENT == "production":
+            raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
+        _logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -151,9 +165,9 @@ async def login_page(request: Request, error: str = ""):
 @app.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
     ok, token = await _fetch_keycloak_token(username=username, password=password)
-    # Local fallback for development environments.
-    if not ok and username == LOCAL_ADMIN_USER and password == LOCAL_ADMIN_PASSWORD:
-        token = DEFAULT_TOKEN or os.getenv("AUTH_DEV_TOKEN", "dev-token")
+    # Local fallback: only active when AUTH_DEV_BYPASS_ENABLED=true (explicit opt-in).
+    if not ok and AUTH_DEV_BYPASS_ENABLED and username == LOCAL_ADMIN_USER and password == LOCAL_ADMIN_PASSWORD:
+        token = DEFAULT_TOKEN or AUTH_DEV_TOKEN
         ok = True
     if not ok:
         return RedirectResponse(url="/login?error=Credenziali+non+valide", status_code=302)

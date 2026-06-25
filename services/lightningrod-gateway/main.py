@@ -1,4 +1,10 @@
 import os
+import sys
+
+_SRC = os.path.join(os.path.dirname(__file__), "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
 import json
 import time
 import asyncio
@@ -10,25 +16,38 @@ import aiokafka
 import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from prometheus_client import generate_latest
+
+from lightningrod_gateway.core.config import (
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_TOPIC_PREFIX,
+    KAFKA_ENABLED,
+    KAFKA_REQUIRED,
+    MAX_DELIVERY_ATTEMPTS,
+    DELIVERY_BACKOFF_SECONDS,
+    REDIS_URL,
+    REDIS_ENABLED,
+    REDIS_REQUIRED,
+    SESSION_TTL_SECONDS,
+    DISPATCH_TTL_SECONDS,
+)
+from lightningrod_gateway.core.metrics import (
+    DISPATCH_EVENTS_TOTAL,
+    DELIVERY_ATTEMPTS_TOTAL,
+    DELIVERY_FAILURES_TOTAL,
+    AGENT_SESSIONS_GAUGE,
+    PENDING_DISPATCH_GAUGE,
+    PER_DEVICE_PENDING_GAUGE,
+    REQUEST_DURATION,
+    DISPATCH_LATENCY,
+    BROKER_COMMIT_LAG,
+    KAFKA_INGESTION_LATENCY,
+    QUEUE_WAIT,
+)
 
 app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
-KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
-KAFKA_REQUIRED = os.getenv("KAFKA_REQUIRED", "false").lower() == "true"
-MAX_DELIVERY_ATTEMPTS = int(os.getenv("MAX_DELIVERY_ATTEMPTS", "3"))
-DELIVERY_BACKOFF_SECONDS = float(os.getenv("DELIVERY_BACKOFF_SECONDS", "0.5"))
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true"
-REDIS_REQUIRED = os.getenv("REDIS_REQUIRED", "false").lower() == "true"
-# Heartbeat-based TTL: session expires if not refreshed within this window.
-SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "300"))
-# Dispatch TTL matches EXECUTION_RUNNING_TIMEOUT_SECONDS in execution-service.
-DISPATCH_TTL_SECONDS = int(os.getenv("DISPATCH_TTL_SECONDS", "3600"))
-
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("lightningrod-gateway")
 
 producer: aiokafka.AIOKafkaProducer | None = None
@@ -40,42 +59,6 @@ redis_client: aioredis.Redis | None = None
 # With fallback active the gateway is NOT horizontally scalable (single-instance only).
 _local_sessions: dict[str, dict[str, Any]] = {}
 _local_dispatches: dict[str, dict[str, Any]] = {}
-
-DISPATCH_EVENTS_TOTAL = Counter(
-    "s4t_lr_dispatch_events_total",
-    "Total dispatch events consumed from Kafka",
-    ["service"],
-)
-DELIVERY_ATTEMPTS_TOTAL = Counter(
-    "s4t_lr_delivery_attempts_total",
-    "Total delivery attempts to edge agents",
-    ["service", "device_id"],
-)
-DELIVERY_FAILURES_TOTAL = Counter(
-    "s4t_lr_delivery_failures_total",
-    "Total delivery failures after retries exhausted",
-    ["service", "device_id"],
-)
-AGENT_SESSIONS_GAUGE = Gauge(
-    "s4t_lr_agent_sessions",
-    "Number of currently registered agent sessions",
-    ["service"],
-)
-PENDING_DISPATCH_GAUGE = Gauge(
-    "s4t_lr_pending_dispatches",
-    "Number of pending dispatches in cache",
-    ["service"],
-)
-PER_DEVICE_PENDING_GAUGE = Gauge(
-    "s4t_lr_per_device_pending_dispatches",
-    "Pending dispatches per device",
-    ["service", "device_id"],
-)
-REQUEST_DURATION = Histogram(
-    "s4t_lr_request_duration_seconds",
-    "HTTP request duration",
-    ["service", "method", "path"],
-)
 
 
 # ---------------------------------------------------------------------------
@@ -206,15 +189,54 @@ async def _consume_dispatched() -> None:
 
     try:
         async for msg in consumer:
+            gateway_received_at = time.time()
             event = msg.value
             execution_id = event.get("resource_id") or event.get("execution_id") or str(uuid4())
             device_id = event.get("payload", {}).get("device_id")
+
+            # msg.timestamp is epoch-milliseconds assigned by Kafka (CreateTime by default,
+            # LogAppendTime if broker is configured with log.message.timestamp.type=LogAppendTime).
+            kafka_broker_ts: float | None = (
+                msg.timestamp / 1000.0 if msg.timestamp and msg.timestamp > 0 else None
+            )
+
+            # Phase 1b: Kafka publish → gateway consumer receive.
+            # kafka_dispatched_at is injected by execution-service; fall back to
+            # occurred_at for events from older service versions.
+            kafka_dispatched_at: float | None = (
+                event.get("payload", {}).get("kafka_dispatched_at")
+                or event.get("occurred_at")
+            )
+
+            broker_commit_lag_s: float | None = None
+            kafka_ingestion_s: float | None = None
+
+            if kafka_dispatched_at is not None:
+                kafka_ingestion_s = gateway_received_at - float(kafka_dispatched_at)
+                KAFKA_INGESTION_LATENCY.labels("lightningrod-gateway").observe(kafka_ingestion_s)
+
+                if kafka_broker_ts is not None:
+                    broker_commit_lag_s = kafka_broker_ts - float(kafka_dispatched_at)
+                    BROKER_COMMIT_LAG.labels("lightningrod-gateway").observe(broker_commit_lag_s)
+
+                logger.info(json.dumps({
+                    "event": "dispatch_kafka_ingested",
+                    "service": "lightningrod-gateway",
+                    "execution_id": execution_id,
+                    "device_id": device_id,
+                    "kafka_dispatched_at": kafka_dispatched_at,
+                    "kafka_broker_timestamp": kafka_broker_ts,
+                    "gateway_received_at": gateway_received_at,
+                    "kafka_broker_lag_s": round(broker_commit_lag_s, 6) if broker_commit_lag_s is not None else None,
+                    "kafka_ingestion_s": round(kafka_ingestion_s, 6),
+                }))
 
             dispatch_data = {
                 "execution_id": execution_id,
                 "device_id": device_id,
                 "event": event,
-                "received_at": time.time(),
+                "received_at": gateway_received_at,
+                "kafka_broker_timestamp": kafka_broker_ts,
                 "delivery_attempts": 0,
                 "delivery_last_error": "",
             }
@@ -435,17 +457,72 @@ async def deliver(execution_id: str) -> dict[str, Any]:
         DELIVERY_ATTEMPTS_TOTAL.labels("lightningrod-gateway", device_id).inc()
 
         if session:
+            delivered_at = time.time()
+
+            # Retrieve all timing anchors from the dispatch blob.
+            gateway_received_at_val: float | None = cached.get("received_at")
+            kafka_broker_ts_val: float | None = cached.get("kafka_broker_timestamp")
+            kafka_dispatched_at_val: float | None = (
+                cached.get("event", {}).get("payload", {}).get("kafka_dispatched_at")
+                or cached.get("event", {}).get("occurred_at")
+            )
+
+            queue_wait_s: float | None = None
+            dispatch_latency_s: float | None = None
+            kafka_ingestion_s_val: float | None = None
+            kafka_broker_lag_s_val: float | None = None
+
+            if gateway_received_at_val is not None:
+                queue_wait_s = delivered_at - float(gateway_received_at_val)
+                QUEUE_WAIT.labels("lightningrod-gateway").observe(queue_wait_s)
+
+            if kafka_dispatched_at_val is not None:
+                dispatch_latency_s = delivered_at - float(kafka_dispatched_at_val)
+                DISPATCH_LATENCY.labels("lightningrod-gateway").observe(dispatch_latency_s)
+
+                if gateway_received_at_val is not None:
+                    kafka_ingestion_s_val = float(gateway_received_at_val) - float(kafka_dispatched_at_val)
+
+                if kafka_broker_ts_val is not None:
+                    kafka_broker_lag_s_val = float(kafka_broker_ts_val) - float(kafka_dispatched_at_val)
+
+            logger.info(json.dumps({
+                "event": "dispatch_delivered",
+                "service": "lightningrod-gateway",
+                "execution_id": execution_id,
+                "device_id": device_id,
+                "kafka_dispatched_at": kafka_dispatched_at_val,
+                "kafka_broker_timestamp": kafka_broker_ts_val,
+                "gateway_received_at": gateway_received_at_val,
+                "delivered_at": delivered_at,
+                "kafka_broker_lag_s": round(kafka_broker_lag_s_val, 6) if kafka_broker_lag_s_val is not None else None,
+                "kafka_ingestion_s": round(kafka_ingestion_s_val, 6) if kafka_ingestion_s_val is not None else None,
+                "queue_wait_s": round(queue_wait_s, 6) if queue_wait_s is not None else None,
+                "dispatch_latency_s": round(dispatch_latency_s, 6) if dispatch_latency_s is not None else None,
+                "attempts": attempt,
+            }))
+
             await _dispatch_delete(execution_id)
             PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
             if device_id != "unknown":
                 PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
                     await _dispatch_count_for_device(device_id)
                 )
+            # Full timing breakdown returned to the caller (benchmark board agent).
+            # All epoch-float fields enable JSONL reconstruction without log parsing.
             return {
                 "execution_id": execution_id,
                 "device_id": device_id,
                 "status": "delivered",
                 "attempts": attempt,
+                "kafka_dispatched_at": kafka_dispatched_at_val,
+                "kafka_broker_timestamp": kafka_broker_ts_val,
+                "gateway_received_at": gateway_received_at_val,
+                "delivered_at": delivered_at,
+                "kafka_broker_lag_seconds": kafka_broker_lag_s_val,
+                "kafka_ingestion_seconds": kafka_ingestion_s_val,
+                "queue_wait_seconds": queue_wait_s,
+                "dispatch_latency_seconds": dispatch_latency_s,
             }
 
         error_msg = f"no active session for device {device_id}"
