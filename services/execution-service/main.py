@@ -53,6 +53,8 @@ from execution_service.core.config import (
     ACTIVE_STATUSES,
     _ALLOWED_TRANSITIONS,
     _CALLBACK_ALLOWED_FIELDS,
+    PLUGIN_SERVICE_URL,
+    DEVICE_SERVICE_URL,
 )
 from execution_service.core.database import Base, engine, SessionLocal, ensure_execution_columns
 from execution_service.core.metrics import (
@@ -312,6 +314,11 @@ async def create_execution(
         now = datetime.now(timezone.utc)
         caller_owner_id = getattr(request.state, "user_id", None)
         caller_tenant_id = getattr(request.state, "tenant_id", x_tenant_id)
+        execution_type = payload.get("type", payload.get("execution_type", "command"))
+        plugin_id = payload.get("plugin_id")
+        if execution_type in {"function.install", "function.invoke"} and not plugin_id:
+            raise HTTPException(status_code=400, detail="plugin_id is required for function executions")
+        args_raw = payload.get("args")
         execution = Execution(
             id=execution_id,
             device_id=device_id,
@@ -322,6 +329,10 @@ async def create_execution(
             tenant_id=caller_tenant_id,
             owner_id=caller_owner_id,
             created_at=now,
+            execution_type=execution_type,
+            plugin_id=plugin_id,
+            args=json.dumps(args_raw) if args_raw is not None else None,
+            invocation_mode=payload.get("mode", "async"),
         )
         db.add(execution)
         db.commit()
@@ -383,9 +394,62 @@ async def dispatch_execution(execution_id: str) -> dict[str, Any]:
         "execution_id": execution.id,
         "device_id": execution.device_id,
         "command": execution.command,
+        "execution_type": execution.execution_type or "command",
         "correlation_id": execution.correlation_id,
         "kafka_dispatched_at": time.time(),
     }
+
+    # FaaS: fetch plugin metadata and device capabilities, embed in dispatch envelope
+    exec_type = execution.execution_type or "command"
+    if exec_type in {"function.install", "function.invoke"}:
+        import httpx as _httpx
+        try:
+            plugin_resp = _httpx.get(
+                f"{PLUGIN_SERVICE_URL}/api/v2/plugins/{execution.plugin_id}",
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            if plugin_resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="plugin not found in registry")
+            plugin_data = plugin_resp.json()
+            if plugin_data.get("status") != "active":
+                raise HTTPException(status_code=409, detail=f"plugin status is '{plugin_data.get('status')}', must be active")
+            envelope["plugin"] = {
+                "id": execution.plugin_id,
+                "name": plugin_data.get("name"),
+                "version": plugin_data.get("version"),
+                "runtime_type": plugin_data.get("runtime_type"),
+                "artifact_uri": plugin_data.get("artifact_uri"),
+                "artifact_checksum": plugin_data.get("artifact_checksum"),
+                "entrypoint": plugin_data.get("entrypoint"),
+                "timeout_seconds": plugin_data.get("timeout_seconds", 30),
+                "memory_limit_mb": plugin_data.get("memory_limit_mb", 64),
+                "permissions": plugin_data.get("permissions", []),
+                "required_capabilities": plugin_data.get("required_capabilities", []),
+            }
+        except _httpx.RequestError as exc:
+            raise HTTPException(status_code=503, detail=f"plugin-service unavailable: {exc}") from exc
+
+        if execution.device_id:
+            try:
+                device_resp = _httpx.get(
+                    f"{DEVICE_SERVICE_URL}/api/v2/devices/{execution.device_id}",
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                if device_resp.status_code == 200:
+                    caps = device_resp.json().get("capabilities") or {}
+                    if "wasm_wasi" in (envelope.get("plugin", {}).get("required_capabilities") or []):
+                        if not caps.get("wasm_wasi"):
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"device {execution.device_id} does not declare wasm_wasi capability",
+                            )
+                    envelope["device_capabilities"] = caps
+            except _httpx.RequestError:
+                logger.warning("device-service unreachable — skipping capability check for %s", execution.device_id)
+
+        if execution.args:
+            envelope["args"] = json.loads(execution.args)
+
     audit_log("dispatched", execution_id)
     await _events.publish_event("dispatched", execution.id, envelope)
     return response
@@ -425,6 +489,8 @@ async def callback_execution(execution_id: str, payload: dict[str, Any]) -> dict
             execution.result_stdout = payload["stdout"]
         if "stderr" in payload:
             execution.result_stderr = payload["stderr"]
+        if "function_result" in payload and payload["function_result"] is not None:
+            execution.function_result = json.dumps(payload["function_result"])
 
         db.commit()
         db.refresh(execution)
@@ -433,6 +499,67 @@ async def callback_execution(execution_id: str, payload: dict[str, Any]) -> dict
     audit_log("callback", execution_id, f"new_status={new_status}")
     await _events.publish_event("callback", execution.id, response)
     return response
+
+
+# ── FaaS HTTP Trigger Shortcuts ───────────────────────────────────────────────
+# These create + dispatch a function execution in one call.
+
+async def _create_and_dispatch_function(
+    plugin_id: str,
+    device_id: str | None,
+    args: dict | None,
+    mode: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Helper: create a function.invoke execution and immediately dispatch it."""
+    fake_payload: dict[str, Any] = {
+        "type": "function.invoke",
+        "plugin_id": plugin_id,
+        "device_id": device_id,
+        "args": args or {},
+        "mode": mode,
+        "command": f"function.invoke:{plugin_id}",
+    }
+    # Reuse create_execution logic via internal call
+    create_req = request
+    created = await create_execution(fake_payload, create_req, x_tenant_id=None)
+    exec_id = created["id"]
+    # Dispatch immediately
+    dispatched = await dispatch_execution(exec_id)
+    return dispatched
+
+
+@app.post("/api/v2/functions/{plugin_id}/invoke", status_code=202)
+async def invoke_function(
+    plugin_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Invoke a function on any available device (device_id in body or omit for fleet-wide)."""
+    return await _create_and_dispatch_function(
+        plugin_id=plugin_id,
+        device_id=payload.get("device_id"),
+        args=payload.get("args"),
+        mode=payload.get("mode", "async"),
+        request=request,
+    )
+
+
+@app.post("/api/v2/devices/{device_id}/functions/{plugin_id}/invoke", status_code=202)
+async def invoke_function_on_device(
+    device_id: str,
+    plugin_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Invoke a function on a specific device."""
+    return await _create_and_dispatch_function(
+        plugin_id=plugin_id,
+        device_id=device_id,
+        args=payload.get("args"),
+        mode=payload.get("mode", "async"),
+        request=request,
+    )
 
 
 @app.post("/api/v2/executions/{execution_id}/cancel")

@@ -37,6 +37,14 @@ class Execution(Base):
     dispatched_at = Column(DateTime, nullable=True)
     running_at = Column(DateTime, nullable=True)
 
+    # FaaS fields
+    # execution_type: "command" (default) | "function.install" | "function.invoke"
+    execution_type = Column(String(30), nullable=True)
+    plugin_id = Column(String(36), nullable=True, index=True)  # ref to plugin-service
+    args = Column(Text, nullable=True)                          # JSON args for function.invoke
+    function_result = Column(Text, nullable=True)               # JSON result from agent callback
+    invocation_mode = Column(String(10), nullable=True)         # "async" (default) | "sync"
+
 
 def make_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
@@ -60,11 +68,16 @@ def execution_to_dict(e: Execution, *, include_payload: bool = True) -> dict[str
         "device_id": e.device_id,
         "command": e.command,
         "status": e.status,
+        "execution_type": e.execution_type or "command",
+        "plugin_id": e.plugin_id,
+        "args": json.loads(e.args) if e.args else None,
+        "invocation_mode": e.invocation_mode or "async",
         "correlation_id": e.correlation_id,
         "idempotency_key": e.idempotency_key,
         "exit_code": e.exit_code if include_payload else None,
         "result_stdout": e.result_stdout if include_payload else None,
         "result_stderr": e.result_stderr if include_payload else None,
+        "function_result": json.loads(e.function_result) if (e.function_result and include_payload) else None,
         "tenant_id": e.tenant_id,
         "owner_id": e.owner_id,
         "created_at": e.created_at.isoformat() if e.created_at else None,
