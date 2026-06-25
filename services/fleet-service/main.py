@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -17,7 +18,7 @@ import aiokafka
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import generate_latest
-from sqlalchemy import func, select
+from sqlalchemy import exc as sa_exc, func, select
 
 from fleet_service.core.config import (
     AUTH_DEV_BYPASS_ENABLED, AUTH_DEV_TOKEN, AUTH_ENABLED, AUTH_WRITE_ROLE,
@@ -27,6 +28,7 @@ from fleet_service.core.database import Base, engine, SessionLocal
 from fleet_service.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 import fleet_service.core.events as _events
 from fleet_service.models.fleet import Fleet
+from fleet_service.models.fleet_member import FleetMember
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("fleet-service")
@@ -208,3 +210,81 @@ async def delete_fleet(fleet_id: str) -> None:
         db.delete(fleet)
         db.commit()
     await _events.publish_event("deleted", fleet_id, deleted_payload)
+
+
+# ── Fleet Membership ──────────────────────────────────────────────────────────
+
+@app.post("/api/v2/fleets/{fleet_id}/members", status_code=201)
+async def add_fleet_member(fleet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    device_id = payload.get("device_id")
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id is required")
+    with SessionLocal() as db:
+        fleet = db.get(Fleet, fleet_id)
+        if not fleet:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        member = FleetMember(
+            id=str(uuid4()),
+            fleet_id=fleet_id,
+            device_id=device_id,
+            joined_at=datetime.now(timezone.utc),
+        )
+        db.add(member)
+        try:
+            db.commit()
+        except sa_exc.IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="device already in fleet")
+        db.refresh(member)
+    response = {"id": member.id, "fleet_id": member.fleet_id, "device_id": member.device_id,
+                "joined_at": member.joined_at.isoformat() if member.joined_at else None}
+    await _events.publish_event("member_added", fleet_id, response)
+    return response
+
+
+@app.get("/api/v2/fleets/{fleet_id}/members")
+async def list_fleet_members(fleet_id: str) -> dict[str, Any]:
+    with SessionLocal() as db:
+        fleet = db.get(Fleet, fleet_id)
+        if not fleet:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        members = db.execute(
+            select(FleetMember).where(FleetMember.fleet_id == fleet_id)
+        ).scalars().all()
+        items = [
+            {"id": m.id, "fleet_id": m.fleet_id, "device_id": m.device_id,
+             "joined_at": m.joined_at.isoformat() if m.joined_at else None}
+            for m in members
+        ]
+    return {"fleet_id": fleet_id, "items": items, "total": len(items)}
+
+
+@app.delete("/api/v2/fleets/{fleet_id}/members/{device_id}", status_code=204)
+async def remove_fleet_member(fleet_id: str, device_id: str) -> None:
+    with SessionLocal() as db:
+        fleet = db.get(Fleet, fleet_id)
+        if not fleet:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        member = db.execute(
+            select(FleetMember).where(
+                FleetMember.fleet_id == fleet_id,
+                FleetMember.device_id == device_id,
+            )
+        ).scalar_one_or_none()
+        if not member:
+            raise HTTPException(status_code=404, detail="device not in fleet")
+        db.delete(member)
+        db.commit()
+    await _events.publish_event("member_removed", fleet_id, {"fleet_id": fleet_id, "device_id": device_id})
+
+
+@app.get("/api/v2/devices/{device_id}/fleets")
+async def list_device_fleets(device_id: str) -> dict[str, Any]:
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(FleetMember).where(FleetMember.device_id == device_id)
+        ).scalars().all()
+        fleet_ids = [m.fleet_id for m in rows]
+        fleets = db.execute(select(Fleet).where(Fleet.id.in_(fleet_ids))).scalars().all()
+        items = [{"id": f.id, "name": f.name, "description": f.description} for f in fleets]
+    return {"device_id": device_id, "items": items, "total": len(items)}

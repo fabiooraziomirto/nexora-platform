@@ -375,6 +375,7 @@ services:
       DEVICE_URL: http://device-service:8000
       EXEC_URL: http://execution-service:8000
       GW_URL: http://lightningrod-gateway:8000
+      RUNTIME_URL: http://nexora-function-runtime:9000
       BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
       BOARD_NAME: lr-board-1
       BOARD_TYPE: lightningrod-emulator
@@ -398,6 +399,7 @@ services:
       DEVICE_URL: http://device-service:8000
       EXEC_URL: http://execution-service:8000
       GW_URL: http://lightningrod-gateway:8000
+      RUNTIME_URL: http://nexora-function-runtime:9000
       BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
       BOARD_NAME: lr-board-2
       BOARD_TYPE: lightningrod-emulator

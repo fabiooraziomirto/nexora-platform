@@ -9,6 +9,7 @@ import urllib.request
 DEVICE_URL = os.getenv("DEVICE_URL", "http://device-service:8000").rstrip("/")
 EXEC_URL = os.getenv("EXEC_URL", "http://execution-service:8000").rstrip("/")
 GW_URL = os.getenv("GW_URL", "http://lightningrod-gateway:8000").rstrip("/")
+RUNTIME_URL = os.getenv("RUNTIME_URL", "http://nexora-function-runtime:9000").rstrip("/")
 BOOTSTRAP_TOKEN = os.getenv("BOOTSTRAP_TOKEN", "dev-bootstrap:dev-bootstrap-token")
 BOARD_NAME = os.getenv("BOARD_NAME", f"lr-board-{uuid.uuid4().hex[:8]}")
 BOARD_TYPE = os.getenv("BOARD_TYPE", "lightningrod-emulator")
@@ -58,6 +59,48 @@ def list_executions() -> list[dict]:
     return data.get("items", [])
 
 
+def _handle_function_install(execution_id: str, execution: dict) -> dict:
+    plugin = execution.get("plugin") or {}
+    try:
+        resp = _http_json(
+            "POST",
+            f"{RUNTIME_URL}/runtime/functions/install",
+            {
+                "function_id": plugin.get("id"),
+                "artifact_uri": plugin.get("artifact_uri"),
+                "checksum": plugin.get("artifact_checksum"),
+                "entrypoint": plugin.get("entrypoint"),
+                "permissions": plugin.get("permissions", []),
+            },
+        )
+        return {"status": "installed", "exit_code": 0, "stdout": f"installed {plugin.get('id')} on {BOARD_NAME}\n", "stderr": ""}
+    except Exception as exc:
+        return {"status": "failed", "exit_code": 1, "stdout": "", "stderr": str(exc)}
+
+
+def _handle_function_invoke(execution_id: str, execution: dict) -> dict:
+    plugin = execution.get("plugin") or {}
+    args = execution.get("args") or {}
+    function_id = plugin.get("id")
+    if not function_id:
+        return {"status": "failed", "exit_code": 1, "stderr": "missing plugin id"}
+    try:
+        resp = _http_json(
+            "POST",
+            f"{RUNTIME_URL}/runtime/functions/{function_id}/invoke",
+            {"args": args, "entrypoint": plugin.get("entrypoint")},
+        )
+        return {
+            "status": "succeeded",
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "function_result": resp.get("result"),
+        }
+    except Exception as exc:
+        return {"status": "failed", "exit_code": 1, "stderr": str(exc), "function_result": None}
+
+
 def handle_execution(device_id: str, execution: dict) -> None:
     execution_id = execution["id"]
     status = execution.get("status")
@@ -69,14 +112,20 @@ def handle_execution(device_id: str, execution: dict) -> None:
     except Exception:
         return
 
+    exec_type = execution.get("execution_type", "command")
     _http_json("POST", f"{EXEC_URL}/api/v2/executions/{execution_id}/callback", {"status": "running"})
     time.sleep(1)
-    _http_json(
-        "POST",
-        f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
-        {"status": "succeeded", "exit_code": 0, "stdout": f"ok from {BOARD_NAME}\n", "stderr": ""},
-    )
-    print(f"[{BOARD_NAME}] executed {execution_id} -> succeeded", flush=True)
+
+    if exec_type == "function.install":
+        result = _handle_function_install(execution_id, execution)
+    elif exec_type == "function.invoke":
+        result = _handle_function_invoke(execution_id, execution)
+    else:
+        result = {"status": "succeeded", "exit_code": 0, "stdout": f"ok from {BOARD_NAME}\n", "stderr": ""}
+
+    callback_payload = {k: v for k, v in result.items() if v is not None}
+    _http_json("POST", f"{EXEC_URL}/api/v2/executions/{execution_id}/callback", callback_payload)
+    print(f"[{BOARD_NAME}] {exec_type} {execution_id} -> {result['status']}", flush=True)
 
 
 def main() -> None:
