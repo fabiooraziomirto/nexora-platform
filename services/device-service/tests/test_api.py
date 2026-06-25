@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_device_service.db")
 os.environ.setdefault("KAFKA_ENABLED", "false")
 os.environ.setdefault("KAFKA_REQUIRED", "false")
+os.environ.setdefault("AUTH_ENABLED", "false")
 os.environ.setdefault(
     "AGENT_BOOTSTRAP_TOKENS", "test-bootstrap:test-secret:4102444800,expired:expired-secret:1"
 )
