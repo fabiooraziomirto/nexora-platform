@@ -28,6 +28,10 @@ class Device(Base):
     status = Column(String(50), nullable=False, default="offline", index=True)
     last_seen = Column(DateTime, nullable=True, index=True)
 
+    # FaaS capabilities reported by edge agent at register/heartbeat
+    # JSON: {"wasm_wasi": true, "arch": "arm64", "agent_version": "1.0", "available_memory_mb": 256, "supported_runtimes": ["wasm-wasi"]}
+    capabilities = Column(Text, nullable=True)
+
     # Metadata
     meta = Column("metadata", JSON, nullable=True)
     tags = Column(JSON, nullable=True)

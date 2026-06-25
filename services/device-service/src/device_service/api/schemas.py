@@ -38,6 +38,8 @@ class DeviceResponse(DeviceBase):
     owner_id: Optional[str] = None
     tenant_id: Optional[str] = None
     privacy_level: int = 0
+    # FaaS edge capabilities reported by agent
+    capabilities: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,12 +58,16 @@ class AgentRegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     device_type: str = Field(..., min_length=1, max_length=100)
     metadata: Optional[dict] = None
+    # FaaS: agent declares its runtime capabilities on registration
+    capabilities: Optional[dict] = None
 
 
 class AgentHeartbeatRequest(BaseModel):
     """Schema for agent heartbeat (Lightning-Rod connection lifecycle parity)."""
     status: Optional[str] = Field(default="online", min_length=1, max_length=50)
     telemetry: Optional[dict] = None
+    # FaaS: agent may update capabilities on heartbeat (e.g. after runtime install)
+    capabilities: Optional[dict] = None
 
 
 class AgentStatusResponse(BaseModel):
