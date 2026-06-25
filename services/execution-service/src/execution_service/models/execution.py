@@ -30,6 +30,9 @@ class Execution(Base):
     result_stdout = Column(Text, nullable=True)
     result_stderr = Column(Text, nullable=True)
     tenant_id = Column(String(64), nullable=True, index=True)
+    # owner_id: Keycloak sub of the user who created this execution.
+    # Used for privacy enforcement: only the owner sees full payload (level 4).
+    owner_id = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, nullable=True)
     dispatched_at = Column(DateTime, nullable=True)
     running_at = Column(DateTime, nullable=True)
@@ -41,7 +44,12 @@ def make_aware(dt: datetime) -> datetime:
     return dt
 
 
-def execution_to_dict(e: Execution) -> dict[str, Any]:
+def execution_to_dict(e: Execution, *, include_payload: bool = True) -> dict[str, Any]:
+    """Serialize an Execution to dict.
+
+    include_payload=False applies privacy level 3 (command history without
+    stdout/stderr content). Set to True only for the owner (level 4).
+    """
     dispatch_latency_seconds: float | None = None
     if e.dispatched_at and e.running_at:
         dispatch_latency_seconds = round(
@@ -54,10 +62,11 @@ def execution_to_dict(e: Execution) -> dict[str, Any]:
         "status": e.status,
         "correlation_id": e.correlation_id,
         "idempotency_key": e.idempotency_key,
-        "exit_code": e.exit_code,
-        "result_stdout": e.result_stdout,
-        "result_stderr": e.result_stderr,
+        "exit_code": e.exit_code if include_payload else None,
+        "result_stdout": e.result_stdout if include_payload else None,
+        "result_stderr": e.result_stderr if include_payload else None,
         "tenant_id": e.tenant_id,
+        "owner_id": e.owner_id,
         "created_at": e.created_at.isoformat() if e.created_at else None,
         "dispatched_at": e.dispatched_at.isoformat() if e.dispatched_at else None,
         "running_at": e.running_at.isoformat() if e.running_at else None,

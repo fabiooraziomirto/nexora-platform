@@ -7,6 +7,7 @@ import structlog
 
 from device_service.core.config import settings
 from device_service.core.database import get_db
+from device_service.core.auth import CurrentUser, get_current_user
 from device_service.api.schemas import (
     AgentHeartbeatRequest,
     AgentRegisterRequest,
@@ -70,14 +71,18 @@ async def list_devices(
     status: str | None = None,
     device_type: str | None = None,
     db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    """List devices with pagination and filtering."""
+    """List devices. Operators see all devices; owners see only their tenant's devices."""
     service = DeviceService(db)
+    # Operators get an unfiltered view (topology only — no sensitive payload)
+    tenant_filter = None if user.is_operator else user.tenant_id
     return await service.list_devices(
         page=page,
         page_size=page_size,
         status=status,
         device_type=device_type,
+        tenant_id=tenant_filter,
     )
 
 
@@ -85,23 +90,34 @@ async def list_devices(
 async def get_device(
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    """Get device by ID."""
+    """Get device by ID. Access depends on caller's privacy level with the device."""
     service = DeviceService(db)
-    device = await service.get_device(device_id)
+    device = await service.get_device_raw(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    return device
+
+    # Tenant isolation: non-operators can only see devices in their tenant
+    if not user.is_operator and device.tenant_id and device.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    return service._to_response(device)
 
 
 @router.post("/devices", response_model=DeviceResponse, status_code=201)
 async def create_device(
     device_data: DeviceCreate,
     db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    """Create a new device."""
+    """Create a new device. Sets owner_id and tenant_id from the caller's identity."""
     service = DeviceService(db)
-    return await service.create_device(device_data)
+    return await service.create_device(
+        device_data,
+        owner_id=user.user_id,
+        tenant_id=user.tenant_id,
+    )
 
 
 @router.patch("/devices/{device_id}", response_model=DeviceResponse)
@@ -109,22 +125,38 @@ async def update_device(
     device_id: UUID,
     device_data: DeviceUpdate,
     db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    """Update device."""
+    """Update device. Requires ownership or operator role."""
     service = DeviceService(db)
-    device = await service.update_device(device_id, device_data)
+    device = await service.get_device_raw(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    return device
+
+    if not user.is_operator and device.owner_id and device.owner_id != user.user_id:
+        raise HTTPException(status_code=403, detail="Not the device owner")
+
+    updated = await service.update_device(device_id, device_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return updated
 
 
 @router.delete("/devices/{device_id}", status_code=204)
 async def delete_device(
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    """Delete device."""
+    """Delete device. Requires ownership or operator role."""
     service = DeviceService(db)
+    device = await service.get_device_raw(device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    if not user.is_operator and device.owner_id and device.owner_id != user.user_id:
+        raise HTTPException(status_code=403, detail="Not the device owner")
+
     success = await service.delete_device(device_id)
     if not success:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -162,4 +194,3 @@ async def agent_heartbeat(
     if not result:
         raise HTTPException(status_code=404, detail="Device not found")
     return result
-

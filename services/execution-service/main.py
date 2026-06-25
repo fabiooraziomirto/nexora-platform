@@ -30,6 +30,7 @@ from execution_service.core.config import (
     AUTH_ENABLED,
     AUTH_DEV_TOKEN,
     AUTH_DEV_BYPASS_ENABLED,
+    AUTH_OPERATOR_ROLE,
     ENVIRONMENT,
     KEYCLOAK_ISSUER,
     AUTH_WRITE_ROLE,
@@ -176,7 +177,13 @@ async def shutdown() -> None:
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
+    # When auth is disabled (tests / local dev), treat as operator so no filtering is applied.
+    # Allow outer ASGI test wrappers to pre-inject a specific identity (skip overwrite if set).
     if not AUTH_ENABLED:
+        if not getattr(request.state, "user_id", None):
+            request.state.user_id = "dev-user"
+            request.state.tenant_id = "dev"
+            request.state.is_operator = True
         return await call_next(request)
     if request.url.path in {"/health", "/ready", "/metrics"}:
         return await call_next(request)
@@ -185,6 +192,9 @@ async def auth_middleware(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "missing bearer token"})
     token = auth.split(" ", 1)[1]
     if AUTH_DEV_BYPASS_ENABLED and token == AUTH_DEV_TOKEN:
+        request.state.user_id = "dev-user"
+        request.state.tenant_id = "dev"
+        request.state.is_operator = True
         return await call_next(request)
     payload = _decode_jwt_payload(token)
     if not payload:
@@ -199,6 +209,12 @@ async def auth_middleware(request: Request, call_next):
         roles = set(realm_access.get("roles", []))
         if AUTH_WRITE_ROLE and AUTH_WRITE_ROLE not in roles:
             return JSONResponse(status_code=403, content={"detail": "forbidden"})
+    # Propagate caller identity to request.state for use in route handlers
+    roles_list: list[str] = payload.get("realm_access", {}).get("roles", [])
+    groups: list[str] = payload.get("groups", [])
+    request.state.user_id = payload.get("sub", "")
+    request.state.tenant_id = groups[0].lstrip("/") if groups else "global"
+    request.state.is_operator = AUTH_OPERATOR_ROLE in roles_list
     return await call_next(request)
 
 
@@ -251,11 +267,21 @@ async def metrics() -> PlainTextResponse:
 
 
 @app.get("/api/v2/executions")
-async def list_executions() -> dict[str, Any]:
+async def list_executions(request: Request) -> dict[str, Any]:
+    is_operator = getattr(request.state, "is_operator", True)
+    caller_owner_id = getattr(request.state, "user_id", None)
     with SessionLocal() as db:
-        items = db.execute(select(Execution)).scalars().all()
-        payload = [execution_to_dict(e) for e in items]
-    return {"items": payload, "total": len(payload)}
+        q = select(Execution)
+        if not is_operator and caller_owner_id:
+            # Non-operators see only their own executions (command history, level 3)
+            q = q.where(Execution.owner_id == caller_owner_id)
+        items = db.execute(q).scalars().all()
+        # Payload masking: owner sees full content (level 4); others see metadata only (level 3)
+        result = [
+            execution_to_dict(e, include_payload=(is_operator or e.owner_id == caller_owner_id))
+            for e in items
+        ]
+    return {"items": result, "total": len(result)}
 
 
 @app.post("/api/v2/executions", status_code=201)
@@ -284,6 +310,8 @@ async def create_execution(
 
         execution_id = str(uuid4())
         now = datetime.now(timezone.utc)
+        caller_owner_id = getattr(request.state, "user_id", None)
+        caller_tenant_id = getattr(request.state, "tenant_id", x_tenant_id)
         execution = Execution(
             id=execution_id,
             device_id=device_id,
@@ -291,7 +319,8 @@ async def create_execution(
             status="queued",
             correlation_id=str(uuid4()),
             idempotency_key=idempotency_key,
-            tenant_id=x_tenant_id,
+            tenant_id=caller_tenant_id,
+            owner_id=caller_owner_id,
             created_at=now,
         )
         db.add(execution)
@@ -305,12 +334,20 @@ async def create_execution(
 
 
 @app.get("/api/v2/executions/{execution_id}")
-async def get_execution(execution_id: str) -> dict[str, Any]:
+async def get_execution(execution_id: str, request: Request) -> dict[str, Any]:
+    is_operator = getattr(request.state, "is_operator", True)
+    caller_owner_id = getattr(request.state, "user_id", None)
     with SessionLocal() as db:
         execution = db.get(Execution, execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="execution not found")
-    return execution_to_dict(execution)
+    # Tenant isolation: non-operators outside the owner's tenant get 404
+    caller_tenant = getattr(request.state, "tenant_id", None)
+    if not is_operator and execution.owner_id and execution.owner_id != caller_owner_id:
+        if execution.tenant_id != caller_tenant:
+            raise HTTPException(status_code=404, detail="execution not found")
+    is_owner = is_operator or (execution.owner_id == caller_owner_id)
+    return execution_to_dict(execution, include_payload=is_owner)
 
 
 @app.delete("/api/v2/executions/{execution_id}", status_code=204)

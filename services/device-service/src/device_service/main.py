@@ -9,6 +9,8 @@ from uuid import uuid4
 import time
 
 from device_service.api import devices
+from device_service.api import discovery
+from device_service.api import privacy
 from device_service.core.config import settings
 from device_service.core.database import engine, init_db
 from device_service.core.events import event_bus
@@ -58,7 +60,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
+# Include routers — discovery first so /devices/pending and /devices/announce
+# are matched before the /devices/{device_id} path parameter in devices.router
+app.include_router(discovery.router, prefix="/api/v2", tags=["discovery"])
+app.include_router(privacy.router, prefix="/api/v2", tags=["privacy"])
 app.include_router(devices.router, prefix="/api/v2", tags=["devices"])
 
 

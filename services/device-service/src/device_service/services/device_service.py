@@ -39,25 +39,34 @@ class DeviceService:
             last_seen=device.last_seen,
             created_at=device.created_at,
             updated_at=device.updated_at,
+            owner_id=device.owner_id,
+            tenant_id=device.tenant_id,
+            privacy_level=device.privacy_level,
         )
-    
+
     async def list_devices(
         self,
         page: int = 1,
         page_size: int = 50,
         status: Optional[str] = None,
         device_type: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        owner_id: Optional[str] = None,
     ) -> DeviceListResponse:
         """List devices with pagination and filtering."""
         query = select(Device)
         count_query = select(func.count()).select_from(Device)
-        
+
         # Apply filters
         conditions = []
         if status:
             conditions.append(Device.status == status)
         if device_type:
             conditions.append(Device.device_type == device_type)
+        if tenant_id:
+            conditions.append(Device.tenant_id == tenant_id)
+        if owner_id:
+            conditions.append(Device.owner_id == owner_id)
         
         if conditions:
             query = query.where(and_(*conditions))
@@ -82,16 +91,25 @@ class DeviceService:
             page_size=page_size,
         )
     
-    async def get_device(self, device_id: UUID) -> Optional[DeviceResponse]:
-        """Get device by ID."""
+    async def get_device_raw(self, device_id: UUID) -> Optional[Device]:
+        """Return the raw Device ORM object (for ownership checks in route handlers)."""
         query = select(Device).where(Device.id == str(device_id))
         result = await self.db.execute(query)
-        device = result.scalar_one_or_none()
+        return result.scalar_one_or_none()
+
+    async def get_device(self, device_id: UUID) -> Optional[DeviceResponse]:
+        """Get device by ID."""
+        device = await self.get_device_raw(device_id)
         if device:
             return self._to_response(device)
         return None
     
-    async def create_device(self, device_data: DeviceCreate) -> DeviceResponse:
+    async def create_device(
+        self,
+        device_data: DeviceCreate,
+        owner_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+    ) -> DeviceResponse:
         """Create a new device."""
         device = Device(
             id=str(uuid4()),
@@ -101,6 +119,8 @@ class DeviceService:
             meta=device_data.metadata,
             tags=device_data.tags,
             status="offline",
+            owner_id=owner_id,
+            tenant_id=tenant_id,
         )
         
         self.db.add(device)

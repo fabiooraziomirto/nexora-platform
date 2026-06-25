@@ -34,7 +34,11 @@ class DeviceResponse(DeviceBase):
     last_seen: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    
+    # Ownership fields (present when caller has access)
+    owner_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    privacy_level: int = 0
+
     model_config = ConfigDict(from_attributes=True)
 
 

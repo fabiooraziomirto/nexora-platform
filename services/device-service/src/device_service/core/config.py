@@ -57,6 +57,20 @@ class Settings(BaseSettings):
     AGENT_BOOTSTRAP_TOKENS: str = "dev-bootstrap:dev-bootstrap-token:4102444800"
     AGENT_BOOTSTRAP_REVOKED_TOKEN_IDS: str = ""
     AGENT_BOOTSTRAP_REVOKED_SOURCE: str = "env:AGENT_BOOTSTRAP_REVOKED_TOKEN_IDS"
+
+    # Auth / OIDC
+    AUTH_ENABLED: bool = True
+    AUTH_DEV_TOKEN: str = "dev-token"          # bypass when AUTH_ENABLED=false or in dev
+    KEYCLOAK_JWKS_URL: str = Field(
+        default="http://keycloak:8080/realms/stack4things/protocol/openid-connect/certs",
+        description="Keycloak JWKS endpoint for JWT signature verification",
+    )
+    # Role that grants platform-operator privileges (sees topology, not device data)
+    AUTH_OPERATOR_ROLE: str = "platform-operator"
+
+    # Device discovery pairing (RFC 8628)
+    DISCOVERY_EXPIRY_SECONDS: int = 900    # 15 minutes
+    DISCOVERY_POLL_INTERVAL_SECONDS: int = 5
     
     class Config:
         env_file = ".env"

@@ -9,6 +9,8 @@ AUTH_DEV_BYPASS_ENABLED = os.getenv("AUTH_DEV_BYPASS_ENABLED", "false").lower() 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER", "")
 AUTH_WRITE_ROLE = os.getenv("AUTH_WRITE_ROLE", "writer")
+# Role that grants platform-operator privileges (sees all executions, full payload)
+AUTH_OPERATOR_ROLE = os.getenv("AUTH_OPERATOR_ROLE", "platform-operator")
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
