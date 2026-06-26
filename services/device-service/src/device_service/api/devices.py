@@ -114,7 +114,7 @@ async def create_device(
     service = DeviceService(db)
     return await service.create_device(
         device_data,
-        owner_id=current_user.sub if current_user else None,
+        owner_id=current_user.user_id if current_user else None,
         tenant_id=current_user.tenant_id if current_user else None,
     )
 
@@ -131,7 +131,7 @@ async def update_device(
     device_raw = await service.get_device_raw(device_id)
     if not device_raw:
         raise HTTPException(status_code=404, detail="Device not found")
-    if current_user and device_raw.owner_id and device_raw.owner_id != current_user.sub:
+    if current_user and device_raw.owner_id and device_raw.owner_id != current_user.user_id:
         if not current_user.has_role(settings.AUTH_OPERATOR_ROLE):
             raise HTTPException(status_code=403, detail="Not authorized to update this device")
     updated = await service.update_device(device_id, device_data)
@@ -151,7 +151,7 @@ async def delete_device(
     device_raw = await service.get_device_raw(device_id)
     if not device_raw:
         raise HTTPException(status_code=404, detail="Device not found")
-    if current_user and device_raw.owner_id and device_raw.owner_id != current_user.sub:
+    if current_user and device_raw.owner_id and device_raw.owner_id != current_user.user_id:
         if not current_user.has_role(settings.AUTH_OPERATOR_ROLE):
             raise HTTPException(status_code=403, detail="Not authorized to delete this device")
     success = await service.delete_device(device_id)
