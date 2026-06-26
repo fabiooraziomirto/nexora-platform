@@ -22,6 +22,7 @@ from device_service.core.events import event_bus
 from device_service.core.rate_limit import limiter
 from device_service.models.device import Device
 from device_service.models.device_telemetry import DeviceTelemetry
+from device_service.api.slo import evaluate_slos
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -107,7 +108,8 @@ async def ingest_telemetry(
     """Ingest one or more telemetry samples from a device.
 
     Accepts up to 500 samples per call. Timestamps default to server UTC if omitted.
-    Returns a 202 with a summary of ingested sample counts per metric.
+    Returns a 202 with a summary of ingested sample counts per metric and
+    the number of SLO violations detected in this batch.
     """
     await _assert_device_exists(device_id, db)
 
@@ -151,7 +153,38 @@ async def ingest_telemetry(
         },
     )
 
-    return {"device_id": str(device_id), "ingested": len(rows), "metrics": metrics_summary}
+    # SLO evaluation — check each sample against enabled SLO definitions
+    sample_tuples = [(r.metric, r.value, r.ts) for r in rows]
+    violations = await evaluate_slos(str(device_id), sample_tuples, db)
+    for v in violations:
+        logger.warning(
+            "slo.violated",
+            device_id=str(device_id),
+            slo_id=v.slo_id,
+            metric=v.metric,
+            observed=v.observed_value,
+            threshold=v.threshold,
+            operator=v.operator,
+        )
+        await event_bus.publish(
+            "device.slo.violated",
+            {
+                "device_id": str(device_id),
+                "slo_id": v.slo_id,
+                "metric": v.metric,
+                "observed_value": v.observed_value,
+                "threshold": v.threshold,
+                "operator": v.operator,
+                "violated_at": v.violated_at.isoformat(),
+            },
+        )
+
+    return {
+        "device_id": str(device_id),
+        "ingested": len(rows),
+        "metrics": metrics_summary,
+        "violations": len(violations),
+    }
 
 
 @router.get("/devices/{device_id}/telemetry", response_model=TelemetryQueryResponse)
