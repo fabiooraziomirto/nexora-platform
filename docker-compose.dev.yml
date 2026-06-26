@@ -252,6 +252,25 @@ services:
     ports:
       - "8006:8000"
 
+  nexora-ui:
+    profiles: ["dev", "smoke"]
+    build:
+      context: ./services/nexora-ui
+      dockerfile: Dockerfile
+    container_name: nxr-nexora-ui
+    depends_on:
+      device-service:
+        condition: service_healthy
+      fleet-service:
+        condition: service_started
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   nexora-function-runtime:
     profiles: ["dev", "emulator"]
     build:
