@@ -12,6 +12,28 @@ This README is intentionally detailed to support handover and onboarding of exte
 - Replace tightly coupled legacy patterns with service boundaries, explicit contracts, local quality gates, and operational runbooks.
 - Keep an architecture that is evolvable: every major capability should be implementable as an adapter or independent service.
 
+## 1.1) Research Contributions
+
+Nexora is also the reference implementation for an academic systems paper
+(see [`docs/paper/`](docs/paper/)). Its scientific contributions are:
+
+- **C1 — Inline SLO enforcement.** Per-device service-level objectives are
+  evaluated *synchronously on the telemetry-ingest path* and violations are
+  persisted atomically as first-class, queryable records (not out-of-band
+  alerts). See `services/device-service` and [ADR-0004](docs/adr/).
+- **C2 — Reliable edge dispatch.** An explicit execution state machine
+  (`queued → dispatched → running → succeeded/failed/timeout/cancelled`) plus a
+  Kafka-driven, Redis-backed edge gateway (`nexora-edge`) giving bounded-retry,
+  at-least-once command delivery with full latency instrumentation. See
+  [ADR-0001](docs/adr/).
+- **C3 — Privacy-aware multi-tenancy.** OIDC-based authorization with
+  payload masking by tenant/role. See [ADR-0004](docs/adr/).
+
+Edge FaaS (WASM/WASI via `nexora-function-runtime`, [ADR-0005](docs/adr/)) and
+declarative infrastructure (Crossplane) are positioned as future work. The
+paper draft, related-work comparison, and reproducible benchmark harness live
+under [`docs/paper/`](docs/paper/) and [`scripts/perf-eval.py`](scripts/perf-eval.py).
+
 ## 2) Current Maturity
 
 - Version: `Nexora`
