@@ -1,6 +1,7 @@
 import os
 
 os.environ.setdefault("KAFKA_ENABLED", "false")
+os.environ.setdefault("AUTH_ENABLED", "false")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_network_service.db")
 
 from main import Base, engine  # noqa: E402

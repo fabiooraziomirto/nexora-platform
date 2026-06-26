@@ -48,7 +48,7 @@ from nexora_edge.core.metrics import (
     KAFKA_CONSUMER_LAG,
 )
 
-app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
+app = FastAPI(title="Nexora Edge Gateway", version="0.1.0")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("nexora-edge")

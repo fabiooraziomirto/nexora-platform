@@ -65,13 +65,19 @@ class PolicyEngine:
             "resource_id": resource_id,
         }
         
+        # Admin is a platform superuser — short-circuit before rule evaluation.
+        # (The default "rule:admin_or_owner" indirection is not resolved by the
+        # simple evaluator below, so admin must be granted explicitly here.)
+        if "admin" in (roles or []):
+            return True
+
         # Get policy rule
         policy_key = f"{resource_type}:{action}"
         if policy_key not in self.policies:
             policy_key = "default"
-        
+
         rule = self.policies.get(policy_key, "rule:default")
-        
+
         # Evaluate rule
         return self._evaluate_rule(rule, context)
     

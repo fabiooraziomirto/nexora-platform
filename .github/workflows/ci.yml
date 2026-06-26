@@ -51,6 +51,47 @@ jobs:
           AUTH_ENABLED: "false"
         run: pytest tests/ -x -q --tb=short --override-ini="addopts="
 
+  # ── unit tests for the remaining services (matrix) ──────────────────────────
+  test-services:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { service: fleet-service,       pythonpath: ".:src" }
+          - { service: dns-service,         pythonpath: ".:src" }
+          - { service: network-service,     pythonpath: ".:src" }
+          - { service: webservice-service,  pythonpath: ".:src" }
+          - { service: plugin-service,      pythonpath: "src" }
+          - { service: rbac-service,        pythonpath: "src" }
+          - { service: nexora-edge,         pythonpath: ".:src" }
+          - { service: nexora-function-runtime, pythonpath: "." }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install test dependencies
+        run: |
+          pip install pytest pytest-asyncio "httpx<0.28" fastapi uvicorn \
+            sqlalchemy aiosqlite structlog "PyJWT>=2.9" "cryptography>=43" \
+            prometheus-client redis aiokafka wasmtime \
+            opentelemetry-api opentelemetry-sdk || true
+          # Per-service requirements if present
+          if [ -f "services/${{ matrix.service }}/requirements.txt" ]; then
+            pip install -r "services/${{ matrix.service }}/requirements.txt" || true
+          fi
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        env:
+          KAFKA_ENABLED: "false"
+          AUTH_ENABLED: "false"
+          REDIS_ENABLED: "false"
+          OTEL_ENABLED: "false"
+          PYTHONPATH: ${{ matrix.pythonpath }}
+        run: pytest tests/ -q --tb=short --override-ini="addopts="
+
   # ── lint (ruff) — runs across all Python services ───────────────────────────
   lint:
     runs-on: ubuntu-latest
