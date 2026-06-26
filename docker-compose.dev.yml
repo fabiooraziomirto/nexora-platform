@@ -358,12 +358,12 @@ services:
     ports:
       - "18089:8080"
 
-  lr-board-emulator-1:
+  lr-board-emulator:
     profiles: ["emulator"]
     build:
       context: ./services/lr-board-emulator
       dockerfile: Dockerfile
-    container_name: nexora-lr-board-emulator-1
+    container_name: nexora-lr-board-emulator
     depends_on:
       device-service:
         condition: service_started
@@ -377,17 +377,26 @@ services:
       GW_URL: http://lightningrod-gateway:8000
       RUNTIME_URL: http://nexora-function-runtime:9000
       BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
-      BOARD_NAME: lr-board-1
       BOARD_TYPE: lightningrod-emulator
       HEARTBEAT_SECONDS: "10"
       POLL_SECONDS: "4"
+      # Multi-board: number of parallel boards to simulate
+      N_BOARDS: "2"
+      # Failure injection (0.0 = no failures, 1.0 = always fail)
+      FAIL_RATE: "0.0"
+      # Extra agent processing delay in ms (0 = realistic 1s default)
+      DELAY_MS: "0"
+      # Kill boards after N seconds (0 = run forever)
+      KILL_AFTER: "0"
 
-  lr-board-emulator-2:
-    profiles: ["emulator"]
+  # Benchmark profile: 20 boards, 10% failure rate, 150ms agent delay
+  # Usage: docker compose -f docker-compose.dev.yml --profile bench up lr-board-emulator-bench
+  lr-board-emulator-bench:
+    profiles: ["bench"]
     build:
       context: ./services/lr-board-emulator
       dockerfile: Dockerfile
-    container_name: nexora-lr-board-emulator-2
+    container_name: nexora-lr-board-emulator-bench
     depends_on:
       device-service:
         condition: service_started
@@ -401,14 +410,17 @@ services:
       GW_URL: http://lightningrod-gateway:8000
       RUNTIME_URL: http://nexora-function-runtime:9000
       BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
-      BOARD_NAME: lr-board-2
       BOARD_TYPE: lightningrod-emulator
       HEARTBEAT_SECONDS: "10"
-      POLL_SECONDS: "4"
+      POLL_SECONDS: "2"
+      N_BOARDS: "20"
+      FAIL_RATE: "0.1"
+      DELAY_MS: "150"
+      KILL_AFTER: "0"
+      BOARD_NAME_PREFIX: bench-board
 
 volumes:
   mysql_data:
   redis_data:
   legacy_keystone_data:
   function_artifacts:
-
