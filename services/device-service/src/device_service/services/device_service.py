@@ -16,6 +16,14 @@ from device_service.api.schemas import (
     DeviceListResponse,
 )
 from device_service.core.events import event_bus
+from device_service.core.metrics import (
+    device_operations,
+    device_operation_duration,
+    active_devices,
+    device_provisioning_seconds,
+    device_registrations_total,
+    device_heartbeats_total,
+)
 
 logger = structlog.get_logger()
 
@@ -65,7 +73,6 @@ class DeviceService:
         query = select(Device)
         count_query = select(func.count()).select_from(Device)
 
-        # Apply filters
         conditions = []
         if status:
             conditions.append(Device.status == status)
@@ -80,15 +87,12 @@ class DeviceService:
             query = query.where(and_(*conditions))
             count_query = count_query.where(and_(*conditions))
         
-        # Get total count
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
         
-        # Apply pagination
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size).order_by(Device.created_at.desc())
         
-        # Execute query
         result = await self.db.execute(query)
         devices = result.scalars().all()
         
@@ -119,6 +123,8 @@ class DeviceService:
         tenant_id: Optional[str] = None,
     ) -> DeviceResponse:
         """Create a new device."""
+        import time as _time
+        t0 = _time.monotonic()
         device = Device(
             id=str(uuid4()),
             name=device_data.name,
@@ -130,14 +136,16 @@ class DeviceService:
             owner_id=owner_id,
             tenant_id=tenant_id,
         )
-        
+
         self.db.add(device)
         await self.db.commit()
         await self.db.refresh(device)
-        
+
+        device_operations.labels(operation="create", status="ok").inc()
+        device_operation_duration.labels(operation="create").observe(_time.monotonic() - t0)
+
         logger.info("Device created", device_id=device.id, name=device.name)
-        
-        # Publish event
+
         await event_bus.publish(
             "device.created",
             {
@@ -146,7 +154,7 @@ class DeviceService:
                 "device_type": device.device_type,
             }
         )
-        
+
         return self._to_response(device)
     
     async def update_device(
@@ -162,7 +170,6 @@ class DeviceService:
         if not device:
             return None
         
-        # Update fields
         update_data = device_data.model_dump(exclude_unset=True)
         if "metadata" in update_data:
             update_data["meta"] = update_data.pop("metadata")
@@ -174,7 +181,6 @@ class DeviceService:
         
         logger.info("Device updated", device_id=device.id)
         
-        # Publish event
         await event_bus.publish(
             "device.updated",
             {
@@ -190,24 +196,24 @@ class DeviceService:
         query = select(Device).where(Device.id == str(device_id))
         result = await self.db.execute(query)
         device = result.scalar_one_or_none()
-        
+
         if not device:
+            device_operations.labels(operation="delete", status="not_found").inc()
             return False
-        
+
+        was_online = device.status == "online"
         device_id_str = device.id
         await self.db.delete(device)
         await self.db.commit()
-        
+
+        device_operations.labels(operation="delete", status="ok").inc()
+        if was_online:
+            active_devices.dec()
+
         logger.info("Device deleted", device_id=device_id_str)
-        
-        # Publish event
-        await event_bus.publish(
-            "device.deleted",
-            {
-                "device_id": device_id_str,
-            }
-        )
-        
+
+        await event_bus.publish("device.deleted", {"device_id": device_id_str})
+
         return True
 
     # ------------------------------------------------------------------
@@ -216,7 +222,12 @@ class DeviceService:
 
     async def register_agent(self, data: AgentRegisterRequest) -> AgentStatusResponse:
         """Register or re-register an agent device."""
+        import json as _json
+        import time as _time
+
+        t0 = _time.monotonic()
         now = datetime.now(timezone.utc)
+        is_new = True
 
         if data.device_id:
             query = select(Device).where(Device.id == str(data.device_id))
@@ -225,10 +236,10 @@ class DeviceService:
         else:
             device = None
 
-        import json as _json
         capabilities_json = _json.dumps(data.capabilities) if data.capabilities else None
 
         if device:
+            is_new = False
             device.name = data.name
             device.device_type = data.device_type
             if data.metadata is not None:
@@ -252,7 +263,14 @@ class DeviceService:
         await self.db.commit()
         await self.db.refresh(device)
 
-        logger.info("Agent registered", device_id=device.id, name=device.name)
+        reg_type = "new" if is_new else "re_register"
+        device_registrations_total.labels(registration_type=reg_type).inc()
+        device_operations.labels(operation="register", status="ok").inc()
+        device_operation_duration.labels(operation="register").observe(_time.monotonic() - t0)
+        if is_new:
+            active_devices.inc()
+
+        logger.info("Agent registered", device_id=device.id, name=device.name, type=reg_type)
 
         await event_bus.publish(
             "agent.registered",
@@ -269,15 +287,19 @@ class DeviceService:
         self, device_id: UUID, data: AgentHeartbeatRequest
     ) -> Optional[AgentStatusResponse]:
         """Process an agent heartbeat."""
+        import json as _json
+
         query = select(Device).where(Device.id == str(device_id))
         result = await self.db.execute(query)
         device = result.scalar_one_or_none()
 
         if not device:
+            device_heartbeats_total.labels(status="not_found").inc()
             return None
 
-        import json as _json
         now = datetime.now(timezone.utc)
+        is_first_heartbeat = device.last_seen is None
+
         device.last_seen = now
         device.status = data.status or "online"
         if data.capabilities is not None:
@@ -286,6 +308,15 @@ class DeviceService:
         await self.db.commit()
         await self.db.refresh(device)
 
+        device_heartbeats_total.labels(status="ok").inc()
+        device_operations.labels(operation="heartbeat", status="ok").inc()
+
+        # Provisioning time: first heartbeat after registration
+        if is_first_heartbeat and device.created_at:
+            provisioning_s = (now - device.created_at.replace(tzinfo=timezone.utc)).total_seconds()
+            if provisioning_s >= 0:
+                device_provisioning_seconds.observe(provisioning_s)
+
         logger.info("Agent heartbeat", device_id=device.id)
 
         return AgentStatusResponse(
@@ -293,4 +324,3 @@ class DeviceService:
             status=device.status,
             last_seen=device.last_seen,
         )
-

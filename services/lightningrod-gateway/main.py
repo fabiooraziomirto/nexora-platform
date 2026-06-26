@@ -43,6 +43,7 @@ from lightningrod_gateway.core.metrics import (
     BROKER_COMMIT_LAG,
     KAFKA_INGESTION_LATENCY,
     QUEUE_WAIT,
+    KAFKA_CONSUMER_LAG,
 )
 
 app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
@@ -53,6 +54,7 @@ logger = logging.getLogger("lightningrod-gateway")
 producer: aiokafka.AIOKafkaProducer | None = None
 consumer: aiokafka.AIOKafkaConsumer | None = None
 _consumer_task: asyncio.Task | None = None
+_lag_poller_task: asyncio.Task | None = None
 redis_client: aioredis.Redis | None = None
 
 # Local in-memory fallback — used only when Redis is disabled or unreachable.
@@ -63,9 +65,6 @@ _local_dispatches: dict[str, dict[str, Any]] = {}
 
 # ---------------------------------------------------------------------------
 # Redis-backed store helpers
-# Each helper falls back to the local dicts on any Redis error so the gateway
-# degrades gracefully instead of crashing. A warning is emitted on each
-# fallback so the condition is visible in logs/alerts.
 # ---------------------------------------------------------------------------
 
 def _rkey_session(device_id: str) -> str:
@@ -145,8 +144,6 @@ async def _dispatch_count() -> int:
 
 
 async def _dispatch_count_for_device(device_id: str) -> int:
-    # O(N dispatches) — acceptable for research/emulator scale.
-    # For production at scale, maintain a per-device set in Redis instead.
     if redis_client is not None:
         try:
             keys = await redis_client.keys("gateway:dispatch:*")
@@ -161,6 +158,36 @@ async def _dispatch_count_for_device(device_id: str) -> int:
         except Exception:
             logger.warning("Redis error in _dispatch_count_for_device device=%s, falling back to local", device_id)
     return sum(1 for d in _local_dispatches.values() if d.get("device_id") == device_id)
+
+
+# ---------------------------------------------------------------------------
+# Kafka consumer lag poller
+# ---------------------------------------------------------------------------
+
+async def _poll_consumer_lag(interval_seconds: float = 15.0) -> None:
+    """Periodically observe the consumer lag for each assigned partition."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        if consumer is None:
+            continue
+        try:
+            partitions = consumer.assignment()
+            if not partitions:
+                continue
+            end_offsets = await consumer.end_offsets(list(partitions))
+            for tp, end_offset in end_offsets.items():
+                try:
+                    position = await consumer.position(tp)
+                    lag = max(0, end_offset - position)
+                    KAFKA_CONSUMER_LAG.labels(
+                        service="lightningrod-gateway",
+                        topic=tp.topic,
+                        partition=str(tp.partition),
+                    ).set(lag)
+                except Exception:
+                    pass
+        except Exception:
+            logger.debug("lag poller: skipped (consumer not ready)")
 
 
 # ---------------------------------------------------------------------------
@@ -194,15 +221,10 @@ async def _consume_dispatched() -> None:
             execution_id = event.get("resource_id") or event.get("execution_id") or str(uuid4())
             device_id = event.get("payload", {}).get("device_id")
 
-            # msg.timestamp is epoch-milliseconds assigned by Kafka (CreateTime by default,
-            # LogAppendTime if broker is configured with log.message.timestamp.type=LogAppendTime).
             kafka_broker_ts: float | None = (
                 msg.timestamp / 1000.0 if msg.timestamp and msg.timestamp > 0 else None
             )
 
-            # Phase 1b: Kafka publish → gateway consumer receive.
-            # kafka_dispatched_at is injected by execution-service; fall back to
-            # occurred_at for events from older service versions.
             kafka_dispatched_at: float | None = (
                 event.get("payload", {}).get("kafka_dispatched_at")
                 or event.get("occurred_at")
@@ -323,18 +345,21 @@ async def startup() -> None:
             raise
 
     _consumer_task = asyncio.create_task(_consume_dispatched())
+    _lag_poller_task = asyncio.create_task(_poll_consumer_lag())
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    global producer, _consumer_task, redis_client
-    if _consumer_task and not _consumer_task.done():
-        _consumer_task.cancel()
-        try:
-            await _consumer_task
-        except asyncio.CancelledError:
-            pass
-        _consumer_task = None
+    global producer, _consumer_task, _lag_poller_task, redis_client
+    for task in (_consumer_task, _lag_poller_task):
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    _consumer_task = None
+    _lag_poller_task = None
     if producer:
         await producer.stop()
         producer = None
@@ -428,7 +453,6 @@ async def heartbeat(device_id: str) -> dict[str, Any]:
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     session["last_seen"] = time.time()
-    # _session_set also resets the Redis TTL, keeping the session alive.
     await _session_set(device_id, session)
     return {"device_id": device_id, "last_seen": session["last_seen"]}
 
@@ -459,7 +483,6 @@ async def deliver(execution_id: str) -> dict[str, Any]:
         if session:
             delivered_at = time.time()
 
-            # Retrieve all timing anchors from the dispatch blob.
             gateway_received_at_val: float | None = cached.get("received_at")
             kafka_broker_ts_val: float | None = cached.get("kafka_broker_timestamp")
             kafka_dispatched_at_val: float | None = (
@@ -508,8 +531,6 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
                     await _dispatch_count_for_device(device_id)
                 )
-            # Full timing breakdown returned to the caller (benchmark board agent).
-            # All epoch-float fields enable JSONL reconstruction without log parsing.
             return {
                 "execution_id": execution_id,
                 "device_id": device_id,
