@@ -36,6 +36,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     logger.info("Starting Device Service", version=settings.VERSION)
+
+    if settings.ENVIRONMENT == "production" and not settings.AUTH_ENABLED:
+        raise RuntimeError("AUTH_ENABLED=false is not allowed when ENVIRONMENT=production")
+    if settings.ENVIRONMENT == "production" and settings.AUTH_DEV_BYPASS_ENABLED:
+        raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
+    if settings.AUTH_DEV_BYPASS_ENABLED:
+        logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
     
     # Initialize database
     await init_db()

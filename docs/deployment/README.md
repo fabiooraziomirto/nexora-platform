@@ -4,6 +4,7 @@
 
 - [IoTronic / Lightning Rod Parity Matrix](nexora-parity-matrix.md) — concept mapping from legacy to v2.0
 - [Execution Pipeline Runbook](execution-pipeline-runbook.md) — operator troubleshooting guide
+- [Production Kubernetes Foundation](production-kubernetes-foundation.md) — baseline production env, secrets, and readiness requirements
 - [Release Checklist (MVP)](release-checklist-mvp.md) — pre-release verification steps
 - [Keycloak Authentication](auth-keycloak-nxr.md) — auth model and rollout for Nxr services
 

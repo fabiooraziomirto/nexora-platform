@@ -48,6 +48,8 @@ poetry.lock
 .coverage
 htmlcov/
 .tox/
+test_*.db
+*_test.db
 
 # Logs
 *.log
@@ -60,6 +62,24 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated research/paper artifacts
+results/
+docs/paper/*.aux
+docs/paper/*.bbl
+docs/paper/*.blg
+docs/paper/*.fdb_latexmk
+docs/paper/*.fls
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.synctex.gz
+docs/paper/main.pdf
+docs/paper/figures/*.aux
+docs/paper/figures/*.log
+docs/paper/results/*.json
+docs/paper/results/*.jsonl
+docs/paper/results/*.txt
+!docs/paper/results/.gitkeep
 
 # Kubernetes secrets
 *.secret.yaml

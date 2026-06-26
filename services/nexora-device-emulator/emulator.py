@@ -145,22 +145,27 @@ def _list_executions() -> list[dict]:
 # Execution handlers
 # ---------------------------------------------------------------------------
 
-def _handle_function_install(execution_id: str, execution: dict) -> dict:
-    plugin = execution.get("plugin") or {}
+def _handle_function_install(execution_id: str, payload: dict) -> dict:
+    plugin = payload.get("plugin") or {}
     try:
         _http_json(
             "POST",
             f"{RUNTIME_URL}/runtime/functions/install",
             {
-                "function_id": plugin.get("id"),
+                "id": plugin.get("id"),
+                "name": plugin.get("name", ""),
+                "version": plugin.get("version", "1.0.0"),
+                "runtime_type": plugin.get("runtime_type", "wasm-wasi"),
                 "artifact_uri": plugin.get("artifact_uri"),
-                "checksum": plugin.get("artifact_checksum"),
-                "entrypoint": plugin.get("entrypoint"),
+                "artifact_checksum": plugin.get("artifact_checksum"),
+                "entrypoint": plugin.get("entrypoint", "_start"),
+                "timeout_seconds": plugin.get("timeout_seconds", 30),
+                "memory_limit_mb": plugin.get("memory_limit_mb", 64),
                 "permissions": plugin.get("permissions", []),
             },
         )
         return {
-            "status": "installed",
+            "status": "succeeded",
             "exit_code": 0,
             "stdout": f"installed {plugin.get('id')}\n",
             "stderr": "",
@@ -169,24 +174,24 @@ def _handle_function_install(execution_id: str, execution: dict) -> dict:
         return {"status": "failed", "exit_code": 1, "stdout": "", "stderr": str(exc)}
 
 
-def _handle_function_invoke(execution_id: str, execution: dict) -> dict:
-    plugin = execution.get("plugin") or {}
-    args = execution.get("args") or {}
+def _handle_function_invoke(execution_id: str, payload: dict) -> dict:
+    plugin = payload.get("plugin") or {}
+    args = payload.get("args") or {}
     function_id = plugin.get("id")
     if not function_id:
-        return {"status": "failed", "exit_code": 1, "stderr": "missing plugin id"}
+        return {"status": "failed", "exit_code": 1, "stderr": "missing plugin id in dispatch payload"}
     try:
         resp = _http_json(
             "POST",
             f"{RUNTIME_URL}/runtime/functions/{function_id}/invoke",
-            {"args": args, "entrypoint": plugin.get("entrypoint")},
+            {"args": args, "entrypoint": plugin.get("entrypoint", "_start")},
         )
         return {
             "status": "succeeded",
-            "exit_code": 0,
-            "stdout": "",
-            "stderr": "",
-            "function_result": resp.get("result"),
+            "exit_code": resp.get("exit_code", 0),
+            "stdout": resp.get("stdout", ""),
+            "stderr": resp.get("stderr", ""),
+            "function_result": resp.get("function_result"),
         }
     except Exception as exc:
         return {"status": "failed", "exit_code": 1, "stderr": str(exc), "function_result": None}
@@ -208,12 +213,14 @@ def _handle_execution(
     t_start = time.time()
 
     try:
-        _http_json("POST", f"{GW_URL}/api/v2/deliver/{execution_id}", {})
+        delivery_resp = _http_json("POST", f"{GW_URL}/api/v2/deliver/{execution_id}", {})
     except Exception as exc:
         _log(board_name, "deliver_error", execution_id=execution_id, error=str(exc))
         return
 
-    exec_type = execution.get("execution_type", "command")
+    # Use the Kafka event payload from the gateway (includes full plugin object).
+    dispatch_payload = delivery_resp.get("payload") or execution
+    exec_type = dispatch_payload.get("execution_type") or execution.get("execution_type", "command")
     _http_json(
         "POST",
         f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
@@ -233,9 +240,9 @@ def _handle_execution(
             "stderr": f"injected failure (fail_rate={fail_rate})",
         }
     elif exec_type == "function.install":
-        result = _handle_function_install(execution_id, execution)
+        result = _handle_function_install(execution_id, dispatch_payload)
     elif exec_type == "function.invoke":
-        result = _handle_function_invoke(execution_id, execution)
+        result = _handle_function_invoke(execution_id, dispatch_payload)
     else:
         result = {
             "status": "succeeded",

@@ -19,6 +19,7 @@ from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest
 
 from nexora_edge.core.config import (
+    ENVIRONMENT,
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_TOPIC_PREFIX,
     KAFKA_ENABLED,
@@ -32,7 +33,12 @@ from nexora_edge.core.config import (
     DISPATCH_TTL_SECONDS,
 )
 from nexora_edge.core.tracing import setup_tracing, extract_trace_context, tracer as _tracer
-from opentelemetry import trace as _otel_trace
+try:
+    from opentelemetry import trace as _otel_trace
+except ImportError:
+    from nexora_edge.core.tracing import _NoopTrace
+
+    _otel_trace = _NoopTrace()
 from nexora_edge.core.metrics import (
     DISPATCH_EVENTS_TOTAL,
     DELIVERY_ATTEMPTS_TOTAL,
@@ -324,6 +330,12 @@ async def startup() -> None:
     global producer, _consumer_task, redis_client
     setup_tracing()
 
+    if ENVIRONMENT == "production" and (not REDIS_ENABLED or not REDIS_REQUIRED):
+        raise RuntimeError(
+            "nexora-edge requires REDIS_ENABLED=true and REDIS_REQUIRED=true "
+            "when ENVIRONMENT=production"
+        )
+
     if REDIS_ENABLED:
         try:
             redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
@@ -567,8 +579,8 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 PER_DEVICE_PENDING_GAUGE.labels("nexora-edge", device_id).set(
                     await _dispatch_count_for_device(device_id)
                 )
-            # Full timing breakdown returned to the caller (benchmark board agent).
-            # All epoch-float fields enable JSONL reconstruction without log parsing.
+            # Full timing breakdown + original Kafka event returned to the caller.
+            # Agents use "payload" to get plugin details for function.install/invoke.
             return {
                 "execution_id": execution_id,
                 "device_id": device_id,
@@ -582,6 +594,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 "kafka_ingestion_seconds": kafka_ingestion_s_val,
                 "queue_wait_seconds": queue_wait_s,
                 "dispatch_latency_seconds": dispatch_latency_s,
+                "payload": cached.get("event", {}).get("payload", {}),
             }
 
         error_msg = f"no active session for device {device_id}"

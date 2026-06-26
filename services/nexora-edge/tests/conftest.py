@@ -11,9 +11,7 @@ for path in (SERVICE_ROOT, SRC_ROOT):
         sys.path.insert(0, value)
 
 os.environ.setdefault("KAFKA_ENABLED", "false")
-os.environ.setdefault("EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS", "600")
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test_execution_service.db")
-
-from main import Base, engine  # noqa: E402
-
-Base.metadata.create_all(bind=engine)
+os.environ.setdefault("REDIS_ENABLED", "false")
+os.environ.setdefault("OTEL_ENABLED", "false")
+os.environ.setdefault("MAX_DELIVERY_ATTEMPTS", "2")
+os.environ.setdefault("DELIVERY_BACKOFF_SECONDS", "0")

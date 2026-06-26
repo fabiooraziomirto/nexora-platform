@@ -19,7 +19,7 @@ import structlog
 
 from device_service.core.database import get_db
 from device_service.core.events import event_bus
-from device_service.core.rate_limit import limiter
+from device_service.core.rate_limit import limiter, LIMIT_TELEMETRY_INGEST, LIMIT_TELEMETRY_QUERY
 from device_service.models.device import Device
 from device_service.models.device_telemetry import DeviceTelemetry
 from device_service.api.slo import evaluate_slos
@@ -98,7 +98,7 @@ def _row_to_response(row: DeviceTelemetry) -> TelemetrySampleResponse:
 # ---------------------------------------------------------------------------
 
 @router.post("/devices/{device_id}/telemetry", status_code=202)
-@limiter.limit("60/minute")
+@limiter.limit(LIMIT_TELEMETRY_INGEST)
 async def ingest_telemetry(
     request: Request,
     device_id: UUID,
@@ -188,7 +188,7 @@ async def ingest_telemetry(
 
 
 @router.get("/devices/{device_id}/telemetry", response_model=TelemetryQueryResponse)
-@limiter.limit("120/minute")
+@limiter.limit(LIMIT_TELEMETRY_QUERY)
 async def query_telemetry(
     request: Request,
     device_id: UUID,
@@ -247,7 +247,7 @@ async def query_telemetry(
 
 
 @router.get("/devices/{device_id}/telemetry/latest", response_model=TelemetryLatestResponse)
-@limiter.limit("120/minute")
+@limiter.limit(LIMIT_TELEMETRY_QUERY)
 async def latest_telemetry(
     request: Request,
     device_id: UUID,

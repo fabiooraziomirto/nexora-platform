@@ -55,7 +55,7 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
 
     # Dev token shortcut (AUTH_ENABLED=true but token == dev token)
-    if authorization == f"Bearer {settings.AUTH_DEV_TOKEN}":
+    if settings.AUTH_DEV_BYPASS_ENABLED and authorization == f"Bearer {settings.AUTH_DEV_TOKEN}":
         return CurrentUser(user_id="dev-user", tenant_id="dev", roles=[], is_operator=False)
 
     if not authorization.startswith("Bearer "):

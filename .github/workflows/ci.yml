@@ -48,6 +48,30 @@ jobs:
           AUTH_ENABLED: "false"
         run: pytest tests/ -x -q --tb=short --override-ini="addopts="
 
+  # ── nexora-edge ─────────────────────────────────────────────────────────────
+  test-nexora-edge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/nexora-edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install poetry && poetry install --with dev
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+          KAFKA_ENABLED: "false"
+          REDIS_ENABLED: "false"
+          OTEL_ENABLED: "false"
+          MAX_DELIVERY_ATTEMPTS: "2"
+          DELIVERY_BACKOFF_SECONDS: "0"
+        run: pytest tests/ -x -q --tb=short
+
   # ── lint (ruff) — runs across all Python services ───────────────────────────
   lint:
     runs-on: ubuntu-latest
@@ -61,6 +85,46 @@ jobs:
       - name: Ruff check
         run: ruff check services/ libraries/ --select E,F,W --ignore E501 --quiet
 
+  # ── YAML syntax validation for Kubernetes/deployment manifests ─────────────
+  yaml-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install pyyaml
+      - name: Validate YAML syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          import yaml
+
+          roots = [Path("infrastructure/kubernetes"), Path("k8s"), Path(".github")]
+          files = []
+          for root in roots:
+              if root.exists():
+                  files.extend(root.rglob("*.yaml"))
+                  files.extend(root.rglob("*.yml"))
+          for path in Path("services").glob("*/k8s/*.yaml"):
+              files.append(path)
+
+          failed = False
+          for path in sorted(files):
+              try:
+                  with path.open("r", encoding="utf-8") as handle:
+                      list(yaml.safe_load_all(handle))
+              except Exception as exc:
+                  failed = True
+                  print(f"{path}: {exc}", file=sys.stderr)
+
+          if failed:
+              sys.exit(1)
+          print(f"validated {len(files)} YAML files")
+          PY
+
   # ── Docker smoke build — verifies all Dockerfiles compile ───────────────────
   docker-build-smoke:
     runs-on: ubuntu-latest
@@ -69,9 +133,12 @@ jobs:
       matrix:
         service:
           - device-service
+          - dns-service
           - execution-service
           - fleet-service
+          - network-service
           - plugin-service
+          - webservice-service
           - nexora-edge
     steps:
       - uses: actions/checkout@v4

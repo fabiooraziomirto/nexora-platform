@@ -274,6 +274,8 @@ def _ensure_execution_columns() -> None:
 @app.on_event("startup")
 async def startup() -> None:
     setup_tracing()
+    if ENVIRONMENT == "production" and not AUTH_ENABLED:
+        raise RuntimeError("AUTH_ENABLED=false is not allowed when ENVIRONMENT=production")
     if AUTH_DEV_BYPASS_ENABLED:
         if ENVIRONMENT == "production":
             raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")

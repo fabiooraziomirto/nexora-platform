@@ -115,7 +115,7 @@ services:
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -139,7 +139,7 @@ services:
     ports:
       - "8001:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -167,7 +167,7 @@ services:
     ports:
       - "8002:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -188,7 +188,7 @@ services:
     ports:
       - "8003:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -209,7 +209,7 @@ services:
     ports:
       - "8004:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -230,7 +230,7 @@ services:
     ports:
       - "8005:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -280,6 +280,7 @@ services:
     environment:
       RUNTIME_PORT: "9000"
       FUNCTION_INSTALL_DIR: /var/nexora/functions
+      ARTIFACT_ALLOWED_SCHEMES: "https,http,file"
     volumes:
       - function_artifacts:/var/nexora/functions
     ports:
@@ -313,11 +314,34 @@ services:
     ports:
       - "8007:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+
+  nexora-device-emulator:
+    profiles: ["dev", "emulator"]
+    build:
+      context: ./services/nexora-device-emulator
+      dockerfile: Dockerfile
+    container_name: nxr-device-emulator
+    depends_on:
+      device-service:
+        condition: service_healthy
+      nexora-edge:
+        condition: service_healthy
+      execution-service:
+        condition: service_healthy
+    environment:
+      DEVICE_URL: http://device-service:8000
+      EXEC_URL: http://execution-service:8000
+      GW_URL: http://nexora-edge:8000
+      RUNTIME_URL: http://nexora-function-runtime:9000
+      BOOTSTRAP_TOKEN: dev-bootstrap:dev-bootstrap-token
+      N_BOARDS: "1"
+      POLL_SECONDS: "2"
+      HEARTBEAT_SECONDS: "10"
 
 volumes:
   mysql_data:

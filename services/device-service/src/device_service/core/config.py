@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
+    ENVIRONMENT: str = "development"
     
     # Keycloak
     KEYCLOAK_URL: str = Field(
@@ -61,6 +62,7 @@ class Settings(BaseSettings):
     # Auth / OIDC
     AUTH_ENABLED: bool = True
     AUTH_DEV_TOKEN: str = "dev-token"          # bypass when AUTH_ENABLED=false or in dev
+    AUTH_DEV_BYPASS_ENABLED: bool = False
     KEYCLOAK_JWKS_URL: str = Field(
         default="http://keycloak:8080/realms/nxr/protocol/openid-connect/certs",
         description="Keycloak JWKS endpoint for JWT signature verification",
@@ -78,4 +80,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

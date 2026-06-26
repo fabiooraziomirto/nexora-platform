@@ -40,7 +40,8 @@ RUNTIME_PORT = int(os.getenv("RUNTIME_PORT", "9000"))
 DOWNLOAD_TIMEOUT_SECONDS = float(os.getenv("DOWNLOAD_TIMEOUT_SECONDS", "30"))
 MAX_MEMORY_MB_DEFAULT = int(os.getenv("MAX_MEMORY_MB_DEFAULT", "64"))
 RUNTIME_API_KEY = os.getenv("RUNTIME_API_KEY", "")
-ARTIFACT_ALLOWED_SCHEMES = {"https"}
+_schemes_env = os.getenv("ARTIFACT_ALLOWED_SCHEMES", "https")
+ARTIFACT_ALLOWED_SCHEMES = {s.strip() for s in _schemes_env.split(",")}
 _ARTIFACT_SCHEME_WARN_LOGGED = False
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -160,14 +161,20 @@ async def install_function(payload: dict[str, Any]) -> dict[str, Any]:
     if parsed.scheme not in ARTIFACT_ALLOWED_SCHEMES:
         raise HTTPException(status_code=400, detail=f"artifact_uri scheme must be one of: {ARTIFACT_ALLOWED_SCHEMES}")
 
-    # Download artifact (no redirects to prevent redirect-based SSRF)
-    try:
-        resp = httpx.get(artifact_uri, timeout=DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=False)
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"artifact download failed: {exc}") from exc
-
-    artifact_bytes = resp.content
+    # Load artifact: local file (file://) or remote HTTP/HTTPS download
+    if parsed.scheme == "file":
+        local_path = Path(parsed.path)
+        if not local_path.exists():
+            raise HTTPException(status_code=404, detail=f"artifact file not found: {local_path}")
+        artifact_bytes = local_path.read_bytes()
+    else:
+        # Remote download — no redirects to prevent redirect-based SSRF
+        try:
+            resp = httpx.get(artifact_uri, timeout=DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=False)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"artifact download failed: {exc}") from exc
+        artifact_bytes = resp.content
 
     # Verify checksum
     actual_hash = "sha256:" + hashlib.sha256(artifact_bytes).hexdigest()
@@ -314,15 +321,14 @@ def _execute_wasmtime(
     """Execute using wasmtime-py with WASI sandbox."""
     from wasmtime import Config, Engine, Linker, Module, Store, WasiConfig  # type: ignore[import]
 
-    import io
-    from contextlib import redirect_stdout, redirect_stderr
+    import tempfile
 
     engine_config = Config()
     engine_config.consume_fuel = True  # enables fuel-based timeout
     engine = Engine(engine_config)
 
     store = Store(engine)
-    store.add_fuel(timeout * 1_000_000)  # rough fuel limit per second
+    store.set_fuel(timeout * 1_000_000)  # rough fuel limit per second
 
     wasi_cfg = WasiConfig()
     # Pass args as first argv element (JSON-encoded)
@@ -334,11 +340,14 @@ def _execute_wasmtime(
     if "inherit_env" in permissions:
         wasi_cfg.inherit_env()
 
-    # Capture stdout/stderr via WASI pipes
-    stdout_buf = io.BytesIO()
-    stderr_buf = io.BytesIO()
-    wasi_cfg.set_stdout_bytes(stdout_buf)
-    wasi_cfg.set_stderr_bytes(stderr_buf)
+    # Capture stdout/stderr via temp files (wasmtime-py uses file-based I/O)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".stdout") as f_out:
+        stdout_path = f_out.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".stderr") as f_err:
+        stderr_path = f_err.name
+
+    wasi_cfg.stdout_file = stdout_path
+    wasi_cfg.stderr_file = stderr_path
 
     store.set_wasi(wasi_cfg)
 
@@ -346,6 +355,7 @@ def _execute_wasmtime(
     linker.define_wasi()
     module = Module(engine, wasm_file.read_bytes())
     instance = linker.instantiate(store, module)
+    stderr_extra = ""
 
     try:
         fn = instance.exports(store).get(entrypoint)
@@ -355,11 +365,21 @@ def _execute_wasmtime(
             fn(store)
         exit_code = 0
     except Exception as exc:
-        stderr_buf.write(str(exc).encode())
+        stderr_extra = str(exc)
         exit_code = 1
 
-    stdout_text = stdout_buf.getvalue().decode("utf-8", errors="replace")
-    stderr_text = stderr_buf.getvalue().decode("utf-8", errors="replace")
+    try:
+        stdout_text = open(stdout_path, "rb").read().decode("utf-8", errors="replace")
+    except Exception:
+        stdout_text = ""
+    try:
+        stderr_text = open(stderr_path, "rb").read().decode("utf-8", errors="replace") + stderr_extra
+    except Exception:
+        stderr_text = stderr_extra
+
+    import os as _os
+    _os.unlink(stdout_path)
+    _os.unlink(stderr_path)
 
     # Attempt to parse stdout as structured JSON result
     function_result: dict | None = None
