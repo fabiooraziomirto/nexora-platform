@@ -6,6 +6,7 @@ from sqlalchemy import select, func, and_
 import structlog
 
 from device_service.models.device import Device
+from device_service.models.device_shadow import DeviceShadow
 from device_service.api.schemas import (
     AgentHeartbeatRequest,
     AgentRegisterRequest,
@@ -330,6 +331,10 @@ class DeviceService:
             if provisioning_s >= 0:
                 device_provisioning_seconds.observe(provisioning_s)
 
+        # Shadow: if heartbeat carries telemetry, update reported state
+        if data.telemetry:
+            await self._update_shadow_reported(str(device_id), data.telemetry, now)
+
         logger.info("Agent heartbeat", device_id=device.id)
 
         return AgentStatusResponse(
@@ -337,3 +342,36 @@ class DeviceService:
             status=device.status,
             last_seen=device.last_seen,
         )
+
+    async def _update_shadow_reported(
+        self, device_id: str, telemetry: dict, now: datetime
+    ) -> None:
+        """Merge telemetry into the device shadow's reported state."""
+        import json as _json
+        result = await self.db.execute(
+            select(DeviceShadow).where(DeviceShadow.device_id == device_id)
+        )
+        shadow = result.scalar_one_or_none()
+        if not shadow:
+            shadow = DeviceShadow(device_id=device_id, version=1, created_at=now, updated_at=now)
+            self.db.add(shadow)
+            await self.db.flush()
+
+        existing_reported: dict = _json.loads(shadow.reported) if shadow.reported else {}
+        merged = {**existing_reported, **telemetry}
+        existing_desired: dict = _json.loads(shadow.desired) if shadow.desired else {}
+        delta = {k: v for k, v in existing_desired.items() if merged.get(k) != v}
+
+        shadow.reported = _json.dumps(merged)
+        shadow.delta = _json.dumps(delta)
+        shadow.version = (shadow.version or 0) + 1
+        shadow.reported_at = now
+        shadow.updated_at = now
+        await self.db.commit()
+
+        if delta:
+            await event_bus.publish("device.shadow.delta", {
+                "device_id": device_id,
+                "version": shadow.version,
+                "delta": delta,
+            })
