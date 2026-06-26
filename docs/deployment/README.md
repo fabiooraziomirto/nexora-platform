@@ -5,7 +5,6 @@
 - [IoTronic / Lightning Rod Parity Matrix](nexora-parity-matrix.md) — concept mapping from legacy to v2.0
 - [Execution Pipeline Runbook](execution-pipeline-runbook.md) — operator troubleshooting guide
 - [Release Checklist (MVP)](release-checklist-mvp.md) — pre-release verification steps
-- [IoTronic UI Adapter Deploy](nexora-dashboard-adapter-deploy.md) — how to deploy the legacy dashboard adapter on Horizon
 - [Keycloak Authentication](auth-keycloak-nxr.md) — auth model and rollout for Nxr services
 
 ## Architecture Decision Records
@@ -27,7 +26,6 @@ docker compose -f docker-compose.dev.yml --profile auth up -d keycloak
 ### Optional legacy dashboard profile (Horizon + IoTronic plugin)
 
 ```bash
-docker compose -f docker-compose.dev.yml --profile legacy up -d --build legacy-keystone legacy-horizon
 ```
 
 - Horizon legacy URL: `http://localhost:18089`

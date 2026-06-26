@@ -67,7 +67,6 @@ flowchart TB
 
     subgraph UX["User Experience Layer"]
       Dashboard["dashboard-ui (React + FastAPI)"]
-      LegacyAdapter["legacy-horizon + Nexora adapter"]
     end
 
     subgraph Identity["Identity and Access"]
@@ -184,8 +183,6 @@ flowchart TB
 - `fleet-service` -> `http://localhost:8006`
 - `edge-gateway` -> `http://localhost:8007` (Kafka consumer, agent sessions, delivery)
 - `nexora-module-runtime` -> `http://localhost:8010` (WASM/WASI execution daemon on board path)
-- `legacy-keystone` -> `http://localhost:15000/v3` (optional `legacy` profile)
-- `legacy-horizon` -> `http://localhost:18089` (optional `legacy` profile with Nexora compatibility plugin)
 - `mysql` -> `localhost:3306`
 - `redis` -> `localhost:6379`
 - `kafka` -> `localhost:9092`

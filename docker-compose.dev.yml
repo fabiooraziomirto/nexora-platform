@@ -318,58 +318,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ---------------------------------------------------------------------------
-  # Legacy / optional services
-  # ---------------------------------------------------------------------------
-
-  nexora-dashboard:
-    profiles: ["dev"]
-    env_file:
-      - .env.dev
-    build:
-      context: ./services/nexora-dashboard
-      dockerfile: Dockerfile
-    container_name: nxr-nexora-dashboard
-    environment:
-      S4T_DEVICE_URL: http://device-service:8000
-      S4T_PLUGIN_URL: http://plugin-service:8000
-      S4T_EXECUTION_URL: http://execution-service:8000
-      S4T_NETWORK_URL: http://network-service:8000
-      S4T_DNS_URL: http://dns-service:8000
-      S4T_WEBSERVICE_URL: http://webservice-service:8000
-      S4T_FLEET_URL: http://fleet-service:8000
-    ports:
-      - "8008:8000"
-
-  legacy-keystone:
-    profiles: ["dev"]
-    env_file:
-      - .env.dev
-    build:
-      context: ./services/legacy-keystone
-      dockerfile: Dockerfile
-    container_name: nxr-legacy-keystone
-    environment:
-      S4T_DEVICE_URL: http://device-service:8000
-      S4T_PLUGIN_URL: http://plugin-service:8000
-      S4T_EXECUTION_URL: http://execution-service:8000
-      S4T_NETWORK_URL: http://network-service:8000
-      S4T_DNS_URL: http://dns-service:8000
-      S4T_WEBSERVICE_URL: http://webservice-service:8000
-      S4T_FLEET_URL: http://fleet-service:8000
-    ports:
-      - "15000:8000"
-
-  legacy-horizon:
-    profiles: ["dev"]
-    env_file:
-      - .env.dev
-    build:
-      context: ./services/legacy-horizon
-      dockerfile: Dockerfile
-    container_name: nxr-legacy-horizon
-    ports:
-      - "18089:8000"
 
 volumes:
   mysql_data:

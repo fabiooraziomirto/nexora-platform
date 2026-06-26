@@ -21,7 +21,6 @@
 | network-service | Flat | ✅ Completo | ⚠️ Scaffold (24 righe) | Minimale | ✅ HTTP requests + duration | ❌ |
 | webservice-service | Flat | ✅ Completo | ⚠️ Scaffold (24 righe) | Minimale | ✅ HTTP requests + duration | ❌ |
 | nexora-edge | Flat | ✅ Completo | ❌ Assenti | ✅ Reale + retry | ✅ Completo (7 metriche) | ❌ |
-| nexora-dashboard | Flat | ✅ Completo | ❌ Assenti | ✅ Reale (proxy fallback) | ❌ Assenti | ❌ |
 | nexora-device-emulator | Script | ✅ Funzionale | ❌ N/A | Minimale | ❌ Assenti | ❌ |
 | rbac-service | Modular | ✅ Completo | ❌ Assenti | ✅ Reale | ❌ Assenti | ❌ |
 
@@ -75,7 +74,7 @@ active_devices             Gauge
 ```
 
 #### Servizi senza nessuna metrica
-- `nexora-dashboard`, `rbac-service`, `nexora-device-emulator`
+- , `rbac-service`, `nexora-device-emulator`
 
 ---
 
@@ -233,7 +232,7 @@ Decisione: sostituire WAMP/Crossbar.io + oslo.messaging con HTTP REST + Kafka. I
 | **Gateway in-memory sessions** | `agent_sessions` e `dispatch_cache` sono `dict` Python in `nexora-edge/main.py` (riga ~29). ADR-0001 dichiara il gateway "stateless" ma la cache locale lo rende sticky. | **Alto** — impossibile scalare orizzontalmente senza perdere stato sessione |
 | **Redis configurato ma non usato** | `REDIS_URL` presente in `device-service/core/config.py`; Redis è nel compose; nessun `import redis` nel codice del servizio. | Basso — risorsa sprecata |
 | **KAFKA_REQUIRED=false di default** | Tutti i servizi hanno due flag separati: `KAFKA_ENABLED` (abilita publisher) e `KAFKA_REQUIRED` (fa fallire startup se Kafka non raggiungibile). Il default è degraded mode silenzioso. | Medio — in produzione si potrebbe credere che gli eventi vengano pubblicati anche se Kafka è down |
-| **Dev-token bypass OIDC** | `AUTH_DEV_TOKEN` in tutti i servizi flat: se il token corrisponde, il middleware auth viene bypassato completamente (plugin-service riga 76, execution-service riga 29). nexora-dashboard ha ulteriore fallback con username/password locale. | **Alto** — rischio sicurezza se `AUTH_ENABLED=false` o se il dev token trapela in produzione |
+| **Dev-token bypass OIDC** | `AUTH_DEV_TOKEN` in tutti i servizi flat: se il token corrisponde, il middleware auth viene bypassato completamente (plugin-service riga 76, execution-service riga 29). | **Alto** — rischio sicurezza se `AUTH_ENABLED=false` o se il dev token trapela in produzione |
 | **Timeout loop polling vs event-driven** | `execution-service` ha un background task async che ogni 5 secondi itera su tutte le execution `dispatched/running` e le porta in `timeout`. Approccio polling invece di evento schedulato. | Medio — falsi negativi se il loop è lento sotto carico |
 | **Alembic + `_ensure_*_columns()` in parallelo** | I servizi flat hanno sia migrations Alembic che una funzione runtime `_ensure_*_columns()` che fa `ALTER TABLE` se le colonne mancano. Approccio duale non documentato. | Medio — conflitti di migrazione su ambienti esistenti |
 

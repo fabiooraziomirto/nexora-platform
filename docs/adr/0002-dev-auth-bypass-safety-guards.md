@@ -2,7 +2,7 @@
 
 **Status**: Accepted  
 **Date**: 2026-06-25  
-**Scope**: All FastAPI services with HTTP auth middleware (plugin-service, execution-service, fleet-service, dns-service, network-service, webservice-service) and nexora-dashboard
+**Scope**: All FastAPI services with HTTP auth middleware (plugin-service, execution-service, fleet-service, dns-service, network-service, webservice-service)
 
 ---
 
@@ -38,7 +38,6 @@ AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION
 
 This is visible in container logs regardless of log verbosity level.
 
-### nexora-dashboard local admin fallback
 
 The UI's local-admin login fallback (`/login` endpoint) follows the same rule: the fallback is only active when `AUTH_DEV_BYPASS_ENABLED=true`. Without the flag, a failed Keycloak auth always returns a redirect to the login error page.
 
@@ -69,6 +68,6 @@ The UI's local-admin login fallback (`/login` endpoint) follows the same rule: t
 
 ## Implementation notes
 
-- All 6 flat-service `main.py` files and `services/nexora-dashboard/main.py` were updated uniformly in one changeset.
+- All 6 flat-service `main.py` files were updated uniformly in one changeset.
 - The `docker-compose.dev.yml` file intentionally does **not** set `AUTH_DEV_BYPASS_ENABLED=true` by default because `AUTH_ENABLED` defaults to `false` in all services, making the bypass moot in the default dev stack. Operators who want to test the full auth path in dev should set both flags explicitly.
 - Scripts `nexora-device-emulator-e2e.sh` and `perf-dispatch-latency.sh` export `AUTH_DEV_BYPASS_ENABLED=true` as a default, honoring any override already present in the environment.
