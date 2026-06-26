@@ -1,47 +1,53 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Cpu, BarChart2, AlertTriangle, Layers } from 'lucide-react'
+import { Monitor, BarChart2, AlertCircle, Layers, Package, Terminal, Network, Globe } from 'lucide-react'
 
 const NAV = [
-  { to: '/devices', label: 'Devices',    icon: Cpu },
-  { to: '/telemetry', label: 'Telemetry', icon: BarChart2 },
-  { to: '/slo',      label: 'SLO',        icon: AlertTriangle },
-  { to: '/fleets',   label: 'Fleets',     icon: Layers },
+  { to: '/devices',     label: 'Devices',     icon: Monitor },
+  { to: '/plugins',     label: 'Plugins',     icon: Package },
+  { to: '/executions',  label: 'Executions',  icon: Terminal },
+  { to: '/ports',       label: 'Ports',       icon: Network },
+  { to: '/webservices', label: 'Webservices', icon: Globe },
+  { to: '/telemetry',   label: 'Telemetry',   icon: BarChart2 },
+  { to: '/slo',         label: 'SLOs',        icon: AlertCircle },
+  { to: '/fleets',      label: 'Fleets',      icon: Layers },
 ]
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex">
+    <div className="flex min-h-screen w-full">
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-800">
-          <span className="text-lg font-bold tracking-tight text-white">Nexora</span>
-          <span className="ml-1 text-xs text-purple-400 font-medium">Platform</span>
+      <aside className="w-52 shrink-0 bg-slate-800 flex flex-col">
+        <div className="px-4 py-4 border-b border-slate-700">
+          <div className="text-white font-semibold text-base tracking-tight">Nexora</div>
+          <div className="text-slate-400 text-xs mt-0.5">IoT Platform</div>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
+
+        <nav className="flex-1 py-3">
           {NAV.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
                   isActive
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-blue-600 text-white font-medium'
+                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`
               }
             >
-              <Icon size={16} />
+              <Icon size={15} />
               {label}
             </NavLink>
           ))}
         </nav>
-        <div className="px-5 py-3 border-t border-gray-800 text-xs text-gray-600">
-          v0.2.0
+
+        <div className="px-4 py-3 border-t border-slate-700 text-slate-500 text-xs">
+          v0.3.0
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      {/* Page content */}
+      <main className="flex-1 bg-slate-50 overflow-auto">
         <Outlet />
       </main>
     </div>
