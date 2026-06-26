@@ -87,6 +87,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     environment:
       DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
       REDIS_URL: redis://redis:6379/0
@@ -95,6 +97,8 @@ services:
       KAFKA_REQUIRED: "false"
       AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800"
       LOG_LEVEL: INFO
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
     ports:
       - "8000:8000"
     healthcheck:
@@ -137,12 +141,16 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     environment:
       DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_ENABLED: "true"
       KAFKA_REQUIRED: "false"
       MAX_EXECUTIONS_PER_DEVICE: "32"
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
     ports:
       - "8002:8000"
     healthcheck:
@@ -164,6 +172,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_ENABLED: "true"
@@ -173,6 +183,8 @@ services:
       REDIS_REQUIRED: "false"
       SESSION_TTL_SECONDS: "300"
       DISPATCH_TTL_SECONDS: "3600"
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
     ports:
       - "8007:8000"
     healthcheck:
@@ -263,6 +275,16 @@ services:
       interval: 20s
       timeout: 5s
       retries: 5
+
+  jaeger:
+    profiles: ["dev", "test", "smoke"]
+    image: jaegertracing/all-in-one:1.56
+    container_name: stack4things-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC receiver
 
   keycloak:
     profiles: ["auth"]

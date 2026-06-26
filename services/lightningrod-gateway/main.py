@@ -31,6 +31,8 @@ from lightningrod_gateway.core.config import (
     SESSION_TTL_SECONDS,
     DISPATCH_TTL_SECONDS,
 )
+from lightningrod_gateway.core.tracing import setup_tracing, extract_trace_context, tracer as _tracer
+from opentelemetry import trace as _otel_trace
 from lightningrod_gateway.core.metrics import (
     DISPATCH_EVENTS_TOTAL,
     DELIVERY_ATTEMPTS_TOTAL,
@@ -65,6 +67,9 @@ _local_dispatches: dict[str, dict[str, Any]] = {}
 
 # ---------------------------------------------------------------------------
 # Redis-backed store helpers
+# Each helper falls back to the local dicts on any Redis error so the gateway
+# degrades gracefully instead of crashing. A warning is emitted on each
+# fallback so the condition is visible in logs/alerts.
 # ---------------------------------------------------------------------------
 
 def _rkey_session(device_id: str) -> str:
@@ -144,6 +149,8 @@ async def _dispatch_count() -> int:
 
 
 async def _dispatch_count_for_device(device_id: str) -> int:
+    # O(N dispatches) — acceptable for research/emulator scale.
+    # For production at scale, maintain a per-device set in Redis instead.
     if redis_client is not None:
         try:
             keys = await redis_client.keys("gateway:dispatch:*")
@@ -221,10 +228,15 @@ async def _consume_dispatched() -> None:
             execution_id = event.get("resource_id") or event.get("execution_id") or str(uuid4())
             device_id = event.get("payload", {}).get("device_id")
 
+            # msg.timestamp is epoch-milliseconds assigned by Kafka (CreateTime by default,
+            # LogAppendTime if broker is configured with log.message.timestamp.type=LogAppendTime).
             kafka_broker_ts: float | None = (
                 msg.timestamp / 1000.0 if msg.timestamp and msg.timestamp > 0 else None
             )
 
+            # Phase 1b: Kafka publish → gateway consumer receive.
+            # kafka_dispatched_at is injected by execution-service; fall back to
+            # occurred_at for events from older service versions.
             kafka_dispatched_at: float | None = (
                 event.get("payload", {}).get("kafka_dispatched_at")
                 or event.get("occurred_at")
@@ -310,6 +322,7 @@ async def _publish_event(action: str, resource_id: str, payload: dict[str, Any])
 @app.on_event("startup")
 async def startup() -> None:
     global producer, _consumer_task, redis_client
+    setup_tracing()
 
     if REDIS_ENABLED:
         try:
@@ -453,6 +466,7 @@ async def heartbeat(device_id: str) -> dict[str, Any]:
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     session["last_seen"] = time.time()
+    # _session_set also resets the Redis TTL, keeping the session alive.
     await _session_set(device_id, session)
     return {"device_id": device_id, "last_seen": session["last_seen"]}
 
@@ -475,6 +489,10 @@ async def deliver(execution_id: str) -> dict[str, Any]:
     session = await _session_get(device_id) if device_id != "unknown" else None
     attempts = cached.get("delivery_attempts", 0)
 
+    # Extract distributed trace context propagated from execution-service via Kafka envelope.
+    # The "event" sub-dict holds the original Kafka message (which includes traceparent if set).
+    _parent_ctx = extract_trace_context(cached.get("event", {}))
+
     for attempt in range(attempts + 1, MAX_DELIVERY_ATTEMPTS + 1):
         cached["delivery_attempts"] = attempt
         await _dispatch_set(execution_id, cached)
@@ -483,6 +501,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
         if session:
             delivered_at = time.time()
 
+            # Retrieve all timing anchors from the dispatch blob.
             gateway_received_at_val: float | None = cached.get("received_at")
             kafka_broker_ts_val: float | None = cached.get("kafka_broker_timestamp")
             kafka_dispatched_at_val: float | None = (
@@ -509,6 +528,22 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 if kafka_broker_ts_val is not None:
                     kafka_broker_lag_s_val = float(kafka_broker_ts_val) - float(kafka_dispatched_at_val)
 
+            _trace_id = ""
+            with _tracer.start_as_current_span(
+                "gateway.deliver",
+                context=_parent_ctx,
+                attributes={
+                    "execution_id": execution_id,
+                    "device_id": device_id,
+                    "attempt": attempt,
+                    "queue_wait_seconds": queue_wait_s or 0.0,
+                    "dispatch_latency_seconds": dispatch_latency_s or 0.0,
+                },
+            ):
+                _trace_id = format(
+                    _otel_trace.get_current_span().get_span_context().trace_id, "032x"
+                )
+
             logger.info(json.dumps({
                 "event": "dispatch_delivered",
                 "service": "lightningrod-gateway",
@@ -523,6 +558,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 "queue_wait_s": round(queue_wait_s, 6) if queue_wait_s is not None else None,
                 "dispatch_latency_s": round(dispatch_latency_s, 6) if dispatch_latency_s is not None else None,
                 "attempts": attempt,
+                "trace_id": _trace_id,
             }))
 
             await _dispatch_delete(execution_id)
@@ -531,6 +567,8 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
                     await _dispatch_count_for_device(device_id)
                 )
+            # Full timing breakdown returned to the caller (benchmark board agent).
+            # All epoch-float fields enable JSONL reconstruction without log parsing.
             return {
                 "execution_id": execution_id,
                 "device_id": device_id,

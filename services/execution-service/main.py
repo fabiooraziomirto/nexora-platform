@@ -22,8 +22,9 @@ from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import func, select, and_
+from opentelemetry import trace
 
-# ── Submodule imports ─────────────────────────────────────────────────────────
+# ── Submodule imports ───────────────────────────────────────────────────────────────────────────────
 from execution_service.core.config import (
     DATABASE_URL,
     DB_CONNECT_TIMEOUT_SECONDS,
@@ -64,6 +65,7 @@ from execution_service.core.metrics import (
     ACTIVE_EXECUTIONS_GAUGE,
 )
 import execution_service.core.events as _events
+from execution_service.core.tracing import setup_tracing, inject_trace_context, tracer as _tracer
 from execution_service.models.execution import (
     Execution,
     execution_to_dict,
@@ -75,7 +77,7 @@ from execution_service.models.execution import (
 )
 from execution_service.models.trigger import FunctionTrigger
 
-# ── Aliases for backward compatibility with tests that import these names ─────
+# ── Aliases for backward compatibility with tests that import these names ─────────────────
 # Tests do: from main import app, SessionLocal, Execution, ACTIVE_STATUSES
 # All these names are now present in this module's namespace from imports above.
 
@@ -85,7 +87,7 @@ logger = logging.getLogger("execution-service")
 app = FastAPI(title="Execution Service", version="0.1.0")
 
 
-# ── Private helpers that stay here so monkeypatch.setattr("main.X") works ────
+# ── Private helpers that stay here so monkeypatch.setattr("main.X") works ────────────
 # Tests patch: main.MAX_EXECUTIONS_PER_DEVICE and main.EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS.
 # Because those names were imported into this module's namespace above, patching
 # main.X updates *this* module's global dict, which the route closures read.
@@ -112,7 +114,7 @@ def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
 
 
 # ── Timeout loop (defined here so `import main; main.EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS = 0`
-#    is visible to this function's globals) ────────────────────────────────────
+#    is visible to this function's globals) ──────────────────────────────────────────
 async def _timeout_loop() -> None:
     while True:
         await asyncio.sleep(EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS)
@@ -240,10 +242,11 @@ def _ensure_execution_columns() -> None:
     ensure_execution_columns()
 
 
-# ── Lifecycle ─────────────────────────────────────────────────────────────────
+# ── Lifecycle ───────────────────────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
 async def startup() -> None:
+    setup_tracing()
     if AUTH_DEV_BYPASS_ENABLED:
         if ENVIRONMENT == "production":
             raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
@@ -275,7 +278,7 @@ async def shutdown() -> None:
         _events.producer = None
 
 
-# ── Middleware ────────────────────────────────────────────────────────────────
+# ── Middleware ────────────────────────────────────────────────────────────────────────────
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -349,7 +352,7 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Routes ──────────────────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health() -> dict[str, str]:
@@ -476,28 +479,38 @@ async def delete_execution(execution_id: str) -> None:
 
 @app.post("/api/v2/executions/{execution_id}/dispatch")
 async def dispatch_execution(execution_id: str) -> dict[str, Any]:
-    with SessionLocal() as db:
-        execution = db.get(Execution, execution_id)
-        if not execution:
-            raise HTTPException(status_code=404, detail="execution not found")
-        if not transition_allowed(execution.status, "dispatched"):
-            raise HTTPException(
-                status_code=409,
-                detail=f"cannot transition from {execution.status} to dispatched",
-            )
-        execution.status = "dispatched"
-        execution.dispatched_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(execution)
-        response = execution_to_dict(execution)
-    envelope = {
-        "execution_id": execution.id,
-        "device_id": execution.device_id,
-        "command": execution.command,
-        "execution_type": execution.execution_type or "command",
-        "correlation_id": execution.correlation_id,
-        "kafka_dispatched_at": time.time(),
-    }
+    with _tracer.start_as_current_span(
+        "execution.dispatch",
+        attributes={"execution_id": execution_id},
+    ) as span:
+        with SessionLocal() as db:
+            execution = db.get(Execution, execution_id)
+            if not execution:
+                span.set_status(trace.StatusCode.ERROR, "execution not found")
+                raise HTTPException(status_code=404, detail="execution not found")
+            if not transition_allowed(execution.status, "dispatched"):
+                span.set_status(trace.StatusCode.ERROR, f"invalid transition from {execution.status}")
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"cannot transition from {execution.status} to dispatched",
+                )
+            execution.status = "dispatched"
+            execution.dispatched_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(execution)
+            response = execution_to_dict(execution)
+        span.set_attribute("device_id", execution.device_id or "")
+        span.set_attribute("execution_type", execution.execution_type or "command")
+        envelope: dict[str, Any] = {
+            "execution_id": execution.id,
+            "device_id": execution.device_id,
+            "command": execution.command,
+            "execution_type": execution.execution_type or "command",
+            "correlation_id": execution.correlation_id,
+            "kafka_dispatched_at": time.time(),
+        }
+        # Propagate trace context to the gateway via Kafka envelope
+        inject_trace_context(envelope)
 
     # FaaS: fetch plugin metadata and device capabilities, embed in dispatch envelope
     exec_type = execution.execution_type or "command"
@@ -601,7 +614,7 @@ async def callback_execution(execution_id: str, payload: dict[str, Any]) -> dict
     return response
 
 
-# ── FaaS HTTP Trigger Shortcuts ───────────────────────────────────────────────
+# ── FaaS HTTP Trigger Shortcuts ─────────────────────────────────────────────────────────────────────────────
 # These create + dispatch a function execution in one call.
 
 async def _create_and_dispatch_function(
@@ -682,7 +695,7 @@ async def cancel_execution(execution_id: str) -> dict[str, Any]:
     return response
 
 
-# ── Function Trigger CRUD ─────────────────────────────────────────────────────
+# ── Function Trigger CRUD ─────────────────────────────────────────────────────────────────────────────
 
 def _trigger_to_dict(t: FunctionTrigger) -> dict[str, Any]:
     return {
@@ -775,7 +788,7 @@ async def disable_trigger(trigger_id: str) -> dict[str, Any]:
     return _trigger_to_dict(trigger)
 
 
-# ── Fleet Deploy / Invoke (Feature 8) ────────────────────────────────────────
+# ── Fleet Deploy / Invoke (Feature 8) ─────────────────────────────────────────────────────────────────────
 
 async def _get_fleet_members(fleet_id: str) -> list[str]:
     import httpx as _httpx
@@ -905,7 +918,7 @@ async def invoke_function_on_fleet(
     }
 
 
-# ── Operator Aggregation APIs (Feature 10) ───────────────────────────────────
+# ── Operator Aggregation APIs (Feature 10) ───────────────────────────────────────────────────────────────────
 
 def _require_operator(request: Request) -> None:
     if not getattr(request.state, "is_operator", False):
