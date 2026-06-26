@@ -23,6 +23,9 @@ httpx = "^0.25.2"
 prometheus-client = "^0.19.0"
 structlog = "^24.1.0"
 python-json-logger = "^2.0.7"
+opentelemetry-sdk = "^1.24.0"
+opentelemetry-exporter-otlp-proto-grpc = "^1.24.0"
+opentelemetry-instrumentation-fastapi = "^0.45b0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

@@ -14,6 +14,9 @@ pymysql = "^1.1.1"
 cryptography = "^41.0.7"
 aiokafka = "^0.12.0"
 alembic = "^1.16.5"
+opentelemetry-sdk = "^1.24.0"
+opentelemetry-exporter-otlp-proto-grpc = "^1.24.0"
+opentelemetry-instrumentation-fastapi = "^0.45b0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
