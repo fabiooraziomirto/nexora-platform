@@ -1,10 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches: [main, "claude/**", "feature/**", "fix/**"]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   # ── device-service (structured pattern, has full test suite) ────────────────
