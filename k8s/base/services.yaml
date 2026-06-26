@@ -1,0 +1,410 @@
+# Nexora Platform — microservices deployments (k8s/base).
+# Services use ClusterIP by default.
+# For NodePort on a bare-metal VM apply k8s/nodeport/services.yaml on top.
+#
+# Images are built locally and loaded into k3s/kind:
+#   docker build -t nxr/device-service:latest services/device-service/
+#   k3s ctr images import <(docker save nxr/device-service:latest)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: device-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: device-service
+  template:
+    metadata:
+      labels:
+        app: device-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: device-service
+          image: nxr/device-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+            - name: KAFKA_ENABLED
+              value: "true"
+            - name: AUTH_ENABLED
+              value: "false"
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: device-service
+  namespace: nxr
+spec:
+  selector:
+    app: device-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fleet-service
+  template:
+    metadata:
+      labels:
+        app: fleet-service
+    spec:
+      containers:
+        - name: fleet-service
+          image: nxr/fleet-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+            - name: DEVICE_SERVICE_URL
+              value: http://device-service
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-service
+  namespace: nxr
+spec:
+  selector:
+    app: fleet-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plugin-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plugin-service
+  template:
+    metadata:
+      labels:
+        app: plugin-service
+    spec:
+      containers:
+        - name: plugin-service
+          image: nxr/plugin-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: plugin-service
+  namespace: nxr
+spec:
+  selector:
+    app: plugin-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: execution-service
+  template:
+    metadata:
+      labels:
+        app: execution-service
+    spec:
+      containers:
+        - name: execution-service
+          image: nxr/execution-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: execution-service
+  namespace: nxr
+spec:
+  selector:
+    app: execution-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: network-service
+  template:
+    metadata:
+      labels:
+        app: network-service
+    spec:
+      containers:
+        - name: network-service
+          image: nxr/network-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-service
+  namespace: nxr
+spec:
+  selector:
+    app: network-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-service
+  template:
+    metadata:
+      labels:
+        app: dns-service
+    spec:
+      containers:
+        - name: dns-service
+          image: nxr/dns-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-service
+  namespace: nxr
+spec:
+  selector:
+    app: dns-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webservice-service
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webservice-service
+  template:
+    metadata:
+      labels:
+        app: webservice-service
+    spec:
+      containers:
+        - name: webservice-service
+          image: nxr/webservice-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webservice-service
+  namespace: nxr
+spec:
+  selector:
+    app: webservice-service
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexora-edge
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexora-edge
+  template:
+    metadata:
+      labels:
+        app: nexora-edge
+    spec:
+      containers:
+        - name: nexora-edge
+          image: nxr/nexora-edge:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexora-edge
+  namespace: nxr
+spec:
+  selector:
+    app: nexora-edge
+  ports:
+    - port: 80
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexora-ui
+  namespace: nxr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexora-ui
+  template:
+    metadata:
+      labels:
+        app: nexora-ui
+    spec:
+      containers:
+        - name: nexora-ui
+          image: nxr/nexora-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexora-ui
+  namespace: nxr
+spec:
+  selector:
+    app: nexora-ui
+  ports:
+    - port: 80
+      targetPort: 80
