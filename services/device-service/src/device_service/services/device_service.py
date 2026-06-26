@@ -16,6 +16,7 @@ from device_service.api.schemas import (
     DeviceListResponse,
 )
 from device_service.core.events import event_bus
+from device_service.core.tracing import tracer as _tracer
 from device_service.core.metrics import (
     device_operations,
     device_operation_duration,
@@ -225,6 +226,12 @@ class DeviceService:
         import json as _json
         import time as _time
 
+        with _tracer.start_as_current_span(
+            "device.agent_register",
+            attributes={"device_id": str(data.device_id) if data.device_id else "", "name": data.name},
+        ):
+            pass  # span wraps the intent; DB work below is within the same async context
+
         t0 = _time.monotonic()
         now = datetime.now(timezone.utc)
         is_new = True
@@ -288,6 +295,12 @@ class DeviceService:
     ) -> Optional[AgentStatusResponse]:
         """Process an agent heartbeat."""
         import json as _json
+
+        with _tracer.start_as_current_span(
+            "device.heartbeat",
+            attributes={"device_id": str(device_id)},
+        ):
+            pass
 
         query = select(Device).where(Device.id == str(device_id))
         result = await self.db.execute(query)

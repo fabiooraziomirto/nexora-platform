@@ -15,6 +15,7 @@ from device_service.core.config import settings
 from device_service.core.database import engine, init_db
 from device_service.core.events import event_bus
 from device_service.core.metrics import setup_metrics, get_metrics_response
+from device_service.core.tracing import setup_tracing
 
 logger = structlog.get_logger()
 
@@ -31,8 +32,9 @@ async def lifespan(app: FastAPI):
     # Initialize event bus
     await event_bus.connect()
     
-    # Setup metrics
+    # Setup metrics and tracing
     setup_metrics()
+    setup_tracing()
     
     logger.info("Device Service started successfully")
     
@@ -118,4 +120,3 @@ async def readiness_check():
 async def metrics():
     """Prometheus metrics endpoint."""
     return get_metrics_response()
-
