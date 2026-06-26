@@ -1,0 +1,110 @@
+@startuml nexora-architecture
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam ArrowColor #555555
+skinparam componentBorderColor #888888
+skinparam packageBorderColor #AAAAAA
+
+title Nexora Platform — System Architecture
+
+' ── External actors ──────────────────────────────────────────────────────────
+actor "IoT Device\n(edge agent)" as device
+actor "Operator\n(dashboard / API)" as operator
+actor "Monitoring\n(Prometheus)" as prom
+
+' ── Control plane (API layer) ────────────────────────────────────────────────
+package "Control Plane  [k8s namespace: nxr]" {
+
+  package "Core API Services" {
+    component "device-service\n:8000" as ds
+    component "fleet-service\n:8006" as fs
+    component "execution-service\n:8002" as es
+    component "plugin-service\n:8001" as ps
+    component "network-service\n:8003" as ns
+    component "dns-service\n:8004" as dns
+    component "webservice-service\n:8005" as ws
+  }
+
+  package "Edge Gateway" {
+    component "nexora-edge\n:8007" as edge
+    component "nexora-function-runtime\n:9000" as frt
+  }
+
+  package "RBAC" {
+    component "rbac-service\n:8008" as rbac
+  }
+
+  package "UI" {
+    component "nexora-ui\n:8080\n(React + Vite)" as ui
+  }
+}
+
+' ── Data plane ───────────────────────────────────────────────────────────────
+package "Data Plane" {
+  database "MySQL 8\n(nxr db)" as mysql
+  database "Redis 7\n(session cache)" as redis
+  queue "Apache Kafka\n(nxr.* topics)" as kafka
+}
+
+' ── Observability ────────────────────────────────────────────────────────────
+package "Observability" {
+  component "Jaeger\n(OTLP traces)" as jaeger
+}
+
+' ── Infrastructure provisioning ──────────────────────────────────────────────
+package "Infrastructure Layer  [Crossplane XRDs]" {
+  component "DatabaseClaim\n(XStackDatabase)" as xdb
+  component "KafkaTopicClaim\n(XStackKafkaTopic)" as xkafka
+}
+
+' ── Connections ──────────────────────────────────────────────────────────────
+device --> edge : "MQTT / HTTP\nheartbeat + dispatch"
+operator --> ui : HTTPS
+operator --> ds : "REST /api/v2"
+operator --> es : "REST /api/v2"
+ui --> ds
+ui --> fs
+
+ds --> mysql : SQLAlchemy
+fs --> mysql
+es --> mysql
+ps --> mysql
+ns --> mysql
+dns --> mysql
+ws --> mysql
+
+ds --> kafka : "nxr.device.*"
+es --> kafka : "nxr.execution.*"
+ps --> kafka : "nxr.plugin.*"
+
+edge --> kafka : "consume nxr.execution.dispatch"
+edge --> redis : "session cache"
+edge --> frt : "WASM invoke"
+
+ds --> rbac : "policy check"
+es --> rbac : "policy check"
+
+ds --> jaeger : "OTLP spans"
+es --> jaeger
+edge --> jaeger
+
+prom --> ds : "GET /metrics"
+prom --> es
+prom --> edge
+
+xdb ..> mysql : "provisions"
+xkafka ..> kafka : "provisions topics"
+
+note right of edge
+  In-memory session registry (non-HA).
+  Redis migration complete for
+  cross-instance consistency.
+end note
+
+note right of frt
+  WASM/WASI sandbox.
+  Requires RUNTIME_API_KEY.
+end note
+
+@enduml

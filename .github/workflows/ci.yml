@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**", "feature/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── device-service (structured pattern, has full test suite) ────────────────
+  test-device-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/device-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]" 2>/dev/null || \
+          pip install poetry && poetry install --with dev
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+          KAFKA_ENABLED: "false"
+          AUTH_ENABLED: "false"
+        run: pytest tests/ -x -q --tb=short --override-ini="addopts="
+
+  # ── execution-service ────────────────────────────────────────────────────────
+  test-execution-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/execution-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install poetry && poetry install --with dev
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+          KAFKA_ENABLED: "false"
+          AUTH_ENABLED: "false"
+        run: pytest tests/ -x -q --tb=short --override-ini="addopts="
+
+  # ── lint (ruff) — runs across all Python services ───────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ruff
+      - name: Ruff check
+        run: ruff check services/ libraries/ --select E,F,W --ignore E501 --quiet
+
+  # ── Docker smoke build — verifies all Dockerfiles compile ───────────────────
+  docker-build-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - device-service
+          - execution-service
+          - fleet-service
+          - plugin-service
+          - nexora-edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
