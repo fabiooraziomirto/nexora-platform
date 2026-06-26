@@ -43,6 +43,26 @@ RUNTIME_API_KEY = os.getenv("RUNTIME_API_KEY", "")
 ARTIFACT_ALLOWED_SCHEMES = {"https"}
 _ARTIFACT_SCHEME_WARN_LOGGED = False
 
+# Allow forcing the stub even when wasmtime is importable (CI without a real
+# runtime claim). Default: use wasmtime when available.
+WASM_FORCE_STUB = os.getenv("WASM_FORCE_STUB", "false").lower() == "true"
+
+
+def _wasmtime_available() -> bool:
+    """Return True if the real WASI runtime can be used."""
+    if WASM_FORCE_STUB:
+        return False
+    try:
+        import wasmtime  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def runtime_mode() -> str:
+    """Report which execution backend is active: 'wasmtime' or 'stub'."""
+    return "wasmtime" if _wasmtime_available() else "stub"
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Nexora Function Runtime", version="0.1.0")
@@ -98,6 +118,7 @@ async def health() -> dict[str, Any]:
         "service": "function-runtime",
         "installed_count": len(_installed),
         "install_dir": str(INSTALL_DIR),
+        "wasm_runtime": runtime_mode(),
     }
 
 
@@ -294,14 +315,21 @@ def _execute_wasm(
     """
     Execute a WASM/WASI module.
 
-    Tries wasmtime-py first (full sandbox). Falls back to a simulation
-    stub when wasmtime is not installed (useful for dev/emulator environments).
+    Uses wasmtime-py (full WASI sandbox) when available. Falls back to a
+    simulation stub only when wasmtime is not installed or WASM_FORCE_STUB=true
+    (useful for emulator/CI environments without a real WASM runtime).
+
+    The returned dict always carries a "runtime_mode" key ("wasmtime" | "stub")
+    so experimental results never silently mix real and simulated execution.
     """
-    try:
+    if _wasmtime_available():
         return _execute_wasmtime(wasm_file, entrypoint, args, timeout, permissions)
-    except ImportError:
-        logger.warning("wasmtime not installed — using execution stub")
-        return _execute_stub(wasm_file, entrypoint, args)
+    logger.warning(json.dumps({
+        "service": "function-runtime",
+        "event": "stub_fallback",
+        "reason": "wasmtime unavailable or WASM_FORCE_STUB=true",
+    }))
+    return _execute_stub(wasm_file, entrypoint, args)
 
 
 def _execute_wasmtime(
@@ -311,58 +339,61 @@ def _execute_wasmtime(
     timeout: int,
     permissions: list[str],
 ) -> dict[str, Any]:
-    """Execute using wasmtime-py with WASI sandbox."""
+    """Execute using wasmtime-py with a WASI sandbox and fuel-based metering."""
+    import tempfile
     from wasmtime import Config, Engine, Linker, Module, Store, WasiConfig  # type: ignore[import]
-
-    import io
-    from contextlib import redirect_stdout, redirect_stderr
 
     engine_config = Config()
     engine_config.consume_fuel = True  # enables fuel-based timeout
     engine = Engine(engine_config)
 
     store = Store(engine)
-    store.add_fuel(timeout * 1_000_000)  # rough fuel limit per second
+    # Fuel is a proxy for CPU work; scale with the declared timeout budget.
+    store.set_fuel(max(1, timeout) * 1_000_000)
 
-    wasi_cfg = WasiConfig()
-    # Pass args as first argv element (JSON-encoded)
-    wasi_cfg.argv = ["function", json.dumps(args)]
-
-    # Apply permissions
-    if "fs_read" in permissions:
-        wasi_cfg.preopen_dir("/tmp", "/tmp")
-    if "inherit_env" in permissions:
-        wasi_cfg.inherit_env()
-
-    # Capture stdout/stderr via WASI pipes
-    stdout_buf = io.BytesIO()
-    stderr_buf = io.BytesIO()
-    wasi_cfg.set_stdout_bytes(stdout_buf)
-    wasi_cfg.set_stderr_bytes(stderr_buf)
-
-    store.set_wasi(wasi_cfg)
-
-    linker = Linker(engine)
-    linker.define_wasi()
-    module = Module(engine, wasm_file.read_bytes())
-    instance = linker.instantiate(store, module)
-
-    try:
-        fn = instance.exports(store).get(entrypoint)
-        if fn is None and entrypoint != "_start":
-            fn = instance.exports(store).get("_start")
-        if fn is not None:
-            fn(store)
-        exit_code = 0
-    except Exception as exc:
-        stderr_buf.write(str(exc).encode())
-        exit_code = 1
-
-    stdout_text = stdout_buf.getvalue().decode("utf-8", errors="replace")
-    stderr_text = stderr_buf.getvalue().decode("utf-8", errors="replace")
-
-    # Attempt to parse stdout as structured JSON result
     function_result: dict | None = None
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = os.path.join(tmp, "stdout")
+        err_path = os.path.join(tmp, "stderr")
+
+        wasi_cfg = WasiConfig()
+        # Pass args as second argv element (JSON-encoded); argv[0] is the name.
+        wasi_cfg.argv = ["function", json.dumps(args)]
+        wasi_cfg.stdout_file = out_path
+        wasi_cfg.stderr_file = err_path
+
+        # Apply capability-based permissions.
+        if "fs_read" in permissions:
+            wasi_cfg.preopen_dir("/tmp", "/tmp")
+        if "inherit_env" in permissions:
+            wasi_cfg.inherit_env()
+
+        store.set_wasi(wasi_cfg)
+
+        linker = Linker(engine)
+        linker.define_wasi()
+        module = Module(engine, wasm_file.read_bytes())
+
+        exit_code = 0
+        extra_err = ""
+        try:
+            instance = linker.instantiate(store, module)
+            fn = instance.exports(store).get(entrypoint)
+            if fn is None and entrypoint != "_start":
+                fn = instance.exports(store).get("_start")
+            if fn is not None:
+                fn(store)
+        except Exception as exc:  # trap, fuel exhaustion, missing export
+            exit_code = 1
+            extra_err = str(exc)
+
+        # WASI stdout/stderr are flushed to the temp files on store teardown.
+        stdout_text = _read_text(out_path)
+        stderr_text = _read_text(err_path)
+        if extra_err:
+            stderr_text = (stderr_text + "\n" + extra_err).strip()
+
+    # Attempt to parse stdout as a structured JSON result.
     try:
         function_result = json.loads(stdout_text)
     except (ValueError, TypeError):
@@ -373,7 +404,16 @@ def _execute_wasmtime(
         "stdout": stdout_text,
         "stderr": stderr_text,
         "function_result": function_result,
+        "runtime_mode": "wasmtime",
     }
+
+
+def _read_text(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
 
 def _execute_stub(
@@ -388,7 +428,8 @@ def _execute_stub(
     result. Used in emulator/CI environments without a real WASM runtime.
     """
     if not wasm_file.exists():
-        return {"exit_code": 1, "stdout": "", "stderr": "wasm file not found", "function_result": None}
+        return {"exit_code": 1, "stdout": "", "stderr": "wasm file not found",
+                "function_result": None, "runtime_mode": "stub"}
 
     file_size = wasm_file.stat().st_size
     stdout = json.dumps({"status": "ok", "args_received": args, "stub": True})
@@ -397,4 +438,5 @@ def _execute_stub(
         "stdout": stdout,
         "stderr": "",
         "function_result": {"status": "ok", "args_received": args, "stub": True, "wasm_size_bytes": file_size},
+        "runtime_mode": "stub",
     }
