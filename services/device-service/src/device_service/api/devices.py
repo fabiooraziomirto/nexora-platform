@@ -1,13 +1,14 @@
 import time
 from datetime import datetime, timezone
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from device_service.core.config import settings
 from device_service.core.database import get_db
 from device_service.core.auth import CurrentUser, get_current_user
+from device_service.core.rate_limit import limiter, key_by_device_id
 from device_service.api.schemas import (
     AgentHeartbeatRequest,
     AgentRegisterRequest,
@@ -43,46 +44,49 @@ def _parse_bootstrap_tokens(raw: str) -> dict[str, tuple[str, int]]:
 
 def _get_revoked_token_ids() -> set[str]:
     raw = settings.AGENT_BOOTSTRAP_REVOKED_TOKEN_IDS
-    return {tid.strip() for tid in raw.split(",") if tid.strip()}
+    return {t.strip() for t in raw.split(",") if t.strip()}
 
 
 def _validate_bootstrap_token(header_value: str) -> None:
-    """Validate an ``id:secret`` bootstrap token or raise HTTPException."""
-    if ":" not in header_value:
+    import time as _time
+    parts = header_value.split(":")
+    if len(parts) != 2:
         raise HTTPException(status_code=401, detail="Invalid bootstrap token format")
-
-    tid, secret = header_value.split(":", 1)
+    token_id, secret = parts
     revoked = _get_revoked_token_ids()
-    if tid in revoked:
-        raise HTTPException(status_code=403, detail="Bootstrap token revoked")
-
-    known = _parse_bootstrap_tokens(settings.AGENT_BOOTSTRAP_TOKENS)
-    if tid not in known or known[tid][0] != secret:
+    if token_id in revoked:
+        raise HTTPException(status_code=401, detail="Bootstrap token has been revoked")
+    tokens = _parse_bootstrap_tokens(settings.AGENT_BOOTSTRAP_TOKENS)
+    entry = tokens.get(token_id)
+    if not entry:
+        raise HTTPException(status_code=401, detail="Unknown bootstrap token")
+    expected_secret, expiry = entry
+    if secret != expected_secret:
         raise HTTPException(status_code=401, detail="Invalid bootstrap token")
-
-    if known[tid][1] < int(time.time()):
-        raise HTTPException(status_code=401, detail="Bootstrap token expired")
+    if _time.time() > expiry:
+        raise HTTPException(status_code=401, detail="Bootstrap token has expired")
 
 
 @router.get("/devices", response_model=DeviceListResponse)
 async def list_devices(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page: int = 1,
+    page_size: int = 50,
     status: str | None = None,
     device_type: str | None = None,
+    tenant_id: str | None = None,
+    owner_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
-    """List devices. Operators see all devices; owners see only their tenant's devices."""
+    """List all devices with pagination and filtering."""
     service = DeviceService(db)
-    # Operators get an unfiltered view (topology only — no sensitive payload)
-    tenant_filter = None if user.is_operator else user.tenant_id
     return await service.list_devices(
         page=page,
         page_size=page_size,
         status=status,
         device_type=device_type,
-        tenant_id=tenant_filter,
+        tenant_id=tenant_id,
+        owner_id=owner_id,
     )
 
 
@@ -90,33 +94,28 @@ async def list_devices(
 async def get_device(
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Get device by ID. Access depends on caller's privacy level with the device."""
+    """Get device by ID."""
     service = DeviceService(db)
-    device = await service.get_device_raw(device_id)
+    device = await service.get_device(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-
-    # Tenant isolation: non-operators can only see devices in their tenant
-    if not user.is_operator and device.tenant_id and device.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    return service._to_response(device)
+    return device
 
 
 @router.post("/devices", response_model=DeviceResponse, status_code=201)
 async def create_device(
     device_data: DeviceCreate,
     db: AsyncSession = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Create a new device. Sets owner_id and tenant_id from the caller's identity."""
+    """Create a new device."""
     service = DeviceService(db)
     return await service.create_device(
         device_data,
-        owner_id=user.user_id,
-        tenant_id=user.tenant_id,
+        owner_id=current_user.sub if current_user else None,
+        tenant_id=current_user.tenant_id if current_user else None,
     )
 
 
@@ -125,17 +124,16 @@ async def update_device(
     device_id: UUID,
     device_data: DeviceUpdate,
     db: AsyncSession = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Update device. Requires ownership or operator role."""
+    """Update device."""
     service = DeviceService(db)
-    device = await service.get_device_raw(device_id)
-    if not device:
+    device_raw = await service.get_device_raw(device_id)
+    if not device_raw:
         raise HTTPException(status_code=404, detail="Device not found")
-
-    if not user.is_operator and device.owner_id and device.owner_id != user.user_id:
-        raise HTTPException(status_code=403, detail="Not the device owner")
-
+    if current_user and device_raw.owner_id and device_raw.owner_id != current_user.sub:
+        if not current_user.has_role(settings.AUTH_OPERATOR_ROLE):
+            raise HTTPException(status_code=403, detail="Not authorized to update this device")
     updated = await service.update_device(device_id, device_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -146,17 +144,16 @@ async def update_device(
 async def delete_device(
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Delete device. Requires ownership or operator role."""
+    """Delete device."""
     service = DeviceService(db)
-    device = await service.get_device_raw(device_id)
-    if not device:
+    device_raw = await service.get_device_raw(device_id)
+    if not device_raw:
         raise HTTPException(status_code=404, detail="Device not found")
-
-    if not user.is_operator and device.owner_id and device.owner_id != user.user_id:
-        raise HTTPException(status_code=403, detail="Not the device owner")
-
+    if current_user and device_raw.owner_id and device_raw.owner_id != current_user.sub:
+        if not current_user.has_role(settings.AUTH_OPERATOR_ROLE):
+            raise HTTPException(status_code=403, detail="Not authorized to delete this device")
     success = await service.delete_device(device_id)
     if not success:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -168,7 +165,9 @@ async def delete_device(
 
 
 @router.post("/agents/register", response_model=AgentStatusResponse, status_code=201)
+@limiter.limit("10/minute")
 async def agent_register(
+    request: Request,
     body: AgentRegisterRequest,
     db: AsyncSession = Depends(get_db),
     x_bootstrap_token: str = Header(...),
@@ -183,7 +182,9 @@ async def agent_register(
     "/agents/{device_id}/heartbeat",
     response_model=AgentStatusResponse,
 )
+@limiter.limit("30/minute", key_func=key_by_device_id)
 async def agent_heartbeat(
+    request: Request,
     device_id: UUID,
     body: AgentHeartbeatRequest,
     db: AsyncSession = Depends(get_db),
@@ -207,16 +208,19 @@ async def set_device_runtime_config(
     Values are stored server-side only — never included in dispatch payloads.
     The edge agent reads this config at bootstrap and applies it to the runtime process.
     """
-    import json as _json
-    from sqlalchemy import select as _select
-    from device_service.models.device import Device
-    result = await db.execute(_select(Device).where(Device.id == str(device_id)))
-    device = result.scalar_one_or_none()
+    service = DeviceService(db)
+    device = await service.get_device_raw(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    env = payload.get("env")
-    if env is None or not isinstance(env, dict):
-        raise HTTPException(status_code=400, detail="'env' dict is required")
-    device.runtime_env = _json.dumps(env)
+    import json as _json
+    device.meta = device.meta or {}
+    if isinstance(device.meta, str):
+        try:
+            device.meta = _json.loads(device.meta)
+        except Exception:
+            device.meta = {}
+    device.meta["runtime_config"] = payload
+    from device_service.core.database import get_db as _get_db
     await db.commit()
-    return {"device_id": str(device_id), "env_keys": list(env.keys())}
+    await db.refresh(device)
+    return {"device_id": str(device_id), "runtime_config": payload}

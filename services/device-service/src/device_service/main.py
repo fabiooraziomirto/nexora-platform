@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 import structlog
 from uuid import uuid4
@@ -21,6 +23,7 @@ from device_service.core.config import settings
 from device_service.core.database import engine, init_db
 from device_service.core.events import event_bus
 from device_service.core.metrics import setup_metrics, get_metrics_response
+from device_service.core.rate_limit import limiter
 from device_service.core.tracing import setup_tracing
 
 logger = structlog.get_logger()
@@ -42,6 +45,13 @@ async def lifespan(app: FastAPI):
     setup_metrics()
     setup_tracing()
     
+    # CORS safety check
+    if "*" in settings.CORS_ORIGINS and not settings.DEBUG:
+        logger.warning(
+            "cors_wildcard_in_production",
+            detail="CORS_ORIGINS contains '*' — set explicit origins in production",
+        )
+
     logger.info("Device Service started successfully")
     
     yield
@@ -58,6 +68,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Rate limiter state and 429 handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(

@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ import structlog
 
 from device_service.core.database import get_db
 from device_service.core.events import event_bus
+from device_service.core.rate_limit import limiter
 from device_service.models.device import Device
 from device_service.models.device_telemetry import DeviceTelemetry
 
@@ -96,7 +97,9 @@ def _row_to_response(row: DeviceTelemetry) -> TelemetrySampleResponse:
 # ---------------------------------------------------------------------------
 
 @router.post("/devices/{device_id}/telemetry", status_code=202)
+@limiter.limit("60/minute")
 async def ingest_telemetry(
+    request: Request,
     device_id: UUID,
     body: TelemetryIngestRequest,
     db: AsyncSession = Depends(get_db),
@@ -152,7 +155,9 @@ async def ingest_telemetry(
 
 
 @router.get("/devices/{device_id}/telemetry", response_model=TelemetryQueryResponse)
+@limiter.limit("120/minute")
 async def query_telemetry(
+    request: Request,
     device_id: UUID,
     metric: Optional[str] = Query(None, description="Filter by metric name"),
     from_ts: Optional[datetime] = Query(None, description="Start of time window (UTC)"),
@@ -209,7 +214,9 @@ async def query_telemetry(
 
 
 @router.get("/devices/{device_id}/telemetry/latest", response_model=TelemetryLatestResponse)
+@limiter.limit("120/minute")
 async def latest_telemetry(
+    request: Request,
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
