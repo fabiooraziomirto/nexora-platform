@@ -31,6 +31,8 @@ from lightningrod_gateway.core.config import (
     SESSION_TTL_SECONDS,
     DISPATCH_TTL_SECONDS,
 )
+from lightningrod_gateway.core.tracing import setup_tracing, extract_trace_context, tracer as _tracer
+from opentelemetry import trace as _otel_trace
 from lightningrod_gateway.core.metrics import (
     DISPATCH_EVENTS_TOTAL,
     DELIVERY_ATTEMPTS_TOTAL,
@@ -43,6 +45,7 @@ from lightningrod_gateway.core.metrics import (
     BROKER_COMMIT_LAG,
     KAFKA_INGESTION_LATENCY,
     QUEUE_WAIT,
+    KAFKA_CONSUMER_LAG,
 )
 
 app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
@@ -53,6 +56,7 @@ logger = logging.getLogger("lightningrod-gateway")
 producer: aiokafka.AIOKafkaProducer | None = None
 consumer: aiokafka.AIOKafkaConsumer | None = None
 _consumer_task: asyncio.Task | None = None
+_lag_poller_task: asyncio.Task | None = None
 redis_client: aioredis.Redis | None = None
 
 # Local in-memory fallback — used only when Redis is disabled or unreachable.
@@ -161,6 +165,36 @@ async def _dispatch_count_for_device(device_id: str) -> int:
         except Exception:
             logger.warning("Redis error in _dispatch_count_for_device device=%s, falling back to local", device_id)
     return sum(1 for d in _local_dispatches.values() if d.get("device_id") == device_id)
+
+
+# ---------------------------------------------------------------------------
+# Kafka consumer lag poller
+# ---------------------------------------------------------------------------
+
+async def _poll_consumer_lag(interval_seconds: float = 15.0) -> None:
+    """Periodically observe the consumer lag for each assigned partition."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        if consumer is None:
+            continue
+        try:
+            partitions = consumer.assignment()
+            if not partitions:
+                continue
+            end_offsets = await consumer.end_offsets(list(partitions))
+            for tp, end_offset in end_offsets.items():
+                try:
+                    position = await consumer.position(tp)
+                    lag = max(0, end_offset - position)
+                    KAFKA_CONSUMER_LAG.labels(
+                        service="lightningrod-gateway",
+                        topic=tp.topic,
+                        partition=str(tp.partition),
+                    ).set(lag)
+                except Exception:
+                    pass
+        except Exception:
+            logger.debug("lag poller: skipped (consumer not ready)")
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +322,7 @@ async def _publish_event(action: str, resource_id: str, payload: dict[str, Any])
 @app.on_event("startup")
 async def startup() -> None:
     global producer, _consumer_task, redis_client
+    setup_tracing()
 
     if REDIS_ENABLED:
         try:
@@ -323,18 +358,21 @@ async def startup() -> None:
             raise
 
     _consumer_task = asyncio.create_task(_consume_dispatched())
+    _lag_poller_task = asyncio.create_task(_poll_consumer_lag())
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    global producer, _consumer_task, redis_client
-    if _consumer_task and not _consumer_task.done():
-        _consumer_task.cancel()
-        try:
-            await _consumer_task
-        except asyncio.CancelledError:
-            pass
-        _consumer_task = None
+    global producer, _consumer_task, _lag_poller_task, redis_client
+    for task in (_consumer_task, _lag_poller_task):
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    _consumer_task = None
+    _lag_poller_task = None
     if producer:
         await producer.stop()
         producer = None
@@ -451,6 +489,10 @@ async def deliver(execution_id: str) -> dict[str, Any]:
     session = await _session_get(device_id) if device_id != "unknown" else None
     attempts = cached.get("delivery_attempts", 0)
 
+    # Extract distributed trace context propagated from execution-service via Kafka envelope.
+    # The "event" sub-dict holds the original Kafka message (which includes traceparent if set).
+    _parent_ctx = extract_trace_context(cached.get("event", {}))
+
     for attempt in range(attempts + 1, MAX_DELIVERY_ATTEMPTS + 1):
         cached["delivery_attempts"] = attempt
         await _dispatch_set(execution_id, cached)
@@ -486,6 +528,22 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 if kafka_broker_ts_val is not None:
                     kafka_broker_lag_s_val = float(kafka_broker_ts_val) - float(kafka_dispatched_at_val)
 
+            _trace_id = ""
+            with _tracer.start_as_current_span(
+                "gateway.deliver",
+                context=_parent_ctx,
+                attributes={
+                    "execution_id": execution_id,
+                    "device_id": device_id,
+                    "attempt": attempt,
+                    "queue_wait_seconds": queue_wait_s or 0.0,
+                    "dispatch_latency_seconds": dispatch_latency_s or 0.0,
+                },
+            ):
+                _trace_id = format(
+                    _otel_trace.get_current_span().get_span_context().trace_id, "032x"
+                )
+
             logger.info(json.dumps({
                 "event": "dispatch_delivered",
                 "service": "lightningrod-gateway",
@@ -500,6 +558,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
                 "queue_wait_s": round(queue_wait_s, 6) if queue_wait_s is not None else None,
                 "dispatch_latency_s": round(dispatch_latency_s, 6) if dispatch_latency_s is not None else None,
                 "attempts": attempt,
+                "trace_id": _trace_id,
             }))
 
             await _dispatch_delete(execution_id)

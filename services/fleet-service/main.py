@@ -15,14 +15,16 @@ from typing import Any
 from uuid import uuid4
 
 import aiokafka
-from fastapi import FastAPI, HTTPException, Request
+import httpx
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import exc as sa_exc, func, select
 
 from fleet_service.core.config import (
     AUTH_DEV_BYPASS_ENABLED, AUTH_DEV_TOKEN, AUTH_ENABLED, AUTH_WRITE_ROLE,
-    ENVIRONMENT, KAFKA_BOOTSTRAP_SERVERS, KAFKA_ENABLED, KAFKA_REQUIRED, KEYCLOAK_ISSUER,
+    DEVICE_SERVICE_URL, ENVIRONMENT, KAFKA_BOOTSTRAP_SERVERS, KAFKA_ENABLED,
+    KAFKA_REQUIRED, KEYCLOAK_ISSUER,
 )
 from fleet_service.core.database import Base, engine, SessionLocal
 from fleet_service.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
@@ -212,7 +214,7 @@ async def delete_fleet(fleet_id: str) -> None:
     await _events.publish_event("deleted", fleet_id, deleted_payload)
 
 
-# ── Fleet Membership ──────────────────────────────────────────────────────────
+# ── Fleet Membership ────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/v2/fleets/{fleet_id}/members", status_code=201)
 async def add_fleet_member(fleet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -288,3 +290,140 @@ async def list_device_fleets(device_id: str) -> dict[str, Any]:
         fleets = db.execute(select(Fleet).where(Fleet.id.in_(fleet_ids))).scalars().all()
         items = [{"id": f.id, "name": f.name, "description": f.description} for f in fleets]
     return {"device_id": device_id, "items": items, "total": len(items)}
+
+
+# ---------------------------------------------------------------------------
+# Fleet analytics — aggregate device health and telemetry across a fleet
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v2/fleets/{fleet_id}/health")
+async def fleet_health(fleet_id: str) -> dict[str, Any]:
+    """Aggregate online/offline/unknown health status for all fleet members.
+
+    Calls device-service for each member in parallel and returns per-device
+    status plus a fleet-level summary (online_count, offline_count, unknown_count).
+    """
+    with SessionLocal() as db:
+        fleet = db.get(Fleet, fleet_id)
+        if not fleet:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        members = db.execute(
+            select(FleetMember).where(FleetMember.fleet_id == fleet_id)
+        ).scalars().all()
+        device_ids = [m.device_id for m in members]
+
+    if not device_ids:
+        return {
+            "fleet_id": fleet_id,
+            "fleet_name": fleet.name,
+            "summary": {"online": 0, "offline": 0, "unknown": 0, "total": 0},
+            "devices": [],
+        }
+
+    async def _fetch_device(client: httpx.AsyncClient, device_id: str) -> dict[str, Any]:
+        try:
+            resp = await client.get(
+                f"{DEVICE_SERVICE_URL}/api/v2/devices/{device_id}",
+                timeout=5.0,
+            )
+            if resp.status_code == 200:
+                d = resp.json()
+                return {
+                    "device_id": device_id,
+                    "name": d.get("name"),
+                    "status": d.get("status", "unknown"),
+                    "last_seen": d.get("last_seen"),
+                    "device_type": d.get("device_type"),
+                }
+        except Exception:
+            pass
+        return {"device_id": device_id, "status": "unknown", "name": None, "last_seen": None, "device_type": None}
+
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(*[_fetch_device(client, did) for did in device_ids])
+
+    summary: dict[str, int] = {"online": 0, "offline": 0, "unknown": 0, "total": len(results)}
+    for r in results:
+        s = r.get("status", "unknown")
+        if s == "online":
+            summary["online"] += 1
+        elif s == "offline":
+            summary["offline"] += 1
+        else:
+            summary["unknown"] += 1
+
+    return {
+        "fleet_id": fleet_id,
+        "fleet_name": fleet.name,
+        "summary": summary,
+        "devices": results,
+    }
+
+
+@app.get("/api/v2/fleets/{fleet_id}/telemetry/latest")
+async def fleet_telemetry_latest(
+    fleet_id: str,
+    metric: str = Query(..., description="Metric name to aggregate across the fleet"),
+) -> dict[str, Any]:
+    """Return the latest value of a given metric for every fleet member.
+
+    Aggregates min/max/avg/median across devices that have reported the metric,
+    and lists per-device readings. Useful for dashboards showing fleet-wide
+    sensor state (e.g. temperature of all nodes).
+    """
+    with SessionLocal() as db:
+        fleet = db.get(Fleet, fleet_id)
+        if not fleet:
+            raise HTTPException(status_code=404, detail="fleet not found")
+        members = db.execute(
+            select(FleetMember).where(FleetMember.fleet_id == fleet_id)
+        ).scalars().all()
+        device_ids = [m.device_id for m in members]
+
+    if not device_ids:
+        return {
+            "fleet_id": fleet_id,
+            "metric": metric,
+            "aggregate": None,
+            "devices": [],
+        }
+
+    async def _fetch_latest(client: httpx.AsyncClient, device_id: str) -> dict[str, Any]:
+        try:
+            resp = await client.get(
+                f"{DEVICE_SERVICE_URL}/api/v2/devices/{device_id}/telemetry/latest",
+                timeout=5.0,
+            )
+            if resp.status_code == 200:
+                readings = resp.json().get("readings", {})
+                if metric in readings:
+                    r = readings[metric]
+                    return {"device_id": device_id, "value": r["value"], "ts": r["ts"], "tags": r.get("tags")}
+        except Exception:
+            pass
+        return {"device_id": device_id, "value": None, "ts": None, "tags": None}
+
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(*[_fetch_latest(client, did) for did in device_ids])
+
+    values = [r["value"] for r in results if r["value"] is not None]
+    aggregate = None
+    if values:
+        sorted_vals = sorted(values)
+        n = len(sorted_vals)
+        median = (sorted_vals[n // 2] if n % 2 else (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2)
+        aggregate = {
+            "count": n,
+            "min": sorted_vals[0],
+            "max": sorted_vals[-1],
+            "avg": round(sum(sorted_vals) / n, 6),
+            "median": median,
+        }
+
+    return {
+        "fleet_id": fleet_id,
+        "fleet_name": fleet.name,
+        "metric": metric,
+        "aggregate": aggregate,
+        "devices": results,
+    }

@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 import structlog
 from uuid import uuid4
@@ -11,10 +13,20 @@ import time
 from device_service.api import devices
 from device_service.api import discovery
 from device_service.api import privacy
+from device_service.api import shadow
+from device_service.api import slo
+from device_service.api import telemetry
+# Ensure all ORM models are registered with Base.metadata before init_db()
+from device_service.models import device as _m_device  # noqa: F401
+from device_service.models import device_shadow as _m_shadow  # noqa: F401
+from device_service.models import device_slo as _m_slo  # noqa: F401
+from device_service.models import device_telemetry as _m_telemetry  # noqa: F401
 from device_service.core.config import settings
 from device_service.core.database import engine, init_db
 from device_service.core.events import event_bus
 from device_service.core.metrics import setup_metrics, get_metrics_response
+from device_service.core.rate_limit import limiter
+from device_service.core.tracing import setup_tracing
 
 logger = structlog.get_logger()
 
@@ -31,9 +43,17 @@ async def lifespan(app: FastAPI):
     # Initialize event bus
     await event_bus.connect()
     
-    # Setup metrics
+    # Setup metrics and tracing
     setup_metrics()
+    setup_tracing()
     
+    # CORS safety check
+    if "*" in settings.CORS_ORIGINS and not settings.DEBUG:
+        logger.warning(
+            "cors_wildcard_in_production",
+            detail="CORS_ORIGINS contains '*' — set explicit origins in production",
+        )
+
     logger.info("Device Service started successfully")
     
     yield
@@ -51,6 +71,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rate limiter state and 429 handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +88,9 @@ app.add_middleware(
 # are matched before the /devices/{device_id} path parameter in devices.router
 app.include_router(discovery.router, prefix="/api/v2", tags=["discovery"])
 app.include_router(privacy.router, prefix="/api/v2", tags=["privacy"])
+app.include_router(shadow.router, prefix="/api/v2", tags=["shadow"])
+app.include_router(telemetry.router, prefix="/api/v2", tags=["telemetry"])
+app.include_router(slo.router, prefix="/api/v2", tags=["slo"])
 app.include_router(devices.router, prefix="/api/v2", tags=["devices"])
 
 
@@ -118,4 +145,3 @@ async def readiness_check():
 async def metrics():
     """Prometheus metrics endpoint."""
     return get_metrics_response()
-

@@ -68,3 +68,10 @@ QUEUE_WAIT = Histogram(
     ["service"],
     buckets=(0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, float("inf")),
 )
+# Kafka consumer lag: number of messages behind the head of the topic.
+# Polled periodically by _lag_poller task in main.py.
+KAFKA_CONSUMER_LAG = Gauge(
+    "s4t_lr_kafka_consumer_lag_messages",
+    "Kafka consumer lag in messages (end_offset - consumer_position) per topic-partition",
+    ["service", "topic", "partition"],
+)
