@@ -67,9 +67,9 @@ incrementally without replacing edge agents.
 
 ## References (to be formatted per journal style)
 
-1. Crisostomi et al., "Stack4Things: an OpenStack-based IoT framework," IEEE ISCC 2015.
-2. Corradi et al., "Iotronic: a Cloud-Edge IoT Management Platform," IEEE CloudCom 2019.
+1. [AUTHORS TBD], "Stack4Things: an OpenStack-based IoT framework," IEEE ISCC 2015.
+2. [AUTHORS TBD], "Iotronic: a Cloud-Edge IoT Management Platform," IEEE CloudCom 2019.
 3. AWS IoT Core documentation, latency benchmarks, AWS re:Invent 2023.
 4. ThingsBoard Performance Test, v3.6, github.com/thingsboard/performance-tests, 2023.
-5. Mineraud et al., "A gap analysis of Internet-of-Things platforms," Comput. Commun. 2016.
-6. Soldatos et al., "OpenIoT: Open Source Internet-of-Things in the Cloud," Springer 2015.
+5. [AUTHORS TBD], "A gap analysis of Internet-of-Things platforms," Comput. Commun. 2016.
+6. [AUTHORS TBD], "OpenIoT: Open Source Internet-of-Things in the Cloud," Springer 2015.
