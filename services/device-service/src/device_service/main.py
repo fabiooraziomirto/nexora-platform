@@ -12,9 +12,11 @@ from device_service.api import devices
 from device_service.api import discovery
 from device_service.api import privacy
 from device_service.api import shadow
+from device_service.api import telemetry
 # Ensure all ORM models are registered with Base.metadata before init_db()
 from device_service.models import device as _m_device  # noqa: F401
 from device_service.models import device_shadow as _m_shadow  # noqa: F401
+from device_service.models import device_telemetry as _m_telemetry  # noqa: F401
 from device_service.core.config import settings
 from device_service.core.database import engine, init_db
 from device_service.core.events import event_bus
@@ -71,6 +73,7 @@ app.add_middleware(
 app.include_router(discovery.router, prefix="/api/v2", tags=["discovery"])
 app.include_router(privacy.router, prefix="/api/v2", tags=["privacy"])
 app.include_router(shadow.router, prefix="/api/v2", tags=["shadow"])
+app.include_router(telemetry.router, prefix="/api/v2", tags=["telemetry"])
 app.include_router(devices.router, prefix="/api/v2", tags=["devices"])
 
 
