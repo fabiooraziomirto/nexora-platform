@@ -18,20 +18,20 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-monitoring --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Grafana using Helm (usually comes with Prometheus Operator)
 if command -v helm &> /dev/null; then
     echo "📦 Checking if Grafana is already installed..."
     
-    if ! kubectl get deployment grafana -n stack4things-monitoring &> /dev/null; then
+    if ! kubectl get deployment grafana -n nxr-monitoring &> /dev/null; then
         echo "📦 Installing Grafana using Helm..."
         
         helm repo add grafana https://grafana.github.io/helm-charts
         helm repo update
         
         helm install grafana grafana/grafana \
-            --namespace stack4things-monitoring \
+            --namespace nxr-monitoring \
             --set adminPassword=admin \
             --set persistence.enabled=true \
             --set persistence.storageClassName=local-path \
@@ -56,13 +56,13 @@ kubectl apply -f infrastructure/kubernetes/monitoring/grafana/ || true
 # Get Grafana admin password
 echo ""
 echo "📋 Grafana Status:"
-kubectl get pods -n stack4things-monitoring | grep grafana
+kubectl get pods -n nxr-monitoring | grep grafana
 
 echo ""
 echo "✅ Grafana setup complete!"
 echo ""
 echo "Access Grafana UI:"
-echo "  kubectl port-forward -n stack4things-monitoring svc/grafana 3000:80"
+echo "  kubectl port-forward -n nxr-monitoring svc/grafana 3000:80"
 echo "  Open http://localhost:3000"
 echo "  Username: admin"
 echo "  Password: admin (change on first login)"

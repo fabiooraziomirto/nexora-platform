@@ -1,7 +1,7 @@
 import os
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "stack4things")
+KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "nxr")
 KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
 KAFKA_REQUIRED = os.getenv("KAFKA_REQUIRED", "false").lower() == "true"
 

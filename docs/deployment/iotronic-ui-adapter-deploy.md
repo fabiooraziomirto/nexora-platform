@@ -1,11 +1,11 @@
-# Deploy IoTronic UI Adapter on Stack4Things v2.0
+# Deploy IoTronic UI Adapter on Nxr v2.0
 
 This project includes a compatibility adapter for the original IoTronic Horizon
 plugin under:
 
-- `tools/iotronic-ui-adapter/`
+- `tools/nexora-dashboard-adapter/`
 
-The adapter remaps legacy IoTronic API calls to Stack4Things v2 microservices.
+The adapter remaps legacy IoTronic API calls to Nxr v2 microservices.
 
 ## Important
 
@@ -15,7 +15,7 @@ The adapter remaps legacy IoTronic API calls to Stack4Things v2 microservices.
 
 ## Authentication model
 
-In Stack4Things v2 services, auth is bearer-token based (`Authorization: Bearer ...`).
+In Nxr v2 services, auth is bearer-token based (`Authorization: Bearer ...`).
 
 Recommended approach:
 
@@ -31,8 +31,8 @@ If service auth is disabled (`AUTH_ENABLED=false`), token is not required.
 ## Deploy steps on Horizon host
 
 ```bash
-cd /path/to/stack4things_v2.0
-bash scripts/deploy-iotronic-ui-adapter.sh
+cd /path/to/nxr_v2.0
+bash scripts/deploy-nexora-dashboard-adapter.sh
 ```
 
 If your Horizon paths differ:
@@ -40,7 +40,7 @@ If your Horizon paths differ:
 ```bash
 HORIZON_API_DIR=/custom/api \
 HORIZON_ENABLED_DIR=/custom/enabled \
-bash scripts/deploy-iotronic-ui-adapter.sh
+bash scripts/deploy-nexora-dashboard-adapter.sh
 ```
 
 Then restart Horizon web server.

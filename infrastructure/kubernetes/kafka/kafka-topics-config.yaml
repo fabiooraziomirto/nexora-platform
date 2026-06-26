@@ -2,34 +2,34 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kafka-topics-config
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 data:
   topics.yaml: |
-    # Base Kafka topics for Stack4Things v2.0
+    # Base Kafka topics for Nxr v2.0
     topics:
       # Device events
-      - name: stack4things.device.created
+      - name: nxr.device.created
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000  # 7 days
           cleanup.policy: delete
       
-      - name: stack4things.device.updated
+      - name: nxr.device.updated
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.device.deleted
+      - name: nxr.device.deleted
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 2592000000  # 30 days
           cleanup.policy: delete
       
-      - name: stack4things.device.status-changed
+      - name: nxr.device.status-changed
         partitions: 3
         replication-factor: 3
         config:
@@ -37,21 +37,21 @@ data:
           cleanup.policy: delete
       
       # Plugin events
-      - name: stack4things.plugin.created
+      - name: nxr.plugin.created
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.plugin.updated
+      - name: nxr.plugin.updated
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.plugin.deleted
+      - name: nxr.plugin.deleted
         partitions: 3
         replication-factor: 3
         config:
@@ -59,21 +59,21 @@ data:
           cleanup.policy: delete
       
       # Execution events
-      - name: stack4things.execution.started
+      - name: nxr.execution.started
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 2592000000
           cleanup.policy: delete
       
-      - name: stack4things.execution.completed
+      - name: nxr.execution.completed
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 2592000000
           cleanup.policy: delete
       
-      - name: stack4things.execution.failed
+      - name: nxr.execution.failed
         partitions: 3
         replication-factor: 3
         config:
@@ -81,21 +81,21 @@ data:
           cleanup.policy: delete
       
       # Network events
-      - name: stack4things.network.created
+      - name: nxr.network.created
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.network.updated
+      - name: nxr.network.updated
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.network.deleted
+      - name: nxr.network.deleted
         partitions: 3
         replication-factor: 3
         config:
@@ -103,21 +103,21 @@ data:
           cleanup.policy: delete
       
       # DNS events
-      - name: stack4things.dns.created
+      - name: nxr.dns.created
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.dns.updated
+      - name: nxr.dns.updated
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.dns.deleted
+      - name: nxr.dns.deleted
         partitions: 3
         replication-factor: 3
         config:
@@ -125,21 +125,21 @@ data:
           cleanup.policy: delete
       
       # Fleet events
-      - name: stack4things.fleet.created
+      - name: nxr.fleet.created
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.fleet.updated
+      - name: nxr.fleet.updated
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.fleet.deleted
+      - name: nxr.fleet.deleted
         partitions: 3
         replication-factor: 3
         config:
@@ -147,21 +147,21 @@ data:
           cleanup.policy: delete
       
       # WAMP events
-      - name: stack4things.wamp.connected
+      - name: nxr.wamp.connected
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.wamp.disconnected
+      - name: nxr.wamp.disconnected
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 604800000
           cleanup.policy: delete
       
-      - name: stack4things.wamp.message
+      - name: nxr.wamp.message
         partitions: 6
         replication-factor: 3
         config:
@@ -169,14 +169,14 @@ data:
           cleanup.policy: delete
       
       # System events
-      - name: stack4things.system.health
+      - name: nxr.system.health
         partitions: 3
         replication-factor: 3
         config:
           retention.ms: 86400000
           cleanup.policy: delete
       
-      - name: stack4things.system.metrics
+      - name: nxr.system.metrics
         partitions: 6
         replication-factor: 3
         config:
@@ -184,7 +184,7 @@ data:
           cleanup.policy: delete
       
       # Dead letter queue
-      - name: stack4things.dlq
+      - name: nxr.dlq
         partitions: 6
         replication-factor: 3
         config:

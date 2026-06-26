@@ -97,7 +97,7 @@ async def announce(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Unauthenticated endpoint — a LightningRod device calls this at startup to announce
+    Unauthenticated endpoint — a NexoraEdge device calls this at startup to announce
     itself. Returns RFC 8628 codes. No authentication required (the device has no
     credentials yet; trust is established when the owner claims it).
     """

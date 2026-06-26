@@ -1,5 +1,5 @@
 """
-REST API client for Stack4Things.
+REST API client for Nxr.
 """
 
 from typing import Optional, Dict, Any, List
@@ -22,8 +22,8 @@ from sdk.types import (
 )
 
 
-class Stack4ThingsClient:
-    """Main client for Stack4Things API."""
+class NxrClient:
+    """Main client for Nxr API."""
 
     def __init__(
         self,

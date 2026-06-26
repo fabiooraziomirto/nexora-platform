@@ -1,24 +1,24 @@
 #!/bin/bash
-# Configure Keycloak realm for Stack4Things
+# Configure Keycloak realm for Nxr
 
 set -e
 
-echo "🔐 Configuring Keycloak realm for Stack4Things"
+echo "🔐 Configuring Keycloak realm for Nxr"
 
-KC_POD=$(kubectl get pods -n stack4things-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
+KC_POD=$(kubectl get pods -n nxr-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
 KC_URL="http://localhost:8080"
 ADMIN_USER="admin"
-ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n stack4things-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
+ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n nxr-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
 
 # Wait for Keycloak to be ready
 kubectl wait --for=condition=ready pod \
     -l app.kubernetes.io/name=keycloak \
-    -n stack4things-auth \
+    -n nxr-auth \
     --timeout=300s
 
 # Get admin token
 echo "🔑 Getting admin token..."
-TOKEN=$(kubectl exec -n stack4things-auth "$KC_POD" -- \
+TOKEN=$(kubectl exec -n nxr-auth "$KC_POD" -- \
     curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "username=$ADMIN_USER" \
@@ -32,21 +32,21 @@ if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
     exit 1
 fi
 
-# Create Stack4Things realm
-echo "📝 Creating Stack4Things realm..."
-kubectl exec -n stack4things-auth "$KC_POD" -- \
+# Create Nxr realm
+echo "📝 Creating Nxr realm..."
+kubectl exec -n nxr-auth "$KC_POD" -- \
     curl -s -X POST "$KC_URL/admin/realms" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<EOF || true
 {
-  "realm": "stack4things",
+  "realm": "nxr",
   "enabled": true,
-  "displayName": "Stack4Things",
-  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Stack4Things</span></div>",
-  "loginTheme": "stack4things",
-  "accountTheme": "stack4things",
-  "emailTheme": "stack4things",
+  "displayName": "Nxr",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Nxr</span></div>",
+  "loginTheme": "nxr",
+  "accountTheme": "nxr",
+  "emailTheme": "nxr",
   "accessTokenLifespan": 3600,
   "accessTokenLifespanForImplicitFlow": 900,
   "ssoSessionIdleTimeout": 1800,
@@ -85,8 +85,8 @@ EOF
 # Import realm configuration if available
 if [ -f "infrastructure/kubernetes/keycloak/realm/realm-config.json" ]; then
     echo "📝 Importing realm configuration..."
-    kubectl exec -i -n stack4things-auth "$KC_POD" -- \
-        curl -s -X POST "$KC_URL/admin/realms/stack4things" \
+    kubectl exec -i -n nxr-auth "$KC_POD" -- \
+        curl -s -X POST "$KC_URL/admin/realms/nxr" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d @- < infrastructure/kubernetes/keycloak/realm/realm-config.json || true
@@ -100,7 +100,7 @@ echo ""
 echo "✅ Keycloak realm configuration complete!"
 echo ""
 echo "📋 Realm Info:"
-echo "  Realm: stack4things"
+echo "  Realm: nxr"
 echo "  Access Token Lifespan: 3600s (1 hour)"
 echo "  SSO Session Idle Timeout: 1800s (30 minutes)"
 echo "  SSO Session Max Lifespan: 36000s (10 hours)"

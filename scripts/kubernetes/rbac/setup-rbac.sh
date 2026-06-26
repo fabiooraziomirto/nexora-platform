@@ -1,9 +1,9 @@
 #!/bin/bash
-# Setup RBAC system for Stack4Things
+# Setup RBAC system for Nxr
 
 set -e
 
-echo "🔐 Setting up RBAC system for Stack4Things v2.0"
+echo "🔐 Setting up RBAC system for Nxr v2.0"
 
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr --dry-run=client -o yaml | kubectl apply -f -
 
 # Apply RBAC configurations
 echo "📝 Applying RBAC configurations..."
@@ -41,14 +41,14 @@ fi
 # Verify installation
 echo ""
 echo "📋 RBAC Configuration Status:"
-kubectl get configmap -n stack4things | grep -E "rbac|policy"
+kubectl get configmap -n nxr | grep -E "rbac|policy"
 
 echo ""
 echo "✅ RBAC setup complete!"
 echo ""
 echo "📋 Components:"
 echo "  ✅ OpenStack standard roles configured"
-echo "  ✅ Stack4Things custom roles configured"
+echo "  ✅ Nxr custom roles configured"
 echo "  ✅ Policy engine configured"
 echo "  ✅ Policy caching enabled"
 echo ""

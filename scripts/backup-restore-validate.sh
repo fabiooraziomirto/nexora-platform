@@ -1,14 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
-BACKUP_FILE="${1:-/tmp/stack4things-backup.sql}"
+BACKUP_FILE="${1:-/tmp/nxr-backup.sql}"
 
 echo "Creating MySQL backup to ${BACKUP_FILE}"
-docker exec stack4things-mysql sh -lc "mysqldump -ustack4things -pstack4things stack4things" > "${BACKUP_FILE}"
+docker exec nxr-mysql sh -lc "mysqldump -unxr -pnxr nxr" > "${BACKUP_FILE}"
 
-echo "Restoring backup into stack4things database"
-cat "${BACKUP_FILE}" | docker exec -i stack4things-mysql sh -lc "mysql -ustack4things -pstack4things stack4things"
+echo "Restoring backup into nxr database"
+cat "${BACKUP_FILE}" | docker exec -i nxr-mysql sh -lc "mysql -unxr -pnxr nxr"
 
 echo "Validating restore"
-docker exec stack4things-mysql sh -lc "mysql -ustack4things -pstack4things -e 'SELECT 1' stack4things" >/dev/null
+docker exec nxr-mysql sh -lc "mysql -unxr -pnxr -e 'SELECT 1' nxr" >/dev/null
 echo "Backup/restore validation completed"

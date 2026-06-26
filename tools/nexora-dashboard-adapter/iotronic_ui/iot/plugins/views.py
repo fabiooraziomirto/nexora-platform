@@ -27,12 +27,12 @@ from horizon import tables
 from horizon import tabs
 from horizon.utils import memoized
 
-from openstack_dashboard.api import iotronic, keystone
+from openstack_dashboard.api import nexora, keystone
 from openstack_dashboard import policy
 
-from iotronic_ui.iot.plugins import forms as project_forms
-from iotronic_ui.iot.plugins import tables as project_tables
-from iotronic_ui.iot.plugins import tabs as project_tabs
+from nexora_dashboard.iot.plugins import forms as project_forms
+from nexora_dashboard.iot.plugins import tables as project_tables
+from nexora_dashboard.iot.plugins import tabs as project_tabs
 
 LOG = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class IndexView(tables.DataTableView):
         # Admin
         if policy.check((("iot", "iot:list_all_plugins"),), self.request):
             try:
-                plugins = iotronic.plugin_list(self.request, None, None,
+                plugins = nexora.plugin_list(self.request, None, None,
                                                all_plugins=True)
                 users = keystone.user_list(self.request)
 
@@ -61,7 +61,7 @@ class IndexView(tables.DataTableView):
         elif policy.check((("iot", "iot:list_project_plugins"),),
                           self.request):
             try:
-                plugins = iotronic.plugin_list(self.request, None, None,
+                plugins = nexora.plugin_list(self.request, None, None,
                                                with_public=True)
 
             except Exception:
@@ -71,7 +71,7 @@ class IndexView(tables.DataTableView):
         # Other users
         else:
             try:
-                plugins = iotronic.plugin_list(self.request, None, None,
+                plugins = nexora.plugin_list(self.request, None, None,
                                                with_public=True)
 
             except Exception:
@@ -114,7 +114,7 @@ class InjectView(forms.ModalFormView):
     @memoized.memoized_method
     def get_object(self):
         try:
-            return iotronic.plugin_get(self.request, self.kwargs['plugin_id'],
+            return nexora.plugin_get(self.request, self.kwargs['plugin_id'],
                                        None)
         except Exception:
             redirect = reverse("horizon:iot:plugins:index")
@@ -132,7 +132,7 @@ class InjectView(forms.ModalFormView):
         plugin = self.get_object()
 
         # Populate boards
-        boards = iotronic.board_list(self.request, "online", None, None)
+        boards = nexora.board_list(self.request, "online", None, None)
         boards.sort(key=lambda b: b.name)
 
         board_list = []
@@ -158,7 +158,7 @@ class StartView(forms.ModalFormView):
     @memoized.memoized_method
     def get_object(self):
         try:
-            return iotronic.plugin_get(self.request, self.kwargs['plugin_id'],
+            return nexora.plugin_get(self.request, self.kwargs['plugin_id'],
                                        None)
         except Exception:
             redirect = reverse("horizon:iot:plugins:index")
@@ -176,7 +176,7 @@ class StartView(forms.ModalFormView):
         plugin = self.get_object()
 
         # Populate boards
-        boards = iotronic.board_list(self.request, "online", None, None)
+        boards = nexora.board_list(self.request, "online", None, None)
         boards.sort(key=lambda b: b.name)
 
         board_list = []
@@ -202,7 +202,7 @@ class StopView(forms.ModalFormView):
     @memoized.memoized_method
     def get_object(self):
         try:
-            return iotronic.plugin_get(self.request, self.kwargs['plugin_id'],
+            return nexora.plugin_get(self.request, self.kwargs['plugin_id'],
                                        None)
         except Exception:
             redirect = reverse("horizon:iot:plugins:index")
@@ -220,7 +220,7 @@ class StopView(forms.ModalFormView):
         plugin = self.get_object()
 
         # Populate boards
-        boards = iotronic.board_list(self.request, "online", None, None)
+        boards = nexora.board_list(self.request, "online", None, None)
         boards.sort(key=lambda b: b.name)
 
         board_list = []
@@ -246,7 +246,7 @@ class CallView(forms.ModalFormView):
     @memoized.memoized_method
     def get_object(self):
         try:
-            return iotronic.plugin_get(self.request, self.kwargs['plugin_id'],
+            return nexora.plugin_get(self.request, self.kwargs['plugin_id'],
                                        None)
         except Exception:
             redirect = reverse("horizon:iot:plugins:index")
@@ -264,7 +264,7 @@ class CallView(forms.ModalFormView):
         plugin = self.get_object()
 
         # Populate boards
-        boards = iotronic.board_list(self.request, "online", None, None)
+        boards = nexora.board_list(self.request, "online", None, None)
         boards.sort(key=lambda b: b.name)
 
         board_list = []
@@ -290,7 +290,7 @@ class RemoveView(forms.ModalFormView):
     @memoized.memoized_method
     def get_object(self):
         try:
-            return iotronic.plugin_get(self.request, self.kwargs['plugin_id'],
+            return nexora.plugin_get(self.request, self.kwargs['plugin_id'],
                                        None)
         except Exception:
             redirect = reverse("horizon:iot:plugins:index")
@@ -308,7 +308,7 @@ class RemoveView(forms.ModalFormView):
         plugin = self.get_object()
 
         # Populate boards
-        boards = iotronic.board_list(self.request, "online", None, None)
+        boards = nexora.board_list(self.request, "online", None, None)
         boards.sort(key=lambda b: b.name)
 
         board_list = []
@@ -333,7 +333,7 @@ class UpdateView(forms.ModalFormView):
     @memoized.memoized_method
     def get_object(self):
         try:
-            return iotronic.plugin_get(self.request, self.kwargs['plugin_id'],
+            return nexora.plugin_get(self.request, self.kwargs['plugin_id'],
                                        None)
         except Exception:
             redirect = reverse("horizon:iot:plugins:index")
@@ -385,7 +385,7 @@ class DetailView(tabs.TabView):
     def get_data(self):
         plugin_id = self.kwargs['plugin_id']
         try:
-            plugin = iotronic.plugin_get(self.request, plugin_id, None)
+            plugin = nexora.plugin_get(self.request, plugin_id, None)
         except Exception:
             msg = ('Unable to retrieve plugin %s information') % {'name':
                                                                   plugin.name}

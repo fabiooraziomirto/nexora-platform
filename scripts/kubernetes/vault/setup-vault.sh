@@ -3,7 +3,7 @@
 
 set -e
 
-echo "🗄️  Setting up HashiCorp Vault for Stack4Things v2.0"
+echo "🗄️  Setting up HashiCorp Vault for Nxr v2.0"
 
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-vault --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-vault --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Vault using Helm
 if command -v helm &> /dev/null; then
@@ -30,7 +30,7 @@ if command -v helm &> /dev/null; then
     # Install Vault in dev mode (for development/testing)
     # For production, use HA mode with proper storage backend
     helm install vault hashicorp/vault \
-        --namespace stack4things-vault \
+        --namespace nxr-vault \
         --set server.dev.enabled=true \
         --set server.dev.devRootToken="dev-root-token" \
         --set server.dataStorage.enabled=true \
@@ -49,7 +49,7 @@ fi
 echo "⏳ Waiting for Vault to be ready..."
 kubectl wait --for=condition=ready pod \
     -l app.kubernetes.io/name=vault \
-    -n stack4things-vault \
+    -n nxr-vault \
     --timeout=300s
 
 # Initialize Vault (dev mode already initialized)
@@ -68,12 +68,12 @@ echo ""
 echo "✅ Vault setup complete!"
 echo ""
 echo "📋 Vault Info:"
-echo "  Namespace: stack4things-vault"
-echo "  Service: vault.stack4things-vault.svc.cluster.local:8200"
+echo "  Namespace: nxr-vault"
+echo "  Service: vault.nxr-vault.svc.cluster.local:8200"
 echo "  Root Token: dev-root-token (dev mode only)"
 echo ""
 echo "📝 Access Vault UI:"
-echo "  kubectl port-forward -n stack4things-vault svc/vault 8200:8200"
+echo "  kubectl port-forward -n nxr-vault svc/vault 8200:8200"
 echo "  Open http://localhost:8200"
 echo ""
 echo "⚠️  WARNING: This is dev mode. For production, use HA mode with proper storage backend."

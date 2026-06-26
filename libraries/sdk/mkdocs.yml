@@ -1,6 +1,6 @@
-site_name: Stack4Things SDK
-site_description: Python SDK for Stack4Things v2.0
-site_url: https://stack4things.github.io/sdk
+site_name: Nxr SDK
+site_description: Python SDK for Nxr v2.0
+site_url: https://nxr.github.io/sdk
 
 theme:
   name: material

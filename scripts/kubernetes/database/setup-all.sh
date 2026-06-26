@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-echo "🗄️  Setting up complete database infrastructure for Stack4Things v2.0"
+echo "🗄️  Setting up complete database infrastructure for Nxr v2.0"
 
 # Step 1: MySQL/MariaDB HA
 echo ""
@@ -39,13 +39,13 @@ echo "  ✅ Backup automation configured"
 echo "  ✅ OpenStack compatibility verified"
 echo ""
 echo "📝 Connection Info:"
-echo "  Direct MySQL: mariadb.stack4things-infrastructure.svc.cluster.local:3306"
-echo "  Via ProxySQL: proxysql.stack4things-infrastructure.svc.cluster.local:3306"
+echo "  Direct MySQL: mariadb.nxr-infrastructure.svc.cluster.local:3306"
+echo "  Via ProxySQL: proxysql.nxr-infrastructure.svc.cluster.local:3306"
 echo ""
 echo "📝 Next steps:"
 echo "  1. Run database migrations:"
 echo "     cd services/device-service && poetry run alembic upgrade head"
 echo ""
 echo "  2. Update service configuration:"
-echo "     DATABASE_URL=mysql+pymysql://stack4things:stack4things@proxysql.stack4things-infrastructure.svc.cluster.local:3306/stack4things"
+echo "     DATABASE_URL=mysql+pymysql://nxr:nxr@proxysql.nxr-infrastructure.svc.cluster.local:3306/nxr"
 

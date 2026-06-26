@@ -1,9 +1,9 @@
 """
-REST API client for Stack4Things.
+REST API client for Nxr.
 """
 
 from sdk.api.client import (
-    Stack4ThingsClient,
+    NxrClient,
     DeviceClient,
     FleetClient,
     NetworkClient,
@@ -11,7 +11,7 @@ from sdk.api.client import (
 )
 
 __all__ = [
-    "Stack4ThingsClient",
+    "NxrClient",
     "DeviceClient",
     "FleetClient",
     "NetworkClient",

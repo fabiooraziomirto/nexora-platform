@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-stack4things
-  namespace: stack4things-monitoring
+  name: grafana-dashboard-nxr
+  namespace: nxr-monitoring
   labels:
     grafana_dashboard: "1"
 data:
-  stack4things-overview.json: |
+  nxr-overview.json: |
     {
       "dashboard": {
-        "title": "Stack4Things Overview",
-        "tags": ["stack4things"],
+        "title": "Nxr Overview",
+        "tags": ["nxr"],
         "timezone": "browser",
         "schemaVersion": 27,
         "version": 1,

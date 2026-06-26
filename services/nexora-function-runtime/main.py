@@ -1,12 +1,12 @@
 """
 nexora-function-runtime — Edge WASM/WASI function execution daemon.
 
-Runs on the edge device alongside the LightningRod agent. Provides local
+Runs on the edge device alongside the NexoraEdge agent. Provides local
 APIs (not exposed to the control plane) that the agent calls to install,
 invoke, and manage WASM/WASI functions.
 
 Dispatch flow:
-  1. Agent receives function.install dispatch from lightningrod-gateway
+  1. Agent receives function.install dispatch from nexora-edge
   2. Agent POSTs to /runtime/functions/install (downloads + verifies artifact)
   3. Agent receives function.invoke dispatch
   4. Agent POSTs to /runtime/functions/{id}/invoke (executes in WASM sandbox)

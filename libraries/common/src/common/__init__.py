@@ -1,5 +1,5 @@
 """
-Common library for Stack4Things v2.0
+Common library for Nxr v2.0
 
 Shared utilities for all microservices.
 """
@@ -12,7 +12,7 @@ from common.events import EventBus, EventBusType, get_event_bus
 from common.cache import Cache, get_cache
 from common.logging import setup_logging, get_logger
 from common.errors import (
-    Stack4ThingsError,
+    NxrError,
     ValidationError,
     NotFoundError,
     ConflictError,
@@ -42,7 +42,7 @@ __all__ = [
     "get_cache",
     "setup_logging",
     "get_logger",
-    "Stack4ThingsError",
+    "NxrError",
     "ValidationError",
     "NotFoundError",
     "ConflictError",

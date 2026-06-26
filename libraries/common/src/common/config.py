@@ -11,14 +11,14 @@ class Settings(BaseSettings):
     """Application settings."""
 
     # Application
-    APP_NAME: str = "Stack4Things Service"
+    APP_NAME: str = "Nxr Service"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
     # Database
     DATABASE_URL: MySQLDsn = Field(
-        default="mysql+pymysql://stack4things:stack4things@localhost:3306/stack4things"
+        default="mysql+pymysql://nxr:nxr@localhost:3306/nxr"
     )
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
@@ -35,8 +35,8 @@ class Settings(BaseSettings):
 
     # Kafka
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
-    KAFKA_TOPIC_PREFIX: str = "stack4things"
-    KAFKA_CONSUMER_GROUP: str = "stack4things-service"
+    KAFKA_TOPIC_PREFIX: str = "nxr"
+    KAFKA_CONSUMER_GROUP: str = "nxr-service"
     KAFKA_AUTO_COMMIT: bool = True
 
     # NATS (alternative to Kafka)

@@ -1,4 +1,4 @@
-# Keycloak Authentication for Stack4Things v2.0
+# Keycloak Authentication for Nxr v2.0
 
 ## Current implementation
 
@@ -31,5 +31,5 @@ Keycloak console: `http://localhost:18080` (admin/admin in dev profile).
 ## Notes for IoTronic UI adapter
 
 The adapted dashboard does not authenticate directly against Keycloak by itself;
-it forwards an optional static bearer token (`S4T_AUTH_TOKEN`) to Stack4Things APIs.
+it forwards an optional static bearer token (`S4T_AUTH_TOKEN`) to Nxr APIs.
 For production, wire Horizon auth/session to obtain and refresh this token.

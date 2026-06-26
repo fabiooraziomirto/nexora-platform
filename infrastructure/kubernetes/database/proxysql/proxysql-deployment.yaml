@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: proxysql-config
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 data:
   proxysql.cnf: |
     datadir="/var/lib/proxysql"
@@ -35,7 +35,7 @@ data:
     mysql_servers=
     (
       {
-        address="mariadb.stack4things-infrastructure.svc.cluster.local"
+        address="mariadb.nxr-infrastructure.svc.cluster.local"
         port=3306
         hostgroup=0
         max_connections=100
@@ -44,7 +44,7 @@ data:
         comment="Primary MySQL server"
       },
       {
-        address="mariadb.stack4things-infrastructure.svc.cluster.local"
+        address="mariadb.nxr-infrastructure.svc.cluster.local"
         port=3306
         hostgroup=1
         max_connections=200
@@ -56,8 +56,8 @@ data:
     mysql_users=
     (
       {
-        username="stack4things"
-        password="stack4things"
+        username="nxr"
+        password="nxr"
         default_hostgroup=0
         active=1
         max_connections=1000
@@ -94,7 +94,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: proxysql
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 spec:
   replicas: 2
   selector:
@@ -140,7 +140,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: proxysql
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 spec:
   selector:
     app: proxysql

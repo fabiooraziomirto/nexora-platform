@@ -5,7 +5,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: admin@stack4things.io
+    email: admin@nxr.io
     privateKeySecretRef:
       name: letsencrypt-staging
     solvers:
@@ -21,7 +21,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@stack4things.io
+    email: admin@nxr.io
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -33,15 +33,15 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: stack4things-tls
-  namespace: stack4things
+  name: nxr-tls
+  namespace: nxr
 spec:
-  secretName: stack4things-tls
+  secretName: nxr-tls
   issuerRef:
     name: letsencrypt-staging
     kind: ClusterIssuer
   dnsNames:
-    - stack4things.local
-    - api.stack4things.local
-  commonName: stack4things.local
+    - nxr.local
+    - api.nxr.local
+  commonName: nxr.local
 

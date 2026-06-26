@@ -1,6 +1,6 @@
 # IoTronic / Lightning Rod — Functional Parity Matrix
 
-> **Important**: Stack4Things v2.0 provides **functional parity** with the
+> **Important**: Nxr v2.0 provides **functional parity** with the
 > legacy IoTronic + Lightning Rod stack.  It does **not** replicate the WAMP
 > protocol, Crossbar.io transport, or oslo.messaging RPC layer.  The same
 > operational concepts are implemented using HTTP REST APIs and Apache Kafka.
@@ -19,7 +19,7 @@
 | VPN / network tunnels | `network-service` — `/api/v2/ports` | Abstracted networking endpoints |
 | DNS auto-registration | `dns-service` — `/api/v2/dns/records` | REST CRUD for DNS records |
 | Webservice exposure | `webservice-service` — `/api/v2/webservices` | Port-based service exposure |
-| Crossbar.io session transport | `lightningrod-gateway` | Kafka consumer + HTTP delivery, in-memory sessions |
+| Crossbar.io session transport | `nexora-edge` | Kafka consumer + HTTP delivery, in-memory sessions |
 | OpenStack Keystone auth | Keycloak (primary) + Keystone (fallback) | JWT-based, configurable |
 
 ## What Is NOT Replicated

@@ -26,25 +26,25 @@ if [ ! -f "$BACKUP_FILE" ]; then
 fi
 
 # Get MySQL root password
-MYSQL_ROOT_PASSWORD=$(kubectl get secret --namespace stack4things-infrastructure mariadb -o jsonpath="{.data.mariadb-root-password}" | base64 -d)
+MYSQL_ROOT_PASSWORD=$(kubectl get secret --namespace nxr-infrastructure mariadb -o jsonpath="{.data.mariadb-root-password}" | base64 -d)
 
 # Copy backup file to a pod
 echo "📋 Copying backup file to MySQL pod..."
-POD_NAME=$(kubectl get pods -n stack4things-infrastructure -l app.kubernetes.io/name=mariadb -o jsonpath='{.items[0].metadata.name}')
-kubectl cp "$BACKUP_FILE" "stack4things-infrastructure/$POD_NAME:/tmp/backup.sql.gz"
+POD_NAME=$(kubectl get pods -n nxr-infrastructure -l app.kubernetes.io/name=mariadb -o jsonpath='{.items[0].metadata.name}')
+kubectl cp "$BACKUP_FILE" "nxr-infrastructure/$POD_NAME:/tmp/backup.sql.gz"
 
 # Restore backup
 echo "🔄 Restoring backup..."
 if [[ "$BACKUP_FILE" == *.gz ]]; then
-    kubectl exec -n stack4things-infrastructure "$POD_NAME" -- \
-        bash -c "gunzip -c /tmp/backup.sql.gz | mysql -uroot -p$MYSQL_ROOT_PASSWORD stack4things"
+    kubectl exec -n nxr-infrastructure "$POD_NAME" -- \
+        bash -c "gunzip -c /tmp/backup.sql.gz | mysql -uroot -p$MYSQL_ROOT_PASSWORD nxr"
 else
-    kubectl exec -n stack4things-infrastructure "$POD_NAME" -- \
-        bash -c "mysql -uroot -p$MYSQL_ROOT_PASSWORD stack4things < /tmp/backup.sql"
+    kubectl exec -n nxr-infrastructure "$POD_NAME" -- \
+        bash -c "mysql -uroot -p$MYSQL_ROOT_PASSWORD nxr < /tmp/backup.sql"
 fi
 
 # Cleanup
-kubectl exec -n stack4things-infrastructure "$POD_NAME" -- \
+kubectl exec -n nxr-infrastructure "$POD_NAME" -- \
     rm -f /tmp/backup.sql.gz /tmp/backup.sql
 
 echo "✅ Backup restored successfully!"

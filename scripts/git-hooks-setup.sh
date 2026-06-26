@@ -12,7 +12,7 @@ mkdir -p scripts/git-hooks
 # Pre-commit hook
 cat > scripts/git-hooks/pre-commit << 'EOF'
 #!/bin/bash
-# Pre-commit hook for Stack4Things v2.0
+# Pre-commit hook for Nxr v2.0
 
 set -e
 

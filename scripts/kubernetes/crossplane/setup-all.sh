@@ -5,7 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "☁️  Setting up complete Crossplane infrastructure for Stack4Things v2.0"
+echo "☁️  Setting up complete Crossplane infrastructure for Nxr v2.0"
 
 # Step 1: Install Crossplane
 echo ""

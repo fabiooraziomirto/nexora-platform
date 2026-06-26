@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: audit-logs-storage
-  namespace: stack4things
+  namespace: nxr
 spec:
   accessModes:
     - ReadWriteOnce
@@ -16,7 +16,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: audit-config
-  namespace: stack4things
+  namespace: nxr
 data:
   audit-config.yaml: |
     # Audit logging configuration

@@ -1,6 +1,6 @@
-# Keycloak Configuration for Stack4Things v2.0
+# Keycloak Configuration for Nxr v2.0
 
-## Realm: stack4things
+## Realm: nxr
 
 ### Client: device-service
 
@@ -18,7 +18,7 @@
   "authorizationServicesEnabled": true,
   "redirectUris": [
     "http://localhost:8000/*",
-    "https://api.stack4things.io/*"
+    "https://api.nxr.io/*"
   ],
   "webOrigins": [
     "*"
@@ -46,7 +46,7 @@
   "authorizationServicesEnabled": true,
   "redirectUris": [
     "http://localhost:8000/*",
-    "https://api.stack4things.io/*"
+    "https://api.nxr.io/*"
   ],
   "webOrigins": [
     "*"
@@ -70,7 +70,7 @@
   "providerId": "keycloak-oidc",
   "enabled": true,
   "config": {
-    "clientId": "stack4things-client",
+    "clientId": "nxr-client",
     "clientSecret": "CHANGE_ME",
     "authorizationUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/authorize",
     "tokenUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/token",

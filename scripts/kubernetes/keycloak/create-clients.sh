@@ -5,13 +5,13 @@ set -e
 
 echo "🔐 Creating OAuth2/OIDC clients in Keycloak"
 
-KC_POD=$(kubectl get pods -n stack4things-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
+KC_POD=$(kubectl get pods -n nxr-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
 KC_URL="http://localhost:8080"
 ADMIN_USER="admin"
-ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n stack4things-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
+ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n nxr-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
 
 # Get admin token
-TOKEN=$(kubectl exec -n stack4things-auth "$KC_POD" -- \
+TOKEN=$(kubectl exec -n nxr-auth "$KC_POD" -- \
     curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "username=$ADMIN_USER" \
@@ -34,8 +34,8 @@ create_client() {
     
     echo "Creating client: $client_id"
     
-    kubectl exec -n stack4things-auth "$KC_POD" -- \
-        curl -s -X POST "$KC_URL/admin/realms/stack4things/clients" \
+    kubectl exec -n nxr-auth "$KC_POD" -- \
+        curl -s -X POST "$KC_URL/admin/realms/nxr/clients" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d @- <<EOF || true
@@ -64,7 +64,7 @@ WEB_UI_SECRET=$(openssl rand -hex 32)
 
 # Create API Gateway client
 create_client "api-gateway" "$API_GATEWAY_SECRET" \
-    '["http://localhost:8000/auth/callback", "https://api.stack4things.io/auth/callback"]' \
+    '["http://localhost:8000/auth/callback", "https://api.nxr.io/auth/callback"]' \
     "API Gateway OAuth2 client"
 
 # Create Device Service client
@@ -74,7 +74,7 @@ create_client "device-service" "$DEVICE_SERVICE_SECRET" \
 
 # Create Web UI client
 create_client "web-ui" "$WEB_UI_SECRET" \
-    '["http://localhost:3000/auth/callback", "https://app.stack4things.io/auth/callback"]' \
+    '["http://localhost:3000/auth/callback", "https://app.nxr.io/auth/callback"]' \
     "Web UI OAuth2 client"
 
 # Store client secrets
@@ -82,7 +82,7 @@ kubectl create secret generic keycloak-clients \
     --from-literal=api-gateway-secret="$API_GATEWAY_SECRET" \
     --from-literal=device-service-secret="$DEVICE_SERVICE_SECRET" \
     --from-literal=web-ui-secret="$WEB_UI_SECRET" \
-    --namespace=stack4things-auth \
+    --namespace=nxr-auth \
     --dry-run=client -o yaml | kubectl apply -f -
 
 echo ""

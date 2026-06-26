@@ -19,12 +19,12 @@ Session start: 2026-06-25T00:00 (autonomous loop)
 | 2026-06-25T01:05 | **Stage 4: dns-service** | 379431c | Modular |
 | 2026-06-25T01:15 | **Stage 4: network-service** | 74e41ab | Modular |
 | 2026-06-25T01:25 | **Stage 4: webservice-service** | 42de939 | Modular |
-| 2026-06-25T01:35 | **Stage 4: lightningrod-gateway** | 16c0e79 | Modular (no tests) |
+| 2026-06-25T01:35 | **Stage 4: nexora-edge** | 16c0e79 | Modular (no tests) |
 | 2026-06-25T01:45 | ADR-0003 written | — | Documents modular standard |
 
 ---
 
-## Stage 1 — Fix broker commit lag (lightningrod-gateway)
+## Stage 1 — Fix broker commit lag (nexora-edge)
 
 **Status**: COMPLETE ✓  
 **Commit**: 865739d
@@ -33,7 +33,7 @@ Session start: 2026-06-25T00:00 (autonomous loop)
 - Removed `if broker_commit_lag_s >= 0:` guard — `BROKER_COMMIT_LAG` now always observes
 - Expanded histogram buckets to negative range: `-0.1, -0.025, -0.005, -0.001, 0.0, ...`
 - Added comment in source and in metrics.py documenting the `kafka-configs.sh` command
-  to enable `LogAppendTime` on `stack4things.execution.dispatched`
+  to enable `LogAppendTime` on `nxr.execution.dispatched`
 
 **Design decision**: Negative values (clock skew between producer host and broker) are
 recorded rather than dropped. This allows operators to detect and quantify systematic
@@ -53,7 +53,7 @@ Deferred to Stage 5 verification window. The code change is structurally correct
 **Found pre-existing in working tree** — all service files already had
 `AUTH_DEV_BYPASS_ENABLED` implemented. ADR-0002 already written. Committed as-is.
 
-**Verification**: Integration test (lr-emulator-e2e.sh + test-all.sh) deferred —
+**Verification**: Integration test (nexora-device-emulator-e2e.sh + test-all.sh) deferred —
 requires running stack. Syntactic check confirms consistent implementation.
 
 ---
@@ -87,7 +87,7 @@ coupling without test modification. This is documented in ADR-0003.
 | dns-service | 379431c | 1/1 pass | Routes in root main.py (test coupling) |
 | network-service | 74e41ab | 1/1 pass | Routes in root main.py (test coupling) |
 | webservice-service | 42de939 | 1/1 pass | Routes in root main.py (test coupling) |
-| lightningrod-gateway | 16c0e79 | N/A — 0 tests | Import verified only; lr-emulator-e2e.sh required |
+| nexora-edge | 16c0e79 | N/A — 0 tests | Import verified only; nexora-device-emulator-e2e.sh required |
 
 **ADR-0003** written: `docs/adr/0003-modular-service-structure-standard.md`
 
@@ -123,15 +123,15 @@ done
 
 ### Lavoro parziale su sub-branch
 - None — all work is on the main overnight branch, no partial sub-branches.
-- lightningrod-gateway migration is committed but **only import-tested** (no unit tests exist).
-  The task required `lr-emulator-e2e.sh` verification; this cannot run without the stack.
+- nexora-edge migration is committed but **only import-tested** (no unit tests exist).
+  The task required `nexora-device-emulator-e2e.sh` verification; this cannot run without the stack.
 
 ### Cosa rivedere PRIMA di fare merge
 
-1. **lightningrod-gateway** (commit 16c0e79): Only import-verified. Run `lr-emulator-e2e.sh`
+1. **nexora-edge** (commit 16c0e79): Only import-verified. Run `nexora-device-emulator-e2e.sh`
    against the stack before merging. This is the highest-risk commit.
 
-2. **Stage 2 integration test**: Run `lr-emulator-e2e.sh` and `test-all.sh` to confirm
+2. **Stage 2 integration test**: Run `nexora-device-emulator-e2e.sh` and `test-all.sh` to confirm
    `AUTH_DEV_BYPASS_ENABLED` changes don't break the E2E flow. Tests set the flag
    automatically (the script exports it), but a live verification is recommended.
 

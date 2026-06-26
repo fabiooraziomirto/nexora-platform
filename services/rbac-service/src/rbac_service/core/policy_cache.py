@@ -25,7 +25,7 @@ class PolicyCache:
     
     def _connect(self):
         """Connect to Redis."""
-        redis_host = os.getenv("REDIS_HOST", "redis-master.stack4things-infrastructure.svc.cluster.local")
+        redis_host = os.getenv("REDIS_HOST", "redis-master.nxr-infrastructure.svc.cluster.local")
         redis_port = int(os.getenv("REDIS_PORT", "6379"))
         redis_password = os.getenv("REDIS_PASSWORD", "")
         

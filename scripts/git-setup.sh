@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🔧 Stack4Things v2.0 - Git Setup"
+echo "🔧 Nxr v2.0 - Git Setup"
 echo "================================="
 echo ""
 
@@ -103,7 +103,7 @@ if [ -n "$(git status --porcelain)" ]; then
     read -p "Enter commit message (or press Enter for default): " COMMIT_MSG
     
     if [ -z "$COMMIT_MSG" ]; then
-        COMMIT_MSG="Initial commit: Stack4Things v2.0 implementation"
+        COMMIT_MSG="Initial commit: Nxr v2.0 implementation"
     fi
     
     echo "💾 Committing changes..."

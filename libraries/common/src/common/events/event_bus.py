@@ -101,7 +101,7 @@ class EventBus:
             
             self._client = await nats.connect(
                 servers=[settings.NATS_URL],
-                name=settings.NATS_CLIENT_ID or "stack4things-service",
+                name=settings.NATS_CLIENT_ID or "nxr-service",
             )
             self._connected = True
             

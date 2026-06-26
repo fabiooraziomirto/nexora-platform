@@ -3,7 +3,7 @@
 ## Overview
 
 The execution pipeline moves a command from the cloud (execution-service) to an
-edge device (via lightningrod-gateway) and back.  The lifecycle is:
+edge device (via nexora-edge) and back.  The lifecycle is:
 
     queued → dispatched → running → succeeded | failed | timeout | cancelled
 

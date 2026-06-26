@@ -3,10 +3,10 @@
 
 set -e
 
-CLUSTER_NAME="stack4things"
+CLUSTER_NAME="nxr"
 KUBECONFIG_PATH="$HOME/.kube/config"
 
-echo "🚀 Setting up k3d Kubernetes cluster for Stack4Things v2.0"
+echo "🚀 Setting up k3d Kubernetes cluster for Nxr v2.0"
 
 # Check if k3d is installed
 if ! command -v k3d &> /dev/null; then

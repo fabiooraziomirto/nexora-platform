@@ -2,14 +2,14 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kong-dual-auth
-  namespace: stack4things
+  namespace: nxr
 data:
   kong.yaml: |
     _format_version: "3.0"
     
     services:
     - name: device-service
-      url: http://device-service.stack4things.svc.cluster.local:8000
+      url: http://device-service.nxr.svc.cluster.local:8000
       routes:
       - name: device-service-route
         paths:
@@ -19,7 +19,7 @@ data:
           config:
             client_id: api-gateway
             client_secret: ${KEYCLOAK_CLIENT_SECRET}
-            discovery: http://keycloak.stack4things-auth.svc.cluster.local:8080/realms/stack4things/.well-known/openid-configuration
+            discovery: http://keycloak.nxr-auth.svc.cluster.local:8080/realms/nxr/.well-known/openid-configuration
             bearer_only: "no"
         - name: keystone-auth
           config:

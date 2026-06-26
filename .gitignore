@@ -105,3 +105,4 @@ htmlcov/
 safety-report.json
 requirements.txt
 *.dockerfile.bak
+.claude/worktrees/

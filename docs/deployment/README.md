@@ -1,16 +1,16 @@
-# Stack4Things v2.0 — Deployment Documentation
+# Nxr v2.0 — Deployment Documentation
 
 ## Contents
 
-- [IoTronic / Lightning Rod Parity Matrix](iotronic-parity-matrix.md) — concept mapping from legacy to v2.0
+- [IoTronic / Lightning Rod Parity Matrix](nexora-parity-matrix.md) — concept mapping from legacy to v2.0
 - [Execution Pipeline Runbook](execution-pipeline-runbook.md) — operator troubleshooting guide
 - [Release Checklist (MVP)](release-checklist-mvp.md) — pre-release verification steps
-- [IoTronic UI Adapter Deploy](iotronic-ui-adapter-deploy.md) — how to deploy the legacy dashboard adapter on Horizon
-- [Keycloak Authentication](auth-keycloak-stack4things.md) — auth model and rollout for Stack4Things services
+- [IoTronic UI Adapter Deploy](nexora-dashboard-adapter-deploy.md) — how to deploy the legacy dashboard adapter on Horizon
+- [Keycloak Authentication](auth-keycloak-nxr.md) — auth model and rollout for Nxr services
 
 ## Architecture Decision Records
 
-- [ADR-0001: Lightningrod Gateway and Execution Pipeline](../adr/0001-lightningrod-and-execution-pipeline.md)
+- [ADR-0001: Lightningrod Gateway and Execution Pipeline](../adr/0001-nexoraedge-and-execution-pipeline.md)
 
 ## Quick Start
 
@@ -39,12 +39,12 @@ The legacy profile is isolated from the v2.0 UI service and can run in parallel 
 ### Optional board emulator profile (Lightning Rod-like agents)
 
 ```bash
-docker compose -f docker-compose.dev.yml --profile emulator up -d --build lr-board-emulator-1 lr-board-emulator-2
+docker compose -f docker-compose.dev.yml --profile emulator up -d --build nexora-device-emulator-1 nexora-device-emulator-2
 ```
 
 This profile starts two synthetic edge boards that:
 - register to `device-service` as agents,
-- open a session on `lightningrod-gateway`,
+- open a session on `nexora-edge`,
 - send periodic heartbeats,
 - consume dispatched executions and callback with `succeeded`.
 

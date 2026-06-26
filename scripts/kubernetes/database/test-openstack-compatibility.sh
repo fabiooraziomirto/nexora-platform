@@ -6,11 +6,11 @@ set -e
 echo "🧪 Testing OpenStack MySQL compatibility"
 
 # Configuration
-MYSQL_HOST="${MYSQL_HOST:-mariadb.stack4things-infrastructure.svc.cluster.local}"
+MYSQL_HOST="${MYSQL_HOST:-mariadb.nxr-infrastructure.svc.cluster.local}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
-MYSQL_USER="${MYSQL_USER:-stack4things}"
-MYSQL_PASSWORD="${MYSQL_PASSWORD:-stack4things}"
-MYSQL_DATABASE="${MYSQL_DATABASE:-stack4things}"
+MYSQL_USER="${MYSQL_USER:-nxr}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-nxr}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-nxr}"
 
 echo "📋 Connection Info:"
 echo "  Host: $MYSQL_HOST"
@@ -23,7 +23,7 @@ echo ""
 echo "Test 1: Testing connection..."
 if kubectl run mysql-test-connection --rm -i --restart=Never \
     --image=mysql:8.0 \
-    --namespace=stack4things-infrastructure \
+    --namespace=nxr-infrastructure \
     -- mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
     -e "SELECT 1" &> /dev/null; then
     echo "✅ Connection successful"
@@ -37,7 +37,7 @@ echo ""
 echo "Test 2: Checking database charset and collation..."
 CHARSET=$(kubectl run mysql-test-charset --rm -i --restart=Never \
     --image=mysql:8.0 \
-    --namespace=stack4things-infrastructure \
+    --namespace=nxr-infrastructure \
     -- mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
     -e "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$MYSQL_DATABASE'" \
     2>/dev/null | tail -n 1)
@@ -53,7 +53,7 @@ echo ""
 echo "Test 3: Checking MySQL version..."
 VERSION=$(kubectl run mysql-test-version --rm -i --restart=Never \
     --image=mysql:8.0 \
-    --namespace=stack4things-infrastructure \
+    --namespace=nxr-infrastructure \
     -- mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
     -e "SELECT VERSION()" 2>/dev/null | tail -n 1)
 
@@ -64,7 +64,7 @@ echo ""
 echo "Test 4: Testing OpenStack-style table creation..."
 kubectl run mysql-test-table --rm -i --restart=Never \
     --image=mysql:8.0 \
-    --namespace=stack4things-infrastructure \
+    --namespace=nxr-infrastructure \
     -- mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
     "$MYSQL_DATABASE" <<EOF
 CREATE TABLE IF NOT EXISTS test_openstack_compatibility (
@@ -83,7 +83,7 @@ if [ $? -eq 0 ]; then
     # Cleanup
     kubectl run mysql-test-cleanup --rm -i --restart=Never \
         --image=mysql:8.0 \
-        --namespace=stack4things-infrastructure \
+        --namespace=nxr-infrastructure \
         -- mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
         "$MYSQL_DATABASE" -e "DROP TABLE test_openstack_compatibility" &> /dev/null
 else
@@ -96,7 +96,7 @@ echo ""
 echo "Test 5: Testing transactions..."
 kubectl run mysql-test-transaction --rm -i --restart=Never \
     --image=mysql:8.0 \
-    --namespace=stack4things-infrastructure \
+    --namespace=nxr-infrastructure \
     -- mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
     "$MYSQL_DATABASE" <<EOF
 START TRANSACTION;
@@ -116,11 +116,11 @@ fi
 # Test 6: Test connection pooling (ProxySQL)
 echo ""
 echo "Test 6: Testing ProxySQL connection pooling..."
-if kubectl get svc proxysql -n stack4things-infrastructure &> /dev/null; then
-    PROXYSQL_HOST="proxysql.stack4things-infrastructure.svc.cluster.local"
+if kubectl get svc proxysql -n nxr-infrastructure &> /dev/null; then
+    PROXYSQL_HOST="proxysql.nxr-infrastructure.svc.cluster.local"
     if kubectl run mysql-test-proxysql --rm -i --restart=Never \
         --image=mysql:8.0 \
-        --namespace=stack4things-infrastructure \
+        --namespace=nxr-infrastructure \
         -- mysql -h "$PROXYSQL_HOST" -P 3306 -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
         -e "SELECT 1" &> /dev/null; then
         echo "✅ ProxySQL connection successful"
@@ -134,5 +134,5 @@ fi
 echo ""
 echo "🎉 All compatibility tests passed!"
 echo ""
-echo "✅ Stack4Things v2.0 is compatible with OpenStack MySQL/MariaDB"
+echo "✅ Nxr v2.0 is compatible with OpenStack MySQL/MariaDB"
 

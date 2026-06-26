@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "execution-service"
 version = "0.1.0"
-description = "Stack4Things Execution Service"
-authors = ["Stack4Things Team"]
+description = "Nxr Execution Service"
+authors = ["Nxr Team"]
 
 [tool.poetry.dependencies]
 python = "^3.11"

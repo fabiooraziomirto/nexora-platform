@@ -20,9 +20,9 @@
 | dns-service | Flat | ✅ Completo | ⚠️ Scaffold (24 righe) | Minimale | ✅ HTTP requests + duration | ❌ |
 | network-service | Flat | ✅ Completo | ⚠️ Scaffold (24 righe) | Minimale | ✅ HTTP requests + duration | ❌ |
 | webservice-service | Flat | ✅ Completo | ⚠️ Scaffold (24 righe) | Minimale | ✅ HTTP requests + duration | ❌ |
-| lightningrod-gateway | Flat | ✅ Completo | ❌ Assenti | ✅ Reale + retry | ✅ Completo (7 metriche) | ❌ |
-| iotronic-ui | Flat | ✅ Completo | ❌ Assenti | ✅ Reale (proxy fallback) | ❌ Assenti | ❌ |
-| lr-board-emulator | Script | ✅ Funzionale | ❌ N/A | Minimale | ❌ Assenti | ❌ |
+| nexora-edge | Flat | ✅ Completo | ❌ Assenti | ✅ Reale + retry | ✅ Completo (7 metriche) | ❌ |
+| nexora-dashboard | Flat | ✅ Completo | ❌ Assenti | ✅ Reale (proxy fallback) | ❌ Assenti | ❌ |
+| nexora-device-emulator | Script | ✅ Funzionale | ❌ N/A | Minimale | ❌ Assenti | ❌ |
 | rbac-service | Modular | ✅ Completo | ❌ Assenti | ✅ Reale | ❌ Assenti | ❌ |
 
 ### Note per servizio
@@ -31,7 +31,7 @@
 
 **execution-service** — Servizio più rilevante per la ricerca. State machine completa (`queued → dispatched → running → succeeded/failed/timeout/cancelled`). Background loop di timeout ogni 5 secondi (`_timeout_loop`, riga 187). Idempotency key support. Limite per-device (`MAX_EXECUTIONS_PER_DEVICE`, HTTP 429). Kafka retry con backoff esponenziale.
 
-**lightningrod-gateway** — Il gateway ha il set di metriche più ricco della piattaforma: contatori per dispatch, delivery, failure, sessioni attive, pending dispatch per device. In-memory session cache (`agent_sessions`, `dispatch_cache`) — nessun distributed store, non scalabile orizzontalmente.
+**nexora-edge** — Il gateway ha il set di metriche più ricco della piattaforma: contatori per dispatch, delivery, failure, sessioni attive, pending dispatch per device. In-memory session cache (`agent_sessions`, `dispatch_cache`) — nessun distributed store, non scalabile orizzontalmente.
 
 **plugin-service** — CRUD completo. Risponde sia su `/api/v2/plugins` (legacy) che su `/api/v2/modules`. Solo scaffold di test (health check).
 
@@ -54,7 +54,7 @@ s4t_http_request_duration_seconds Histogram [service, method, path]
 s4t_active_executions            Gauge    [service]
 ```
 
-#### Metriche specifiche lightningrod-gateway (il set più completo)
+#### Metriche specifiche nexora-edge (il set più completo)
 ```
 s4t_lr_dispatch_events_total          Counter  [service]
 s4t_lr_delivery_attempts_total        Counter  [service, device_id]
@@ -75,7 +75,7 @@ active_devices             Gauge
 ```
 
 #### Servizi senza nessuna metrica
-- `iotronic-ui`, `rbac-service`, `lr-board-emulator`
+- `nexora-dashboard`, `rbac-service`, `nexora-device-emulator`
 
 ---
 
@@ -101,7 +101,7 @@ active_devices             Gauge
 ```yaml
 - HighErrorRate:    rate(http_requests_total[5m]) con status 5xx > 5%  — finestra 5m
 - HighLatency:      http_request_duration_seconds p95 > 1s             — finestra 5m
-- ServiceDown:      up{job=~"stack4things.*"} == 0                     — finestra 1m
+- ServiceDown:      up{job=~"nxr.*"} == 0                     — finestra 1m
 - HighCPUUsage:     container_cpu > 80%                                — finestra 5m
 - HighMemoryUsage:  container_memory > 90%                             — finestra 5m
 ```
@@ -124,7 +124,7 @@ Le regole SLO usano il prefisso `s4t_` — compatibili con le metriche effettiva
 |---|---|
 | `test-all.sh` | Orchestratore completo: Python syntax, YAML, shell, imports, Docker compose smoke, API contracts, cross-service, E2E |
 | `contract-tests-api.py` | Positive + negative API contract checks su tutti i CRUD endpoint |
-| `lr-emulator-e2e.sh` | LightningRod lifecycle E2E: register → create execution → dispatch → callback → verify |
+| `nexora-device-emulator-e2e.sh` | NexoraEdge lifecycle E2E: register → create execution → dispatch → callback → verify |
 | `integration-cross-service.sh` | Flusso cross-service (device → execution → gateway) |
 | `test-reproducibility.sh` | Verifica file setup, Poetry config, import reproducibility |
 | `test-imports.sh` | Import check per common library |
@@ -169,7 +169,7 @@ Presente solo per `device-service`. Nessun rollout per gli altri servizi.
 | device-service | 314 | CRUD + 7 agent test case (register, heartbeat, expiry, revocation) |
 | plugin-service | 33 | Solo health check |
 | fleet/dns/network/webservice | ~24 ciascuno | Template scaffold, nessun test reale |
-| lightningrod-gateway | 0 | Nessun test |
+| nexora-edge | 0 | Nessun test |
 | rbac-service | 0 | Nessun test |
 
 ### 3.5 Gap per una pipeline CI minima
@@ -177,15 +177,15 @@ Presente solo per `device-service`. Nessun rollout per gli altri servizi.
 Per avere lint + test + build funzionante basterebbero:
 
 1. **GitHub Actions workflow** con jobs: `ruff check`, `black --check`, `pytest` per execution-service e device-service (i due con test reali), `docker build` per ogni servizio.
-2. **Test per lightningrod-gateway** — il componente più critico non ha test.
+2. **Test per nexora-edge** — il componente più critico non ha test.
 3. **Completare test scaffold** di fleet/dns/network/webservice con almeno CRUD test.
-4. **Estendere Argo Rollout** agli altri servizi critici (execution, lightningrod-gateway).
+4. **Estendere Argo Rollout** agli altri servizi critici (execution, nexora-edge).
 
 ---
 
-## SEZIONE 4 — PARITÀ CON STACK4THINGS/IOTRONIC LEGACY
+## SEZIONE 4 — PARITÀ CON NXR/IOTRONIC LEGACY
 
-### 4.1 Matrice di parità (`docs/deployment/iotronic-parity-matrix.md`)
+### 4.1 Matrice di parità (`docs/deployment/nexora-parity-matrix.md`)
 
 | Concetto Legacy | Equivalente Nexora v2.0 | Note |
 |---|---|---|
@@ -199,7 +199,7 @@ Per avere lint + test + build funzionante basterebbero:
 | VPN / network tunnels | `network-service /api/v2/ports` | Networking endpoint astratto |
 | DNS auto-registration | `dns-service /api/v2/dns/records` | REST CRUD per DNS record |
 | Webservice exposure | `webservice-service /api/v2/webservices` | Port-based service exposure |
-| Crossbar.io session transport | `lightningrod-gateway` | Kafka consumer + HTTP delivery, in-memory sessions |
+| Crossbar.io session transport | `nexora-edge` | Kafka consumer + HTTP delivery, in-memory sessions |
 | OpenStack Keystone auth | Keycloak (primary) + Keystone (fallback) | JWT-based, configurabile |
 
 **NON replicato**:
@@ -219,9 +219,9 @@ Per avere lint + test + build funzionante basterebbero:
 
 ### 5.1 ADR presenti in `docs/adr/`
 
-**ADR-0001** — *LightningRod Gateway and Execution Pipeline* (Accepted, 2026-03-28)
+**ADR-0001** — *NexoraEdge Gateway and Execution Pipeline* (Accepted, 2026-03-28)
 
-Decisione: sostituire WAMP/Crossbar.io + oslo.messaging con HTTP REST + Kafka. Il ciclo di vita dell'esecuzione è gestito da execution-service (create→dispatch→callback); i dispatch event vengono pubblicati su Kafka (`stack4things.execution.dispatched`); il gateway li consuma, li mette in cache, e li consegna agli edge agent via HTTP. Gli agent fanno callback a execution-service. La state machine impone transizioni valide. Il gateway è stateless (scalabile orizzontalmente) — ma questa claim è invalidata dalla in-memory cache, vedi sotto.
+Decisione: sostituire WAMP/Crossbar.io + oslo.messaging con HTTP REST + Kafka. Il ciclo di vita dell'esecuzione è gestito da execution-service (create→dispatch→callback); i dispatch event vengono pubblicati su Kafka (`nxr.execution.dispatched`); il gateway li consuma, li mette in cache, e li consegna agli edge agent via HTTP. Gli agent fanno callback a execution-service. La state machine impone transizioni valide. Il gateway è stateless (scalabile orizzontalmente) — ma questa claim è invalidata dalla in-memory cache, vedi sotto.
 
 **Totale ADR**: 1.
 
@@ -230,10 +230,10 @@ Decisione: sostituire WAMP/Crossbar.io + oslo.messaging con HTTP REST + Kafka. I
 | Decisione | Osservazione nel codice | Rischio |
 |---|---|---|
 | **Struttura modular vs flat** | device-service e rbac-service hanno `src/<name>/core/api/`; tutti gli altri sono `main.py` monolitici. Nessuna spiegazione documentata. | Medio — manutenzione inconsistente |
-| **Gateway in-memory sessions** | `agent_sessions` e `dispatch_cache` sono `dict` Python in `lightningrod-gateway/main.py` (riga ~29). ADR-0001 dichiara il gateway "stateless" ma la cache locale lo rende sticky. | **Alto** — impossibile scalare orizzontalmente senza perdere stato sessione |
+| **Gateway in-memory sessions** | `agent_sessions` e `dispatch_cache` sono `dict` Python in `nexora-edge/main.py` (riga ~29). ADR-0001 dichiara il gateway "stateless" ma la cache locale lo rende sticky. | **Alto** — impossibile scalare orizzontalmente senza perdere stato sessione |
 | **Redis configurato ma non usato** | `REDIS_URL` presente in `device-service/core/config.py`; Redis è nel compose; nessun `import redis` nel codice del servizio. | Basso — risorsa sprecata |
 | **KAFKA_REQUIRED=false di default** | Tutti i servizi hanno due flag separati: `KAFKA_ENABLED` (abilita publisher) e `KAFKA_REQUIRED` (fa fallire startup se Kafka non raggiungibile). Il default è degraded mode silenzioso. | Medio — in produzione si potrebbe credere che gli eventi vengano pubblicati anche se Kafka è down |
-| **Dev-token bypass OIDC** | `AUTH_DEV_TOKEN` in tutti i servizi flat: se il token corrisponde, il middleware auth viene bypassato completamente (plugin-service riga 76, execution-service riga 29). iotronic-ui ha ulteriore fallback con username/password locale. | **Alto** — rischio sicurezza se `AUTH_ENABLED=false` o se il dev token trapela in produzione |
+| **Dev-token bypass OIDC** | `AUTH_DEV_TOKEN` in tutti i servizi flat: se il token corrisponde, il middleware auth viene bypassato completamente (plugin-service riga 76, execution-service riga 29). nexora-dashboard ha ulteriore fallback con username/password locale. | **Alto** — rischio sicurezza se `AUTH_ENABLED=false` o se il dev token trapela in produzione |
 | **Timeout loop polling vs event-driven** | `execution-service` ha un background task async che ogni 5 secondi itera su tutte le execution `dispatched/running` e le porta in `timeout`. Approccio polling invece di evento schedulato. | Medio — falsi negativi se il loop è lento sotto carico |
 | **Alembic + `_ensure_*_columns()` in parallelo** | I servizi flat hanno sia migrations Alembic che una funzione runtime `_ensure_*_columns()` che fa `ALTER TABLE` se le colonne mancano. Approccio duale non documentato. | Medio — conflitti di migrazione su ambienti esistenti |
 
@@ -241,7 +241,7 @@ Decisione: sostituire WAMP/Crossbar.io + oslo.messaging con HTTP REST + Kafka. I
 
 ## SEZIONE 6 — RIPRODUCIBILITÀ SPERIMENTALE
 
-### 6.1 Analisi lr-board-emulator (`services/lr-board-emulator/emulator.py`, 112 righe)
+### 6.1 Analisi nexora-device-emulator (`services/nexora-device-emulator/emulator.py`, 112 righe)
 
 ### 6.2 Dispositivi simulabili
 
@@ -279,10 +279,10 @@ Tutti i parametri sono configurabili tramite **env vars** (nessun argomento CLI)
 ```bash
 DEVICE_URL=http://device-service:8000      # default
 EXEC_URL=http://execution-service:8000     # default (attenzione: nome env diverso dal valore default)
-GW_URL=http://lightningrod-gateway:8000    # default
+GW_URL=http://nexora-edge:8000    # default
 BOOTSTRAP_TOKEN=dev-bootstrap:dev-bootstrap-token
 BOARD_NAME=lr-board-<uuid8>               # auto-generato se non specificato
-BOARD_TYPE=lightningrod-emulator
+BOARD_TYPE=nexoraedge-emulator
 HEARTBEAT_SECONDS=10
 POLL_SECONDS=4
 ```
@@ -293,7 +293,7 @@ Protocollo: **HTTP REST puro** (no WebSocket, no WAMP, no Kafka diretto).
 
 ```
 1. POST /api/v2/agents/register         → device-service  (header: X-Bootstrap-Token)
-2. POST /api/v2/agents/sessions/register → lightningrod-gateway
+2. POST /api/v2/agents/sessions/register → nexora-edge
 3. Loop ogni HEARTBEAT_SECONDS:
    POST /api/v2/agents/{id}/heartbeat   → device-service
    POST /api/v2/agents/sessions/{id}/heartbeat → gateway
@@ -306,7 +306,7 @@ Protocollo: **HTTP REST puro** (no WebSocket, no WAMP, no Kafka diretto).
 
 ### 6.6 Scriptabilità per test automatizzati
 
-**Happy path**: ✅ scriptabile — `scripts/lr-emulator-e2e.sh` fa esattamente questo in modo deterministico (device_id fisso, execution_id fisso, verifica `final_status == "succeeded"`).
+**Happy path**: ✅ scriptabile — `scripts/nexora-device-emulator-e2e.sh` fa esattamente questo in modo deterministico (device_id fisso, execution_id fisso, verifica `final_status == "succeeded"`).
 
 **Scenario avanzati**: ❌ non supportati dallo script attuale.
 
@@ -362,13 +362,13 @@ head -n $((N_BOARDS/2)) /tmp/board_pids | xargs kill
 **Priorità media (necessari per claim di scalabilità)**:
 
 5. **Sostituire in-memory cache nel gateway con Redis**: la claim ADR-0001 di gateway "stateless/horizontally scalable" è falsa oggi.
-6. **Test lightningrod-gateway**: il componente più critico non ha nessun test.
+6. **Test nexora-edge**: il componente più critico non ha nessun test.
 7. **Pipeline CI minima**: almeno lint + test per execution-service e device-service su push.
 
 **Priorità bassa (nice-to-have)**:
 
 8. Completare test CRUD per fleet/dns/network/webservice.
-9. Estendere Argo Rollout a execution-service e lightningrod-gateway.
+9. Estendere Argo Rollout a execution-service e nexora-edge.
 10. Documentare ADR per le decisioni elencate in Sezione 5.2.
 
 ---

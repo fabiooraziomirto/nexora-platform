@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-echo "🚀 Setting up complete Kubernetes infrastructure for Stack4Things v2.0"
+echo "🚀 Setting up complete Kubernetes infrastructure for Nxr v2.0"
 
 # Step 1: Create k3d cluster
 echo ""

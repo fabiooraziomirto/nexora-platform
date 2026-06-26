@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: stack4things-roles
-  namespace: stack4things
+  name: nxr-roles
+  namespace: nxr
 data:
   custom-roles.yaml: |
-    # Stack4Things Custom Roles
+    # Nxr Custom Roles
     
     # device-admin: Device management administrator
     device-admin:

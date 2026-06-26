@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-monitoring --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Prometheus Operator using Helm
 if command -v helm &> /dev/null; then
@@ -28,7 +28,7 @@ if command -v helm &> /dev/null; then
     helm repo update
     
     helm install prometheus prometheus-community/kube-prometheus-stack \
-        --namespace stack4things-monitoring \
+        --namespace nxr-monitoring \
         --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
         --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
         --set prometheus.prometheusSpec.ruleSelectorNilUsesHelmValues=false \
@@ -54,12 +54,12 @@ kubectl apply -f infrastructure/kubernetes/monitoring/prometheus/ || true
 # Verify installation
 echo ""
 echo "📋 Prometheus Operator Status:"
-kubectl get pods -n stack4things-monitoring | grep prometheus
+kubectl get pods -n nxr-monitoring | grep prometheus
 
 echo ""
 echo "✅ Prometheus Operator setup complete!"
 echo ""
 echo "Access Prometheus UI:"
-echo "  kubectl port-forward -n stack4things-monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090"
+echo "  kubectl port-forward -n nxr-monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090"
 echo "  Open http://localhost:9090"
 

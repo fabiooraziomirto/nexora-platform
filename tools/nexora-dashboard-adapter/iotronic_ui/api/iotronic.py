@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Nexora adapter for legacy Horizon panel.
 
-This module replaces the original iotronicclient-based calls with direct HTTP
-calls to Stack4Things v2 microservices.
+This module replaces the original nexoraclient-based calls with direct HTTP
+calls to Nxr v2 microservices.
 """
 
 import json
@@ -26,7 +26,7 @@ class S4TObj(object):
             setattr(self, k, v)
 
 
-_STATE_FILE = os.path.join(tempfile.gettempdir(), "s4t_iotronic_adapter_state.json")
+_STATE_FILE = os.path.join(tempfile.gettempdir(), "s4t_nexora_adapter_state.json")
 
 
 def _load_state():
@@ -212,7 +212,7 @@ def _as_webservice(row):
 
 
 @memoized
-def iotronicclient(request):
+def nexoraclient(request):
     # Kept for compatibility with callers; not used in this adapter.
     return None
 

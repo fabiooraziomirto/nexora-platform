@@ -65,8 +65,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Stack4Things Device Service",
-    description="Device Management Service for Stack4Things v2.0",
+    title="Nxr Device Service",
+    description="Device Management Service for Nxr v2.0",
     version="0.1.0",
     lifespan=lifespan,
 )

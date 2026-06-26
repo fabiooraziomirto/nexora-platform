@@ -18,11 +18,11 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-monitoring --dry-run=client -o yaml | kubectl apply -f -
 
 # Alertmanager is usually installed with Prometheus Operator
 echo "📦 Checking if Alertmanager is already installed..."
-if ! kubectl get deployment alertmanager -n stack4things-monitoring &> /dev/null; then
+if ! kubectl get deployment alertmanager -n nxr-monitoring &> /dev/null; then
     echo "⚠️  Alertmanager should be installed with Prometheus Operator"
     echo "Running Prometheus Operator setup..."
     ./scripts/kubernetes/monitoring/setup-prometheus.sh
@@ -37,12 +37,12 @@ kubectl apply -f infrastructure/kubernetes/monitoring/alertmanager/ || true
 # Verify installation
 echo ""
 echo "📋 Alertmanager Status:"
-kubectl get pods -n stack4things-monitoring | grep alertmanager
+kubectl get pods -n nxr-monitoring | grep alertmanager
 
 echo ""
 echo "✅ Alertmanager setup complete!"
 echo ""
 echo "Access Alertmanager UI:"
-echo "  kubectl port-forward -n stack4things-monitoring svc/alertmanager-operated 9093:9093"
+echo "  kubectl port-forward -n nxr-monitoring svc/alertmanager-operated 9093:9093"
 echo "  Open http://localhost:9093"
 

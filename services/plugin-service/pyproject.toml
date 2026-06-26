@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "plugin-service"
 version = "0.1.0"
-description = "Stack4Things Plugin Service"
-authors = ["Stack4Things Team"]
+description = "Nxr Plugin Service"
+authors = ["Nxr Team"]
 readme = "README.md"
 packages = [{include = "plugin_service", from = "src"}]
 

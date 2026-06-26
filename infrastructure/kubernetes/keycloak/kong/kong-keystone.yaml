@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kong-keystone
-  namespace: stack4things
+  namespace: nxr
 data:
   kong.yaml: |
     _format_version: "3.0"

@@ -60,7 +60,7 @@ for role in admin member reader service; do
       -d "{\"role\": {\"name\": \"$role\"}}" || true
 done
 
-# Stack4Things custom roles
+# Nxr custom roles
 for role in device-admin fleet-manager network-admin plugin-developer execution-operator auditor; do
     curl -s -X PUT "$KEYSTONE_URL/v3/roles/$role" \
       -H "X-Auth-Token: $TOKEN" \
@@ -76,5 +76,5 @@ echo "✅ Keystone integration complete!"
 echo ""
 echo "📋 Roles synchronized:"
 echo "  OpenStack: admin, member, reader, service"
-echo "  Stack4Things: device-admin, fleet-manager, network-admin, plugin-developer, execution-operator, auditor"
+echo "  Nxr: device-admin, fleet-manager, network-admin, plugin-developer, execution-operator, auditor"
 

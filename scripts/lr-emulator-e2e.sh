@@ -11,7 +11,7 @@ BASE_DEVICE="http://localhost:8000"
 BASE_EXEC="http://localhost:8002"
 BASE_GW="http://localhost:8007"
 TOKEN="dev-bootstrap:dev-bootstrap-token"
-DEVICE_TYPE="lr-emulator"
+DEVICE_TYPE="nexora-device-emulator"
 
 echo "[LR-E2E] 1/7 Register agent..."
 REG=$(curl -fsS -X POST "$BASE_DEVICE/api/v2/agents/register" \

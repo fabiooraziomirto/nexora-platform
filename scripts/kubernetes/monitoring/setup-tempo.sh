@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-monitoring --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Tempo using Helm
 if command -v helm &> /dev/null; then
@@ -28,7 +28,7 @@ if command -v helm &> /dev/null; then
     helm repo update
     
     helm install tempo grafana/tempo-distributed \
-        --namespace stack4things-monitoring \
+        --namespace nxr-monitoring \
         --set tempo.tempo.queryFrontend.replicas=1 \
         --set tempo.tempo.ingester.replicas=1 \
         --set tempo.tempo.compactor.replicas=1 \
@@ -51,11 +51,11 @@ kubectl apply -f infrastructure/kubernetes/monitoring/tempo/ || true
 # Verify installation
 echo ""
 echo "📋 Tempo Status:"
-kubectl get pods -n stack4things-monitoring | grep tempo
+kubectl get pods -n nxr-monitoring | grep tempo
 
 echo ""
 echo "✅ Tempo setup complete!"
 echo ""
 echo "Tempo is now available for distributed tracing."
-echo "Configure your services to send traces to: tempo-distributed-distributor.stack4things-monitoring:4317"
+echo "Configure your services to send traces to: tempo-distributed-distributor.nxr-monitoring:4317"
 

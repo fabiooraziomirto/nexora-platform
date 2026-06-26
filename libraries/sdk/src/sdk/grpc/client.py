@@ -1,5 +1,5 @@
 """
-gRPC client for Stack4Things.
+gRPC client for Nxr.
 """
 
 from typing import Optional, List, Dict, Any
@@ -18,8 +18,8 @@ from sdk.types import (
 )
 
 
-class Stack4ThingsGRPCClient:
-    """gRPC client for Stack4Things services."""
+class NxrGRPCClient:
+    """gRPC client for Nxr services."""
 
     def __init__(
         self,

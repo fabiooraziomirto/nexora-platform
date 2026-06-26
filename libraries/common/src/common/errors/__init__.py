@@ -1,5 +1,5 @@
 from common.errors.exceptions import (
-    Stack4ThingsError,
+    NxrError,
     ValidationError,
     NotFoundError,
     ConflictError,
@@ -10,7 +10,7 @@ from common.errors.exceptions import (
 )
 
 __all__ = [
-    "Stack4ThingsError",
+    "NxrError",
     "ValidationError",
     "NotFoundError",
     "ConflictError",

@@ -4,11 +4,11 @@
 set -e
 
 SECRET_NAME=$1
-NAMESPACE=${2:-stack4things-infrastructure}
+NAMESPACE=${2:-nxr-infrastructure}
 
 if [ -z "$SECRET_NAME" ]; then
     echo "❌ Usage: $0 <secret-name> [namespace]"
-    echo "Example: $0 mysql-credentials stack4things-infrastructure"
+    echo "Example: $0 mysql-credentials nxr-infrastructure"
     exit 1
 fi
 
@@ -36,9 +36,9 @@ case "$SECRET_NAME" in
         NEW_PASSWORD=$(generate_password)
         echo "🔄 Rotating MySQL password..."
         kubectl create secret generic "$SECRET_NAME" \
-            --from-literal=username=stack4things \
+            --from-literal=username=nxr \
             --from-literal=password="$NEW_PASSWORD" \
-            --from-literal=database=stack4things \
+            --from-literal=database=nxr \
             --namespace="$NAMESPACE" \
             --dry-run=client -o yaml | kubectl apply -f -
         
@@ -83,7 +83,7 @@ esac
 
 # Restart pods using this secret (optional, commented out for safety)
 # echo "🔄 Restarting pods using this secret..."
-# kubectl rollout restart deployment -n "$NAMESPACE" --selector=app.kubernetes.io/name=stack4things
+# kubectl rollout restart deployment -n "$NAMESPACE" --selector=app.kubernetes.io/name=nxr
 
 echo ""
 echo "✅ Secret rotation complete!"

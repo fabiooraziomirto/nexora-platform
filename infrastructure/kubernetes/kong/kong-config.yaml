@@ -3,43 +3,43 @@ _transform: true
 
 services:
   - name: device-service
-    url: http://device-service.stack4things.svc.cluster.local
+    url: http://device-service.nxr.svc.cluster.local
     routes:
       - name: device-route
         paths: ["/api/v2/devices"]
         strip_path: false
   - name: plugin-service
-    url: http://plugin-service.stack4things.svc.cluster.local
+    url: http://plugin-service.nxr.svc.cluster.local
     routes:
       - name: plugin-route
         paths: ["/api/v2/plugins"]
         strip_path: false
   - name: execution-service
-    url: http://execution-service.stack4things.svc.cluster.local
+    url: http://execution-service.nxr.svc.cluster.local
     routes:
       - name: execution-route
         paths: ["/api/v2/executions"]
         strip_path: false
   - name: network-service
-    url: http://network-service.stack4things.svc.cluster.local
+    url: http://network-service.nxr.svc.cluster.local
     routes:
       - name: network-route
         paths: ["/api/v2/ports"]
         strip_path: false
   - name: dns-service
-    url: http://dns-service.stack4things.svc.cluster.local
+    url: http://dns-service.nxr.svc.cluster.local
     routes:
       - name: dns-route
         paths: ["/api/v2/dns/records"]
         strip_path: false
   - name: webservice-service
-    url: http://webservice-service.stack4things.svc.cluster.local
+    url: http://webservice-service.nxr.svc.cluster.local
     routes:
       - name: webservice-route
         paths: ["/api/v2/webservices"]
         strip_path: false
   - name: fleet-service
-    url: http://fleet-service.stack4things.svc.cluster.local
+    url: http://fleet-service.nxr.svc.cluster.local
     routes:
       - name: fleet-route
         paths: ["/api/v2/fleets"]

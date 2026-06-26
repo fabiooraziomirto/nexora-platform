@@ -123,7 +123,7 @@ class PolicyEngine:
             {"name": "service", "description": "Service account access"},
         ]
         
-        # Stack4Things custom roles
+        # Nxr custom roles
         custom_roles = [
             {"name": "device-admin", "description": "Device management administrator"},
             {"name": "fleet-manager", "description": "Fleet management role"},

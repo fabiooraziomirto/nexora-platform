@@ -59,7 +59,7 @@ async def test_announce_returns_codes(client):
     """Announce should return device_code, user_code, and expires_in."""
     resp = await client.post(
         "/api/v2/devices/announce",
-        json={"hardware_id": "hw-001", "device_type": "lightningrod", "firmware_version": "2.1"},
+        json={"hardware_id": "hw-001", "device_type": "nexoraedge", "firmware_version": "2.1"},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -75,7 +75,7 @@ async def test_poll_pending_before_claim(client):
     """Poll before claim should return status=announced."""
     ann = await client.post(
         "/api/v2/devices/announce",
-        json={"hardware_id": "hw-002", "device_type": "lightningrod"},
+        json={"hardware_id": "hw-002", "device_type": "nexoraedge"},
     )
     device_code = ann.json()["device_code"]
 
@@ -103,7 +103,7 @@ async def test_claim_creates_device_and_approves(client):
     """Claiming a discovery should create a device and mark discovery approved."""
     ann = await client.post(
         "/api/v2/devices/announce",
-        json={"hardware_id": "hw-004", "device_type": "lightningrod"},
+        json={"hardware_id": "hw-004", "device_type": "nexoraedge"},
     )
     discovery_id = ann.json()["discovery_id"]
     device_code = ann.json()["device_code"]
@@ -130,7 +130,7 @@ async def test_claim_twice_fails(client):
     """Claiming an already-approved discovery should return 409."""
     ann = await client.post(
         "/api/v2/devices/announce",
-        json={"hardware_id": "hw-005", "device_type": "lightningrod"},
+        json={"hardware_id": "hw-005", "device_type": "nexoraedge"},
     )
     discovery_id = ann.json()["discovery_id"]
     await client.post(f"/api/v2/devices/{discovery_id}/claim", json={"name": "First Claim"})
@@ -143,7 +143,7 @@ async def test_reject_discovery(client):
     """Rejecting a discovery should mark it rejected and stop polling."""
     ann = await client.post(
         "/api/v2/devices/announce",
-        json={"hardware_id": "hw-006", "device_type": "lightningrod"},
+        json={"hardware_id": "hw-006", "device_type": "nexoraedge"},
     )
     discovery_id = ann.json()["discovery_id"]
     device_code = ann.json()["device_code"]

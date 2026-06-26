@@ -1,5 +1,5 @@
 """
-OpenTelemetry setup for lightningrod-gateway.
+OpenTelemetry setup for nexora-edge.
 
 Context is extracted from the "traceparent" field in incoming Kafka envelopes
 (injected by execution-service) and used to create child spans for delivery.
@@ -13,11 +13,11 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExport
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
-logger = logging.getLogger("lightningrod-gateway")
+logger = logging.getLogger("nexora-edge")
 
 OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() == "true"
 OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-SERVICE = "lightningrod-gateway"
+SERVICE = "nexora-edge"
 
 _propagator = TraceContextTextMapPropagator()
 tracer: trace.Tracer = trace.get_tracer(SERVICE)

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: rbac-roles
-  namespace: stack4things
+  namespace: nxr
 data:
   openstack-roles.yaml: |
     # OpenStack Standard Roles

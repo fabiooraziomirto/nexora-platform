@@ -3,7 +3,7 @@
 
 set -e
 
-echo "📨 Setting up Kafka cluster for Stack4Things v2.0"
+echo "📨 Setting up Kafka cluster for Nxr v2.0"
 
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-infrastructure --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-infrastructure --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Kafka using Helm
 if command -v helm &> /dev/null; then
@@ -29,7 +29,7 @@ if command -v helm &> /dev/null; then
     
     # Install Kafka with Zookeeper
     helm install kafka bitnami/kafka \
-        --namespace stack4things-infrastructure \
+        --namespace nxr-infrastructure \
         --set replicas=3 \
         --set persistence.enabled=true \
         --set persistence.storageClass=local-path \
@@ -41,10 +41,10 @@ if command -v helm &> /dev/null; then
         --set zookeeper.persistence.size=10Gi \
         --set metrics.kafka.enabled=true \
         --set metrics.kafka.serviceMonitor.enabled=true \
-        --set metrics.kafka.serviceMonitor.namespace=stack4things-monitoring \
+        --set metrics.kafka.serviceMonitor.namespace=nxr-monitoring \
         --set metrics.jmx.enabled=true \
         --set metrics.jmx.serviceMonitor.enabled=true \
-        --set metrics.jmx.serviceMonitor.namespace=stack4things-monitoring \
+        --set metrics.jmx.serviceMonitor.namespace=nxr-monitoring \
         --wait
     
     echo "✅ Kafka cluster installed via Helm"
@@ -62,7 +62,7 @@ kubectl apply -f infrastructure/kubernetes/kafka/ || true
 echo "⏳ Waiting for Kafka to be ready..."
 kubectl wait --for=condition=ready pod \
     -l app.kubernetes.io/name=kafka \
-    -n stack4things-infrastructure \
+    -n nxr-infrastructure \
     --timeout=300s
 
 # Create base topics
@@ -72,19 +72,19 @@ echo "📝 Creating base Kafka topics..."
 # Verify installation
 echo ""
 echo "📋 Kafka Cluster Status:"
-kubectl get pods -n stack4things-infrastructure | grep kafka
+kubectl get pods -n nxr-infrastructure | grep kafka
 
 echo ""
 echo "✅ Kafka cluster setup complete!"
 echo ""
 echo "📋 Kafka Connection Info:"
-echo "  Bootstrap Servers: kafka.stack4things-infrastructure.svc.cluster.local:9092"
-echo "  Zookeeper: kafka-zookeeper.stack4things-infrastructure.svc.cluster.local:2181"
+echo "  Bootstrap Servers: kafka.nxr-infrastructure.svc.cluster.local:9092"
+echo "  Zookeeper: kafka-zookeeper.nxr-infrastructure.svc.cluster.local:2181"
 echo ""
 echo "📝 Next steps:"
 echo "  1. List topics:"
-echo "     kubectl exec -it kafka-0 -n stack4things-infrastructure -- kafka-topics.sh --list --bootstrap-server localhost:9092"
+echo "     kubectl exec -it kafka-0 -n nxr-infrastructure -- kafka-topics.sh --list --bootstrap-server localhost:9092"
 echo ""
 echo "  2. Create custom topic:"
-echo "     kubectl exec -it kafka-0 -n stack4things-infrastructure -- kafka-topics.sh --create --topic my-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 3"
+echo "     kubectl exec -it kafka-0 -n nxr-infrastructure -- kafka-topics.sh --create --topic my-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 3"
 

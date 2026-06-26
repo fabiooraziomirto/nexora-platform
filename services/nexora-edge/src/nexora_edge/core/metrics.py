@@ -45,7 +45,7 @@ DISPATCH_LATENCY = Histogram(
 # Phase 1a: time from Kafka publish to broker timestamp.
 # Enable LogAppendTime on the topic for true network+commit lag measurement:
 #   kafka-configs.sh --bootstrap-server kafka:29092 --entity-type topics \
-#     --entity-name stack4things.execution.dispatched --alter \
+#     --entity-name nxr.execution.dispatched --alter \
 #     --add-config message.timestamp.type=LogAppendTime
 # Negative values indicate clock skew between producer host and broker.
 BROKER_COMMIT_LAG = Histogram(

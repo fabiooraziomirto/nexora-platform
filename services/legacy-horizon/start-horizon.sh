@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ ! -d /opt/iotronic-ui ]; then
-  git clone https://opendev.org/x/iotronic-ui.git /opt/iotronic-ui
+if [ ! -d /opt/nexora-dashboard ]; then
+  git clone https://opendev.org/x/nexora-dashboard.git /opt/nexora-dashboard
 fi
 
-if [ -d /adapter/iotronic_ui ]; then
-  cp -f /adapter/iotronic_ui/api/iotronic.py /opt/iotronic-ui/iotronic_ui/api/iotronic.py
-  mkdir -p /opt/iotronic-ui/iotronic_ui/iot/boards
-  cp -f /adapter/iotronic_ui/iot/boards/tabs.py /opt/iotronic-ui/iotronic_ui/iot/boards/tabs.py
-  cp -f /adapter/iotronic_ui/iot/plugins/forms.py /opt/iotronic-ui/iotronic_ui/iot/plugins/forms.py
-  cp -f /adapter/iotronic_ui/iot/plugins/views.py /opt/iotronic-ui/iotronic_ui/iot/plugins/views.py
+if [ -d /adapter/nexora_dashboard ]; then
+  cp -f /adapter/nexora_dashboard/api/nexora.py /opt/nexora-dashboard/nexora_dashboard/api/nexora.py
+  mkdir -p /opt/nexora-dashboard/nexora_dashboard/iot/boards
+  cp -f /adapter/nexora_dashboard/iot/boards/tabs.py /opt/nexora-dashboard/nexora_dashboard/iot/boards/tabs.py
+  cp -f /adapter/nexora_dashboard/iot/plugins/forms.py /opt/nexora-dashboard/nexora_dashboard/iot/plugins/forms.py
+  cp -f /adapter/nexora_dashboard/iot/plugins/views.py /opt/nexora-dashboard/nexora_dashboard/iot/plugins/views.py
 fi
 
 python3 - <<'PY'
 from pathlib import Path
-root = Path("/opt/iotronic-ui/iotronic_ui")
+root = Path("/opt/nexora-dashboard/nexora_dashboard")
 for p in root.rglob("*.py"):
     txt = p.read_text()
     new = txt.replace("from django.utils.translation import ugettext_lazy as _", "from django.utils.translation import gettext_lazy as _")
@@ -33,9 +33,9 @@ for p in root.rglob("*.py"):
         p.write_text(new)
 PY
 
-/var/lib/kolla/venv/bin/pip install --no-deps -e /opt/iotronic-ui
-cp -f /opt/iotronic-ui/iotronic_ui/enabled/_6*.py /var/lib/kolla/venv/lib/python3.10/site-packages/openstack_dashboard/enabled/
-cp -f /opt/iotronic-ui/iotronic_ui/api/iotronic.py /var/lib/kolla/venv/lib/python3.10/site-packages/openstack_dashboard/api/iotronic.py
+/var/lib/kolla/venv/bin/pip install --no-deps -e /opt/nexora-dashboard
+cp -f /opt/nexora-dashboard/nexora_dashboard/enabled/_6*.py /var/lib/kolla/venv/lib/python3.10/site-packages/openstack_dashboard/enabled/
+cp -f /opt/nexora-dashboard/nexora_dashboard/api/nexora.py /var/lib/kolla/venv/lib/python3.10/site-packages/openstack_dashboard/api/nexora.py
 
 python3 - <<'PY'
 from pathlib import Path

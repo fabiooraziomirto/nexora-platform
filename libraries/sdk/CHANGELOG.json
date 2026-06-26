@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "project": "stack4things-sdk",
+  "project": "nxr-sdk",
   "releases": [
     {
       "version": "0.1.0",

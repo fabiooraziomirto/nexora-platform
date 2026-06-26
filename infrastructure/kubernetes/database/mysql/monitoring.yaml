@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ServiceMonitor
 metadata:
   name: mysql-metrics
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
   labels:
     app: mysql
 spec:
@@ -19,7 +19,7 @@ apiVersion: v1
 kind: ServiceMonitor
 metadata:
   name: proxysql-metrics
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
   labels:
     app: proxysql
 spec:

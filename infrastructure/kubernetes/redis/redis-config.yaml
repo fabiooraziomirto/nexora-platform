@@ -2,10 +2,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: redis-config
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 data:
   redis.conf: |
-    # Redis configuration for Stack4Things v2.0
+    # Redis configuration for Nxr v2.0
     
     # Persistence
     save 900 1
@@ -48,7 +48,7 @@ apiVersion: v1
 kind: ServiceMonitor
 metadata:
   name: redis-metrics
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
   labels:
     app: redis
 spec:

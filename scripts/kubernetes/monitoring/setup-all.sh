@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-echo "📊 Setting up complete monitoring stack for Stack4Things v2.0"
+echo "📊 Setting up complete monitoring stack for Nxr v2.0"
 
 # Step 1: Prometheus Operator
 echo ""
@@ -55,10 +55,10 @@ echo "  ✅ Loki installed"
 echo "  ✅ Alertmanager configured"
 echo ""
 echo "🔗 Access URLs:"
-echo "  Prometheus: kubectl port-forward -n stack4things-monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090"
-echo "  Grafana:    kubectl port-forward -n stack4things-monitoring svc/grafana 3000:80"
-echo "  Tempo:      kubectl port-forward -n stack4things-monitoring svc/tempo-distributed-distributor 4317:4317"
-echo "  Alertmanager: kubectl port-forward -n stack4things-monitoring svc/alertmanager-operated 9093:9093"
+echo "  Prometheus: kubectl port-forward -n nxr-monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090"
+echo "  Grafana:    kubectl port-forward -n nxr-monitoring svc/grafana 3000:80"
+echo "  Tempo:      kubectl port-forward -n nxr-monitoring svc/tempo-distributed-distributor 4317:4317"
+echo "  Alertmanager: kubectl port-forward -n nxr-monitoring svc/alertmanager-operated 9093:9093"
 echo ""
 echo "📝 Grafana credentials:"
 echo "  Username: admin"

@@ -66,7 +66,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: admin@stack4things.io
+    email: admin@nxr.io
     privateKeySecretRef:
       name: letsencrypt-staging
     solvers:
@@ -85,7 +85,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@stack4things.io
+    email: admin@nxr.io
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
