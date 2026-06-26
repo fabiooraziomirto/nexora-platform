@@ -11,9 +11,9 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 
-project = 'Stack4Things SDK'
-copyright = '2024, Stack4Things Team'
-author = 'Stack4Things Team'
+project = 'Nxr SDK'
+copyright = '2024, Nxr Team'
+author = 'Nxr Team'
 version = '0.1.0'
 release = '0.1.0'
 

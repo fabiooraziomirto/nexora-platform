@@ -21,12 +21,12 @@ from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
 # START FROM HERE !!!!!!! openstack_dashboard/api/nova.py
-# from iotronicclient.common.apiclient import exceptions as iot_exceptions
+# from nexoraclient.common.apiclient import exceptions as iot_exceptions
 
 from horizon import forms
 from horizon import messages
 
-from openstack_dashboard.api import iotronic
+from openstack_dashboard.api import nexora
 from openstack_dashboard import policy
 
 LOG = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class CreatePluginForm(forms.SelfHandlingForm):
             data["parameters"] = json.loads(data["parameters"])
 
         try:
-            iotronic.plugin_create(request, data["name"],
+            nexora.plugin_create(request, data["name"],
                                    data["public"], data["callable"],
                                    data["code"], data["parameters"])
 
@@ -122,7 +122,7 @@ class InjectPluginForm(forms.SelfHandlingForm):
                 if key == board:
 
                     try:
-                        inject = iotronic.plugin_inject(request, key,
+                        inject = nexora.plugin_inject(request, key,
                                                         data["uuid"],
                                                         data["onboot"])
                         # LOG.debug("API: %s %s", plugin, request)
@@ -192,7 +192,7 @@ class StartPluginForm(forms.SelfHandlingForm):
                 if key == board:
 
                     try:
-                        action = iotronic.plugin_action(request, key,
+                        action = nexora.plugin_action(request, key,
                                                         data["uuid"],
                                                         "PluginStart",
                                                         data["parameters"])
@@ -259,7 +259,7 @@ class StopPluginForm(forms.SelfHandlingForm):
                 if key == board:
 
                     try:
-                        action = iotronic.plugin_action(request, key,
+                        action = nexora.plugin_action(request, key,
                                                         data["uuid"],
                                                         "PluginStop",
                                                         data["delay"])
@@ -329,7 +329,7 @@ class CallPluginForm(forms.SelfHandlingForm):
                 if key == board:
 
                     try:
-                        action = iotronic.plugin_action(request, key,
+                        action = nexora.plugin_action(request, key,
                                                         data["uuid"],
                                                         "PluginCall",
                                                         data["parameters"])
@@ -385,7 +385,7 @@ class RemovePluginForm(forms.SelfHandlingForm):
                 if key == board:
 
                     try:
-                        iotronic.plugin_remove(request,
+                        nexora.plugin_remove(request,
                                                key,
                                                data["uuid"])
                         # LOG.debug("API: %s %s", plugin, request)
@@ -455,7 +455,7 @@ class UpdatePluginForm(forms.SelfHandlingForm):
 
             data["code"] = pickle.dumps(str(data["code"]))
 
-            iotronic.plugin_update(request, data["uuid"],
+            nexora.plugin_update(request, data["uuid"],
                                    {"name": data["name"],
                                     "public": data["public"],
                                     "callable": data["callable"],

@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "lightningrod-gateway"
+name = "nexora-edge"
 version = "0.1.0"
-description = "Stack4Things Lightningrod Gateway – HTTP+Kafka bridge between cloud execution and edge agents"
-authors = ["Stack4Things Team"]
+description = "Nxr Lightningrod Gateway – HTTP+Kafka bridge between cloud execution and edge agents"
+authors = ["Nxr Team"]
 
 [tool.poetry.dependencies]
 python = "^3.11"

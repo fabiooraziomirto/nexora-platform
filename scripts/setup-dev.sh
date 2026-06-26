@@ -1,9 +1,9 @@
 #!/bin/bash
-# Setup script for Stack4Things v2.0 development environment
+# Setup script for Nxr v2.0 development environment
 
 set -e
 
-echo "🚀 Setting up Stack4Things v2.0 Development Environment"
+echo "🚀 Setting up Nxr v2.0 Development Environment"
 
 # Check Python version
 echo "📋 Checking Python version..."

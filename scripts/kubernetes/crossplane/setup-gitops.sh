@@ -10,7 +10,7 @@ if [[ ! "$GITOPS_TOOL" =~ ^(argocd|flux)$ ]]; then
     exit 1
 fi
 
-echo "🔄 Setting up GitOps with $GITOPS_TOOL for Stack4Things"
+echo "🔄 Setting up GitOps with $GITOPS_TOOL for Nxr"
 
 case "$GITOPS_TOOL" in
     argocd)

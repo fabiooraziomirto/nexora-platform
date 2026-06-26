@@ -24,7 +24,7 @@ from plugin_service.api.plugins import router as plugins_router
 logger = logging.getLogger("plugin-service")
 
 app = FastAPI(
-    title="Stack4Things Plugin Service",
+    title="Nxr Plugin Service",
     description="Plugin management microservice",
     version="0.1.0",
 )

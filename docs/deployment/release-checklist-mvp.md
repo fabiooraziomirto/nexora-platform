@@ -6,7 +6,7 @@ Before tagging a release candidate, verify every item below.
 - [ ] All unit tests pass (`pytest` per service)
 - [ ] `scripts/test-all.sh` exits 0 (structure + syntax + compose smoke)
 - [ ] `scripts/contract-tests-api.py` passes positive + negative checks
-- [ ] `scripts/lr-emulator-e2e.sh` completes the full lifecycle
+- [ ] `scripts/nexora-device-emulator-e2e.sh` completes the full lifecycle
 
 ## Security
 - [ ] Bootstrap tokens are not hard-coded in production compose
@@ -14,11 +14,11 @@ Before tagging a release candidate, verify every item below.
 - [ ] No secrets committed in repository
 
 ## Documentation
-- [ ] `docs/deployment/iotronic-parity-matrix.md` reviewed
+- [ ] `docs/deployment/nexora-parity-matrix.md` reviewed
 - [ ] `docs/deployment/execution-pipeline-runbook.md` reviewed
 - [ ] ADR for execution pipeline approved
 
 ## Operations
-- [ ] Prometheus rules loaded (`infrastructure/sre/prometheus-rules-stack4things.yaml`)
+- [ ] Prometheus rules loaded (`infrastructure/sre/prometheus-rules-nxr.yaml`)
 - [ ] Docker images tagged with semver
 - [ ] Compose smoke test on a clean machine

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: policy-resources
-  namespace: stack4things
+  namespace: nxr
 data:
   resource-policies.yaml: |
     # Resource-level policies

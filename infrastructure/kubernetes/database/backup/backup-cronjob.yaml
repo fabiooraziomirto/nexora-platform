@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mysql-backup-storage
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 spec:
   accessModes:
     - ReadWriteOnce
@@ -16,7 +16,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: mysql-backup
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 spec:
   schedule: "0 2 * * *"  # Daily at 2:00 AM
   successfulJobsHistoryLimit: 3
@@ -30,7 +30,7 @@ spec:
             image: mysql:8.0
             env:
             - name: MYSQL_HOST
-              value: mariadb.stack4things-infrastructure.svc.cluster.local
+              value: mariadb.nxr-infrastructure.svc.cluster.local
             - name: MYSQL_PORT
               value: "3306"
             - name: MYSQL_USER
@@ -41,7 +41,7 @@ spec:
                   name: mariadb
                   key: mariadb-root-password
             - name: MYSQL_DATABASE
-              value: stack4things
+              value: nxr
             - name: BACKUP_FILE
               value: "mysql-backup-$(date +%Y-%m-%d-%H%M%S).sql.gz"
             command:
@@ -84,7 +84,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: mysql-backup-verification
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 spec:
   schedule: "0 3 * * *"  # Daily at 3:00 AM (after backup)
   successfulJobsHistoryLimit: 1
@@ -98,7 +98,7 @@ spec:
             image: mysql:8.0
             env:
             - name: MYSQL_HOST
-              value: mariadb.stack4things-infrastructure.svc.cluster.local
+              value: mariadb.nxr-infrastructure.svc.cluster.local
             - name: MYSQL_PORT
               value: "3306"
             - name: MYSQL_USER

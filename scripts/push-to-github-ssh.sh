@@ -8,11 +8,11 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Repository configuration
 GITHUB_USERNAME="lucadagati"
-REPO_NAME="stack4things_v2.0"
+REPO_NAME="nxr_v2.0"
 REPO_URL_SSH="git@github.com:${GITHUB_USERNAME}/${REPO_NAME}.git"
 REPO_URL_HTTPS="https://github.com/${GITHUB_USERNAME}/${REPO_NAME}.git"
 
-echo "🚀 Stack4Things v2.0 - GitHub Push Script (SSH)"
+echo "🚀 Nxr v2.0 - GitHub Push Script (SSH)"
 echo "================================================="
 echo ""
 
@@ -74,7 +74,7 @@ else
     read -p "Enter commit message (or press Enter for default): " COMMIT_MSG
     
     if [ -z "$COMMIT_MSG" ]; then
-        COMMIT_MSG="Update Stack4Things v2.0 implementation"
+        COMMIT_MSG="Update Nxr v2.0 implementation"
     fi
     
     echo "💾 Committing changes..."

@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-monitoring --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Loki using Helm
 if command -v helm &> /dev/null; then
@@ -28,7 +28,7 @@ if command -v helm &> /dev/null; then
     helm repo update
     
     helm install loki grafana/loki \
-        --namespace stack4things-monitoring \
+        --namespace nxr-monitoring \
         --set loki.replicas=1 \
         --set persistence.enabled=true \
         --set persistence.storageClassName=local-path \
@@ -40,7 +40,7 @@ if command -v helm &> /dev/null; then
     # Install Promtail for log collection
     echo "📦 Installing Promtail for log collection..."
     helm install promtail grafana/promtail \
-        --namespace stack4things-monitoring \
+        --namespace nxr-monitoring \
         --set promtail.config.clients[0].url=http://loki:3100/loki/api/v1/push \
         --wait
     
@@ -57,7 +57,7 @@ kubectl apply -f infrastructure/kubernetes/monitoring/loki/ || true
 # Verify installation
 echo ""
 echo "📋 Loki Status:"
-kubectl get pods -n stack4things-monitoring | grep -E "loki|promtail"
+kubectl get pods -n nxr-monitoring | grep -E "loki|promtail"
 
 echo ""
 echo "✅ Loki setup complete!"

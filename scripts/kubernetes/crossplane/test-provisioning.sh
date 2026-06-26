@@ -19,7 +19,7 @@ if [ -z "$PROVIDERS" ]; then
 fi
 
 # Check if XRDs are installed
-XRDS=$(kubectl get crd | grep stack4things.io | wc -l)
+XRDS=$(kubectl get crd | grep nxr.io | wc -l)
 if [ "$XRDS" -eq 0 ]; then
     echo "⚠️  No XRDs found. Installing..."
     ./scripts/kubernetes/crossplane/setup-compositions.sh
@@ -28,11 +28,11 @@ fi
 # Test database claim
 echo "📝 Testing database claim..."
 kubectl apply -f - <<EOF
-apiVersion: database.stack4things.io/v1alpha1
+apiVersion: database.nxr.io/v1alpha1
 kind: DatabaseClaim
 metadata:
   name: test-database
-  namespace: stack4things-infrastructure
+  namespace: nxr-infrastructure
 spec:
   parameters:
     storageGB: 10
@@ -45,7 +45,7 @@ echo "⏳ Waiting for database claim to be ready..."
 timeout=300
 elapsed=0
 while [ $elapsed -lt $timeout ]; do
-    STATUS=$(kubectl get databaseclaim test-database -n stack4things-infrastructure -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+    STATUS=$(kubectl get databaseclaim test-database -n nxr-infrastructure -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
     if [ "$STATUS" == "True" ]; then
         echo "✅ Database claim ready!"
         break
@@ -62,7 +62,7 @@ fi
 # Check resources
 echo ""
 echo "📋 Database Claim Status:"
-kubectl get databaseclaim test-database -n stack4things-infrastructure || true
+kubectl get databaseclaim test-database -n nxr-infrastructure || true
 
 echo ""
 echo "📋 Composite Resources:"
@@ -77,7 +77,7 @@ read -p "Do you want to delete the test database? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "🗑️  Deleting test database..."
-    kubectl delete databaseclaim test-database -n stack4things-infrastructure || true
+    kubectl delete databaseclaim test-database -n nxr-infrastructure || true
 fi
 
 echo ""

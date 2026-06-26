@@ -2,13 +2,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: keycloak-realm-config
-  namespace: stack4things
+  namespace: nxr
 data:
   realm.json: |
     {
-      "realm": "stack4things",
+      "realm": "nxr",
       "enabled": true,
-      "displayName": "Stack4Things",
+      "displayName": "Nxr",
       "clients": [
         {
           "clientId": "device-service",
@@ -61,7 +61,7 @@ data:
           "providerId": "keycloak-oidc",
           "enabled": true,
           "config": {
-            "clientId": "stack4things-client",
+            "clientId": "nxr-client",
             "authorizationUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/authorize",
             "tokenUrl": "https://keystone.example.com/v3/OS-FEDERATION/identity_providers/keystone/protocols/openid/token"
           }

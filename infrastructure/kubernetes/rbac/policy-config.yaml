@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: policy-config
-  namespace: stack4things
+  namespace: nxr
 data:
   policy.json: |
     {

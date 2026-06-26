@@ -18,18 +18,18 @@ services:
   mysql:
     profiles: ["dev", "test", "smoke"]
     image: mysql:8.0
-    container_name: stack4things-mysql
+    container_name: nxr-mysql
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: stack4things
-      MYSQL_USER: stack4things
-      MYSQL_PASSWORD: stack4things
+      MYSQL_DATABASE: nxr
+      MYSQL_USER: nxr
+      MYSQL_PASSWORD: nxr
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "stack4things", "-pstack4things"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "nxr", "-pnxr"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,7 +37,7 @@ services:
   redis:
     profiles: ["dev", "test", "smoke"]
     image: redis:7-alpine
-    container_name: stack4things-redis
+    container_name: nxr-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -49,7 +49,7 @@ services:
   kafka:
     profiles: ["dev", "test", "smoke"]
     image: confluentinc/cp-kafka:7.5.0
-    container_name: stack4things-kafka
+    container_name: nxr-kafka
     depends_on:
       - zookeeper
     environment:
@@ -71,7 +71,7 @@ services:
   zookeeper:
     profiles: ["dev", "test", "smoke"]
     image: confluentinc/cp-zookeeper:7.5.0
-    container_name: stack4things-zookeeper
+    container_name: nxr-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -81,7 +81,7 @@ services:
   jaeger:
     profiles: ["dev", "test", "smoke"]
     image: jaegertracing/all-in-one:1.56
-    container_name: stack4things-jaeger
+    container_name: nxr-jaeger
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
@@ -99,7 +99,7 @@ services:
     build:
       context: ./services/device-service
       dockerfile: Dockerfile
-    container_name: stack4things-device-service
+    container_name: nxr-device-service
     depends_on:
       mysql:
         condition: service_healthy
@@ -108,7 +108,7 @@ services:
       jaeger:
         condition: service_started
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
@@ -127,14 +127,14 @@ services:
     build:
       context: ./services/plugin-service
       dockerfile: Dockerfile
-    container_name: stack4things-plugin-service
+    container_name: nxr-plugin-service
     depends_on:
       mysql:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "8001:8000"
@@ -151,7 +151,7 @@ services:
     build:
       context: ./services/execution-service
       dockerfile: Dockerfile
-    container_name: stack4things-execution-service
+    container_name: nxr-execution-service
     depends_on:
       mysql:
         condition: service_healthy
@@ -160,7 +160,7 @@ services:
       jaeger:
         condition: service_started
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
@@ -179,12 +179,12 @@ services:
     build:
       context: ./services/network-service
       dockerfile: Dockerfile
-    container_name: stack4things-network-service
+    container_name: nxr-network-service
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
     ports:
       - "8003:8000"
     healthcheck:
@@ -200,12 +200,12 @@ services:
     build:
       context: ./services/dns-service
       dockerfile: Dockerfile
-    container_name: stack4things-dns-service
+    container_name: nxr-dns-service
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
     ports:
       - "8004:8000"
     healthcheck:
@@ -221,12 +221,12 @@ services:
     build:
       context: ./services/webservice-service
       dockerfile: Dockerfile
-    container_name: stack4things-webservice-service
+    container_name: nxr-webservice-service
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
     ports:
       - "8005:8000"
     healthcheck:
@@ -242,12 +242,12 @@ services:
     build:
       context: ./services/fleet-service
       dockerfile: Dockerfile
-    container_name: stack4things-fleet-service
+    container_name: nxr-fleet-service
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
       DEVICE_SERVICE_URL: http://device-service:8000
     ports:
       - "8006:8000"
@@ -271,14 +271,14 @@ services:
       timeout: 5s
       retries: 5
 
-  lightningrod-gateway:
+  nexora-edge:
     profiles: ["dev", "test", "smoke"]
     env_file:
       - .env.dev
     build:
-      context: ./services/lightningrod-gateway
+      context: ./services/nexora-edge
       dockerfile: Dockerfile
-    container_name: stack4things-lightningrod-gateway
+    container_name: nxr-nexora-edge
     depends_on:
       kafka:
         condition: service_healthy
@@ -303,14 +303,14 @@ services:
   # Legacy / optional services
   # ---------------------------------------------------------------------------
 
-  iotronic-ui:
+  nexora-dashboard:
     profiles: ["dev"]
     env_file:
       - .env.dev
     build:
-      context: ./services/iotronic-ui
+      context: ./services/nexora-dashboard
       dockerfile: Dockerfile
-    container_name: stack4things-iotronic-ui
+    container_name: nxr-nexora-dashboard
     environment:
       S4T_DEVICE_URL: http://device-service:8000
       S4T_PLUGIN_URL: http://plugin-service:8000
@@ -329,7 +329,7 @@ services:
     build:
       context: ./services/legacy-keystone
       dockerfile: Dockerfile
-    container_name: stack4things-legacy-keystone
+    container_name: nxr-legacy-keystone
     environment:
       S4T_DEVICE_URL: http://device-service:8000
       S4T_PLUGIN_URL: http://plugin-service:8000
@@ -348,7 +348,7 @@ services:
     build:
       context: ./services/legacy-horizon
       dockerfile: Dockerfile
-    container_name: stack4things-legacy-horizon
+    container_name: nxr-legacy-horizon
     ports:
       - "18089:8000"
 

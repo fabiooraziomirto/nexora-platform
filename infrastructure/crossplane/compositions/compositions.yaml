@@ -10,7 +10,7 @@ spec:
     name: mysql-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: database.stack4things.io/v1alpha1
+    apiVersion: database.nxr.io/v1alpha1
     kind: XStackDatabase
   resources:
   - name: cloudsql-instance
@@ -87,7 +87,7 @@ spec:
     name: mysql-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: database.stack4things.io/v1alpha1
+    apiVersion: database.nxr.io/v1alpha1
     kind: XStackDatabase
   resources:
   - name: rds-instance
@@ -132,7 +132,7 @@ spec:
     name: redis-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: cache.stack4things.io/v1alpha1
+    apiVersion: cache.nxr.io/v1alpha1
     kind: XStackCache
   resources:
   - name: redis-instance
@@ -169,7 +169,7 @@ spec:
     name: redis-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: cache.stack4things.io/v1alpha1
+    apiVersion: cache.nxr.io/v1alpha1
     kind: XStackCache
   resources:
   - name: elasticache-cluster
@@ -207,7 +207,7 @@ spec:
     name: kafka-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: messaging.stack4things.io/v1alpha1
+    apiVersion: messaging.nxr.io/v1alpha1
     kind: XStackMessaging
   resources:
   - name: pubsub-topic
@@ -238,7 +238,7 @@ spec:
     name: storage-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: storage.stack4things.io/v1alpha1
+    apiVersion: storage.nxr.io/v1alpha1
     kind: XStackStorage
   resources:
   - name: gcs-bucket
@@ -283,7 +283,7 @@ spec:
     name: storage-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: storage.stack4things.io/v1alpha1
+    apiVersion: storage.nxr.io/v1alpha1
     kind: XStackStorage
   resources:
   - name: s3-bucket
@@ -323,7 +323,7 @@ spec:
     name: lb-connection
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: loadbalancer.stack4things.io/v1alpha1
+    apiVersion: loadbalancer.nxr.io/v1alpha1
     kind: XStackLoadBalancer
   resources:
   - name: gcp-lb

@@ -18,10 +18,10 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-infrastructure --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-infrastructure --dry-run=client -o yaml | kubectl apply -f -
 
 # Check if MySQL/MariaDB is installed
-if ! kubectl get svc mariadb -n stack4things-infrastructure &> /dev/null; then
+if ! kubectl get svc mariadb -n nxr-infrastructure &> /dev/null; then
     echo "⚠️  MySQL/MariaDB not found. Installing it first..."
     ./scripts/kubernetes/database/setup-mysql.sh
 fi
@@ -33,7 +33,7 @@ kubectl apply -f infrastructure/kubernetes/database/backup/
 # Verify installation
 echo ""
 echo "📋 Backup CronJob Status:"
-kubectl get cronjob -n stack4things-infrastructure | grep mysql-backup
+kubectl get cronjob -n nxr-infrastructure | grep mysql-backup
 
 echo ""
 echo "✅ MySQL backup automation setup complete!"
@@ -44,8 +44,8 @@ echo "  Retention: 7 days"
 echo "  Storage: PVC (mysql-backup-storage)"
 echo ""
 echo "🔍 Check backups:"
-echo "  kubectl get cronjob mysql-backup -n stack4things-infrastructure"
-echo "  kubectl get pvc mysql-backup-storage -n stack4things-infrastructure"
+echo "  kubectl get cronjob mysql-backup -n nxr-infrastructure"
+echo "  kubectl get pvc mysql-backup-storage -n nxr-infrastructure"
 echo ""
 echo "📥 Restore backup:"
 echo "  ./scripts/kubernetes/database/restore-backup.sh <backup-file>"

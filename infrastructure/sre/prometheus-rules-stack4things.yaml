@@ -1,7 +1,7 @@
 groups:
-  - name: stack4things.execution_pipeline
+  - name: nxr.execution_pipeline
     rules:
-      - alert: Stack4ThingsExecutionTimeoutRate
+      - alert: NxrExecutionTimeoutRate
         expr: rate(s4t_http_requests_total{service="execution-service",path=~".*timeout.*"}[5m]) > 0.1
         for: 5m
         labels:
@@ -10,7 +10,7 @@ groups:
           summary: "Execution timeout rate elevated"
           description: "More than 0.1 timeout transitions/s over 5 minutes."
 
-      - alert: Stack4ThingsGatewayDeliveryFailures
+      - alert: NxrGatewayDeliveryFailures
         expr: rate(s4t_lr_delivery_failures_total[5m]) > 0.05
         for: 5m
         labels:
@@ -19,7 +19,7 @@ groups:
           summary: "Lightningrod gateway delivery failures elevated"
           description: "More than 0.05 delivery failures/s — agents may be unreachable."
 
-      - alert: Stack4ThingsQueueRejects
+      - alert: NxrQueueRejects
         expr: rate(s4t_http_requests_total{service="execution-service",status="429"}[5m]) > 0.1
         for: 5m
         labels:
@@ -28,7 +28,7 @@ groups:
           summary: "Per-device execution queue full (429s)"
           description: "Devices hitting the per-device execution limit."
 
-      - alert: Stack4ThingsKafkaProducerDown
+      - alert: NxrKafkaProducerDown
         expr: absent(s4t_http_requests_total{service="execution-service"}) == 1
         for: 2m
         labels:

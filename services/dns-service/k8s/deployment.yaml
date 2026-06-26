@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dns-service
-  namespace: stack4things
+  namespace: nxr
 spec:
   replicas: 2
   selector:
@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: dns-service
-          image: ghcr.io/stack4things/dns-service:latest
+          image: ghcr.io/nxr/dns-service:latest
           ports:
             - containerPort: 8000
           envFrom:
@@ -57,7 +57,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dns-service
-  namespace: stack4things
+  namespace: nxr
 spec:
   selector:
     app: dns-service
@@ -70,7 +70,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: dns-service-hpa
-  namespace: stack4things
+  namespace: nxr
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

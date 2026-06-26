@@ -1,5 +1,5 @@
 """
-lr-board-emulator — multi-board LightningRod edge agent simulator.
+nexora-device-emulator — multi-board NexoraEdge edge agent simulator.
 
 Single-board mode (backward compatible):
     python emulator.py
@@ -30,17 +30,17 @@ from typing import Any
 
 DEVICE_URL = os.getenv("DEVICE_URL", "http://device-service:8000").rstrip("/")
 EXEC_URL = os.getenv("EXEC_URL", "http://execution-service:8000").rstrip("/")
-GW_URL = os.getenv("GW_URL", "http://lightningrod-gateway:8000").rstrip("/")
+GW_URL = os.getenv("GW_URL", "http://nexora-edge:8000").rstrip("/")
 RUNTIME_URL = os.getenv("RUNTIME_URL", "http://nexora-function-runtime:9000").rstrip("/")
 BOOTSTRAP_TOKEN = os.getenv("BOOTSTRAP_TOKEN", "dev-bootstrap:dev-bootstrap-token")
 BOARD_NAME = os.getenv("BOARD_NAME", "")  # auto-generated per board if empty
-BOARD_TYPE = os.getenv("BOARD_TYPE", "lightningrod-emulator")
+BOARD_TYPE = os.getenv("BOARD_TYPE", "nexoraedge-emulator")
 HEARTBEAT_SECONDS = float(os.getenv("HEARTBEAT_SECONDS", "10"))
 POLL_SECONDS = float(os.getenv("POLL_SECONDS", "4"))
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="LightningRod multi-board emulator")
+    p = argparse.ArgumentParser(description="NexoraEdge multi-board emulator")
     p.add_argument(
         "--n-boards", type=int,
         default=int(os.getenv("N_BOARDS", "1")),

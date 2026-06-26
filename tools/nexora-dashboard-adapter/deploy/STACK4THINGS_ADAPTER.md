@@ -1,11 +1,11 @@
-# IoTronic UI -> Stack4Things v2 Adapter
+# IoTronic UI -> Nxr v2 Adapter
 
-This fork adapts legacy `iotronic-ui` (Horizon plugin) to Stack4Things v2 APIs.
+This fork adapts legacy `nexora-dashboard` (Horizon plugin) to Nxr v2 APIs.
 
 ## What changed
 
-- `iotronic_ui/api/iotronic.py` no longer uses `iotronicclient`.
-- It calls Stack4Things services directly over HTTP:
+- `nexora_dashboard/api/nexora.py` no longer uses `nexoraclient`.
+- It calls Nxr services directly over HTTP:
   - device-service: boards/devices
   - plugin-service: plugins
   - network-service: ports
@@ -42,7 +42,7 @@ Set these env vars for Horizon process:
 Run:
 
 ```bash
-bash deploy/deploy_stack4things_horizon.sh
+bash deploy/deploy_nxr_horizon.sh
 ```
 
 Then restart Apache/httpd hosting Horizon.

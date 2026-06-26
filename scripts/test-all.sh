@@ -1,12 +1,12 @@
 #!/bin/bash
-# Comprehensive test script for Stack4Things v2.0
+# Comprehensive test script for Nxr v2.0
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🧪 Testing Stack4Things v2.0 Implementation"
+echo "🧪 Testing Nxr v2.0 Implementation"
 echo "=========================================="
 echo ""
 
@@ -286,9 +286,9 @@ if command -v docker &> /dev/null; then
             test_fail "API contract tests failed"
         fi
 
-        if [ -x "$PROJECT_ROOT/scripts/lr-emulator-e2e.sh" ] && bash "$PROJECT_ROOT/scripts/lr-emulator-e2e.sh" &>/dev/null; then
+        if [ -x "$PROJECT_ROOT/scripts/nexora-device-emulator-e2e.sh" ] && bash "$PROJECT_ROOT/scripts/nexora-device-emulator-e2e.sh" &>/dev/null; then
             test_pass "LR emulator E2E flow OK"
-        elif [ -f "$PROJECT_ROOT/scripts/lr-emulator-e2e.sh" ]; then
+        elif [ -f "$PROJECT_ROOT/scripts/nexora-device-emulator-e2e.sh" ]; then
             test_warn "LR emulator E2E flow had issues (Kafka timing possible)"
         fi
 

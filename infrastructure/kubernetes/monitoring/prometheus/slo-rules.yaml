@@ -1,5 +1,5 @@
 groups:
-  - name: stack4things-slo
+  - name: nxr-slo
     rules:
       - alert: High5xxErrorRate
         expr: sum(rate(s4t_http_requests_total{status=~"5.."}[5m])) / sum(rate(s4t_http_requests_total[5m])) > 0.02
@@ -7,7 +7,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "High 5xx error rate on Stack4Things services"
+          summary: "High 5xx error rate on Nxr services"
       - alert: HighP95Latency
         expr: histogram_quantile(0.95, sum(rate(s4t_http_request_duration_seconds_bucket[5m])) by (le, service)) > 0.7
         for: 10m

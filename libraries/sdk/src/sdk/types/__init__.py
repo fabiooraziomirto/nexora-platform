@@ -1,5 +1,5 @@
 """
-Type definitions for Stack4Things SDK.
+Type definitions for Nxr SDK.
 """
 
 from typing import Optional, Dict, Any, List

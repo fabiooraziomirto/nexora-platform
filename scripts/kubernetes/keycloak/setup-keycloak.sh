@@ -3,7 +3,7 @@
 
 set -e
 
-echo "🔐 Setting up Keycloak for Stack4Things v2.0"
+echo "🔐 Setting up Keycloak for Nxr v2.0"
 
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
@@ -18,7 +18,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-auth --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-auth --dry-run=client -o yaml | kubectl apply -f -
 
 # Install Keycloak using Helm
 if command -v helm &> /dev/null; then
@@ -28,11 +28,11 @@ if command -v helm &> /dev/null; then
     helm repo update
     
     # Get admin password from secret or generate new
-    ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n stack4things-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || openssl rand -base64 32)
+    ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n nxr-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || openssl rand -base64 32)
     
     # Install Keycloak
     helm install keycloak bitnami/keycloak \
-        --namespace stack4things-auth \
+        --namespace nxr-auth \
         --set auth.adminUser=admin \
         --set auth.adminPassword="$ADMIN_PASSWORD" \
         --set persistence.enabled=true \
@@ -59,7 +59,7 @@ fi
 echo "⏳ Waiting for Keycloak to be ready..."
 kubectl wait --for=condition=ready pod \
     -l app.kubernetes.io/name=keycloak \
-    -n stack4things-auth \
+    -n nxr-auth \
     --timeout=300s
 
 # Apply Keycloak configuration
@@ -73,19 +73,19 @@ echo "📝 Configuring Keycloak realm..."
 # Verify installation
 echo ""
 echo "📋 Keycloak Status:"
-kubectl get pods -n stack4things-auth | grep keycloak
+kubectl get pods -n nxr-auth | grep keycloak
 
 echo ""
 echo "✅ Keycloak setup complete!"
 echo ""
 echo "📋 Keycloak Info:"
-echo "  Namespace: stack4things-auth"
-echo "  Service: keycloak.stack4things-auth.svc.cluster.local:8080"
+echo "  Namespace: nxr-auth"
+echo "  Service: keycloak.nxr-auth.svc.cluster.local:8080"
 echo "  Admin Username: admin"
 echo "  Admin Password: $ADMIN_PASSWORD"
 echo ""
 echo "📝 Access Keycloak Admin Console:"
-echo "  kubectl port-forward -n stack4things-auth svc/keycloak 8080:8080"
+echo "  kubectl port-forward -n nxr-auth svc/keycloak 8080:8080"
 echo "  Open http://localhost:8080"
 echo "  Username: admin"
 echo "  Password: $ADMIN_PASSWORD"

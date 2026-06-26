@@ -14,7 +14,7 @@ from rbac_service.core.audit import AuditLogger
 logger = structlog.get_logger()
 
 app = FastAPI(
-    title="Stack4Things RBAC Service",
+    title="Nxr RBAC Service",
     description="Policy evaluation and RBAC management service",
     version="0.1.0",
 )

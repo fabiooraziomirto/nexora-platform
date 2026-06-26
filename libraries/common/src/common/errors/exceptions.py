@@ -6,8 +6,8 @@ from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 
 
-class Stack4ThingsError(Exception):
-    """Base exception for Stack4Things errors."""
+class NxrError(Exception):
+    """Base exception for Nxr errors."""
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class Stack4ThingsError(Exception):
         )
 
 
-class ValidationError(Stack4ThingsError):
+class ValidationError(NxrError):
     """Validation error."""
 
     def __init__(self, message: str, field: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
@@ -52,7 +52,7 @@ class ValidationError(Stack4ThingsError):
         return super().to_http_exception(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
-class NotFoundError(Stack4ThingsError):
+class NotFoundError(NxrError):
     """Resource not found error."""
 
     def __init__(self, resource_type: str, resource_id: Optional[str] = None):
@@ -74,7 +74,7 @@ class NotFoundError(Stack4ThingsError):
         return super().to_http_exception(status_code=status.HTTP_404_NOT_FOUND)
 
 
-class ConflictError(Stack4ThingsError):
+class ConflictError(NxrError):
     """Resource conflict error."""
 
     def __init__(self, message: str, resource_type: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
@@ -88,7 +88,7 @@ class ConflictError(Stack4ThingsError):
         return super().to_http_exception(status_code=status.HTTP_409_CONFLICT)
 
 
-class UnauthorizedError(Stack4ThingsError):
+class UnauthorizedError(NxrError):
     """Unauthorized error."""
 
     def __init__(self, message: str = "Unauthorized"):
@@ -99,7 +99,7 @@ class UnauthorizedError(Stack4ThingsError):
         return super().to_http_exception(status_code=status.HTTP_401_UNAUTHORIZED)
 
 
-class ForbiddenError(Stack4ThingsError):
+class ForbiddenError(NxrError):
     """Forbidden error."""
 
     def __init__(self, message: str = "Forbidden"):
@@ -110,7 +110,7 @@ class ForbiddenError(Stack4ThingsError):
         return super().to_http_exception(status_code=status.HTTP_403_FORBIDDEN)
 
 
-class DatabaseError(Stack4ThingsError):
+class DatabaseError(NxrError):
     """Database error."""
 
     def __init__(self, message: str, operation: Optional[str] = None):
@@ -119,7 +119,7 @@ class DatabaseError(Stack4ThingsError):
         self.operation = operation
 
 
-class ExternalServiceError(Stack4ThingsError):
+class ExternalServiceError(NxrError):
     """External service error."""
 
     def __init__(self, service_name: str, message: str):

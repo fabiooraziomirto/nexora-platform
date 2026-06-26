@@ -1,18 +1,18 @@
 #!/bin/bash
-# Setup verification script for Stack4Things v2.0
+# Setup verification script for Nxr v2.0
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🔍 Verifying Stack4Things v2.0 Setup"
+echo "🔍 Verifying Nxr v2.0 Setup"
 echo "====================================="
 echo ""
 
 # Check if we're in the right directory
 if [ ! -f "$PROJECT_ROOT/README.md" ]; then
-    echo "❌ Error: Not in Stack4Things_v2.0 directory"
+    echo "❌ Error: Not in Nxr_v2.0 directory"
     exit 1
 fi
 

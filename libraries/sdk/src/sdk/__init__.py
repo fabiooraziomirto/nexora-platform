@@ -1,18 +1,18 @@
 """
-Python SDK for Stack4Things v2.0
+Python SDK for Nxr v2.0
 
-This SDK provides client libraries for interacting with Stack4Things services
+This SDK provides client libraries for interacting with Nxr services
 via REST API and gRPC.
 """
 
 __version__ = "0.1.0"
 
-from sdk.api.client import Stack4ThingsClient
+from sdk.api.client import NxrClient
 from sdk.api.devices import DeviceClient
 from sdk.api.fleet import FleetClient
 from sdk.api.network import NetworkClient
 from sdk.api.execution import ExecutionClient
-from sdk.grpc.client import Stack4ThingsGRPCClient
+from sdk.grpc.client import NxrGRPCClient
 from sdk.types import (
     Device,
     DeviceStatus,
@@ -25,12 +25,12 @@ from sdk.types import (
 
 __all__ = [
     "__version__",
-    "Stack4ThingsClient",
+    "NxrClient",
     "DeviceClient",
     "FleetClient",
     "NetworkClient",
     "ExecutionClient",
-    "Stack4ThingsGRPCClient",
+    "NxrGRPCClient",
     "Device",
     "DeviceStatus",
     "Fleet",

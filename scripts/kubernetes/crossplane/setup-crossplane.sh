@@ -3,7 +3,7 @@
 
 set -e
 
-echo "☁️  Setting up Crossplane for Stack4Things v2.0"
+echo "☁️  Setting up Crossplane for Nxr v2.0"
 
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then

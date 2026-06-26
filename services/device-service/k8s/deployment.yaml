@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: device-service
-  namespace: stack4things
+  namespace: nxr
   labels:
     app: device-service
     version: v1
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: device-service
-        image: stack4things/device-service:latest
+        image: nxr/device-service:latest
         ports:
         - containerPort: 8000
           name: http
@@ -74,7 +74,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: device-service
-  namespace: stack4things
+  namespace: nxr
   labels:
     app: device-service
 spec:
@@ -91,7 +91,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: device-service-hpa
-  namespace: stack4things
+  namespace: nxr
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

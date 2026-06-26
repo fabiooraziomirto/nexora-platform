@@ -1,51 +1,51 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: stack4things
+  name: nxr
   labels:
-    name: stack4things
+    name: nxr
     environment: development
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: stack4things-services
+  name: nxr-services
   labels:
-    name: stack4things-services
+    name: nxr-services
     environment: development
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: stack4things-infrastructure
+  name: nxr-infrastructure
   labels:
-    name: stack4things-infrastructure
+    name: nxr-infrastructure
     environment: development
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: stack4things-monitoring
+  name: nxr-monitoring
   labels:
-    name: stack4things-monitoring
+    name: nxr-monitoring
     environment: development
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: stack4things-logging
+  name: nxr-logging
   labels:
-    name: stack4things-logging
+    name: nxr-logging
     environment: development
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
@@ -54,7 +54,7 @@ metadata:
   name: ingress-nginx
   labels:
     name: ingress-nginx
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
@@ -63,7 +63,7 @@ metadata:
   name: cert-manager
   labels:
     name: cert-manager
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 
 ---
 apiVersion: v1
@@ -73,5 +73,5 @@ metadata:
   labels:
     name: keycloak
     environment: development
-    managed-by: stack4things-v2
+    managed-by: nxr-v2
 

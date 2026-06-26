@@ -75,11 +75,11 @@ fi
 PYTHONPATH="$PROJECT_ROOT/libraries/sdk/src:$PYTHONPATH" python3 << 'EOF'
 try:
     # Test basic imports
-    from sdk import Stack4ThingsClient
-    print("✅ Stack4ThingsClient imported")
+    from sdk import NxrClient
+    print("✅ NxrClient imported")
     
-    from sdk import Stack4ThingsGRPCClient
-    print("✅ Stack4ThingsGRPCClient imported")
+    from sdk import NxrGRPCClient
+    print("✅ NxrGRPCClient imported")
     
     from sdk import Device, DeviceStatus, DeviceCreate
     print("✅ Device types imported")

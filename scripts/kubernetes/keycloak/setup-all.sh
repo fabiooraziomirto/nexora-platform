@@ -5,7 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "🔐 Setting up complete authentication infrastructure for Stack4Things v2.0"
+echo "🔐 Setting up complete authentication infrastructure for Nxr v2.0"
 
 # Step 1: Setup Keycloak
 echo ""
@@ -47,14 +47,14 @@ echo "🎉 Authentication setup complete!"
 echo ""
 echo "📋 Summary:"
 echo "  ✅ Keycloak installed and configured"
-echo "  ✅ Stack4Things realm created"
+echo "  ✅ Nxr realm created"
 echo "  ✅ OAuth2/OIDC clients configured"
 echo "  ✅ Keystone Identity Broker configured"
 echo "  ✅ API Gateway dual auth configured"
 echo "  ✅ MFA configured (if enabled)"
 echo ""
 echo "📝 Access:"
-echo "  Keycloak Admin: kubectl port-forward -n stack4things-auth svc/keycloak 8080:8080"
+echo "  Keycloak Admin: kubectl port-forward -n nxr-auth svc/keycloak 8080:8080"
 echo "  Admin Username: admin"
 echo "  Admin Password: Check keycloak-secrets secret"
 

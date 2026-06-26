@@ -35,6 +35,6 @@ echo "[postalpha] running chaos drill"
 bash scripts/chaos-drill.sh
 
 echo "[postalpha] running backup/restore validation"
-bash scripts/backup-restore-validate.sh /tmp/stack4things-backup.sql
+bash scripts/backup-restore-validate.sh /tmp/nxr-backup.sql
 
 echo "[postalpha] all post-alpha validations completed"

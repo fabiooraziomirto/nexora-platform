@@ -1,8 +1,8 @@
-apiVersion: database.stack4things.io/v1alpha1
+apiVersion: database.nxr.io/v1alpha1
 kind: DatabaseClaim
 metadata:
-  name: stack4things-database
-  namespace: stack4things-infrastructure
+  name: nxr-database
+  namespace: nxr-infrastructure
 spec:
   parameters:
     storageGB: 20
@@ -10,22 +10,22 @@ spec:
     region: us-central1
 
 ---
-apiVersion: cache.stack4things.io/v1alpha1
+apiVersion: cache.nxr.io/v1alpha1
 kind: CacheClaim
 metadata:
-  name: stack4things-redis
-  namespace: stack4things-infrastructure
+  name: nxr-redis
+  namespace: nxr-infrastructure
 spec:
   parameters:
     memoryGB: 1
     region: us-central1
 
 ---
-apiVersion: messaging.stack4things.io/v1alpha1
+apiVersion: messaging.nxr.io/v1alpha1
 kind: MessagingClaim
 metadata:
-  name: stack4things-kafka
-  namespace: stack4things-infrastructure
+  name: nxr-kafka
+  namespace: nxr-infrastructure
 spec:
   parameters:
     clusterSize: 3
@@ -33,11 +33,11 @@ spec:
     region: us-central1
 
 ---
-apiVersion: storage.stack4things.io/v1alpha1
+apiVersion: storage.nxr.io/v1alpha1
 kind: StorageClaim
 metadata:
-  name: stack4things-storage
-  namespace: stack4things-infrastructure
+  name: nxr-storage
+  namespace: nxr-infrastructure
 spec:
   parameters:
     storageGB: 100
@@ -45,11 +45,11 @@ spec:
     storageClass: STANDARD
 
 ---
-apiVersion: loadbalancer.stack4things.io/v1alpha1
+apiVersion: loadbalancer.nxr.io/v1alpha1
 kind: LoadBalancerClaim
 metadata:
-  name: stack4things-lb
-  namespace: stack4things
+  name: nxr-lb
+  namespace: nxr
 spec:
   parameters:
     type: EXTERNAL

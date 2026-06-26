@@ -1,4 +1,4 @@
-# Stack4Things v2.0 — TODO e stato corrente
+# Nxr v2.0 — TODO e stato corrente
 
 Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 
@@ -6,7 +6,7 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 
 ## Stato del repository (filesystem)
 
-**Data controllo:** 2026-03-28 · **Path:** `/home/lucadag/stack4things_v2.0`
+**Data controllo:** 2026-03-28 · **Path:** `/home/lucadag/nxr_v2.0`
 
 > **Nota:** Parità funzionale vs IoTronic/Lightning Rod, **non** parità di
 > protocollo WAMP.  I concetti sono mappati (board→device, session→agent,
@@ -23,7 +23,7 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 | dns-service | 8004 | [x] CRUD | `main.py` |
 | webservice-service | 8005 | [x] CRUD | `main.py` |
 | fleet-service | 8006 | [x] CRUD | `main.py` |
-| lightningrod-gateway | 8007 | [x] Kafka consumer, agent sessions, deliver+retry | `main.py` |
+| nexora-edge | 8007 | [x] Kafka consumer, agent sessions, deliver+retry | `main.py` |
 
 ### Funzionalità execution-service
 
@@ -44,9 +44,9 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 - [x] Bootstrap token validation (id:secret:expiry, revocation list)
 - [x] CRUD devices completo
 
-### Funzionalità lightningrod-gateway (Lightning Rod parity)
+### Funzionalità nexora-edge (Lightning Rod parity)
 
-- [x] Kafka consumer su `stack4things.execution.dispatched`
+- [x] Kafka consumer su `nxr.execution.dispatched`
 - [x] Agent session management (register, heartbeat, get)
 - [x] Delivery with retry + backoff
 - [x] Delivery failure → Kafka event `delivery_failed`
@@ -58,20 +58,20 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 
 - [x] `scripts/test-all.sh` — test struttura + sintassi + compose smoke
 - [x] `scripts/contract-tests-api.py` — positive + negative contract checks
-- [x] `scripts/lr-emulator-e2e.sh` — full lifecycle emulation
+- [x] `scripts/nexora-device-emulator-e2e.sh` — full lifecycle emulation
 - [x] `scripts/replay_execution_outbox.py` — DLQ replay utility
 - [x] `scripts/integration-cross-service.sh`
 
 ## Documentazione
 
-- [x] `docs/deployment/iotronic-parity-matrix.md` — concept mapping legacy→v2.0
+- [x] `docs/deployment/nexora-parity-matrix.md` — concept mapping legacy→v2.0
 - [x] `docs/deployment/execution-pipeline-runbook.md` — operator runbook
 - [x] `docs/deployment/release-checklist-mvp.md`
-- [x] `docs/adr/0001-lightningrod-and-execution-pipeline.md`
+- [x] `docs/adr/0001-nexoraedge-and-execution-pipeline.md`
 
 ## Infrastruttura
 
-- [x] `infrastructure/sre/prometheus-rules-stack4things.yaml` — alert rules
+- [x] `infrastructure/sre/prometheus-rules-nxr.yaml` — alert rules
 - [x] `docker-compose.dev.yml` — tutti gli 8 servizi + gateway
 
 ## Test unitari

@@ -65,7 +65,7 @@ a full separation with routes in `api/plugins.py` and a thin `main.py` coordinat
 | dns-service | 379431c |
 | network-service | 74e41ab |
 | webservice-service | 42de939 |
-| lightningrod-gateway | 16c0e79 |
+| nexora-edge | 16c0e79 |
 
 ---
 
@@ -88,7 +88,7 @@ a full separation with routes in `api/plugins.py` and a thin `main.py` coordinat
 
 ## Notes
 
-lightningrod-gateway has **0 unit tests**. Its only behavioral verification is
-`scripts/lr-emulator-e2e.sh` against a running stack. The migration was validated
+nexora-edge has **0 unit tests**. Its only behavioral verification is
+`scripts/nexora-device-emulator-e2e.sh` against a running stack. The migration was validated
 by confirming the module imports without error; runtime validation is deferred to
 the next stack-up opportunity.

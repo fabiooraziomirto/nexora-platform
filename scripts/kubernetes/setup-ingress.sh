@@ -59,5 +59,5 @@ kubectl get svc -n ingress-nginx ingress-nginx-controller
 echo ""
 echo "✅ Nginx Ingress Controller setup complete!"
 echo ""
-echo "You can now create Ingress resources in the stack4things namespace."
+echo "You can now create Ingress resources in the nxr namespace."
 

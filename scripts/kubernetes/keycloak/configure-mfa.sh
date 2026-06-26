@@ -5,13 +5,13 @@ set -e
 
 echo "🔒 Configuring MFA in Keycloak"
 
-KC_POD=$(kubectl get pods -n stack4things-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
+KC_POD=$(kubectl get pods -n nxr-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
 KC_URL="http://localhost:8080"
 ADMIN_USER="admin"
-ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n stack4things-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
+ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n nxr-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
 
 # Get admin token
-TOKEN=$(kubectl exec -n stack4things-auth "$KC_POD" -- \
+TOKEN=$(kubectl exec -n nxr-auth "$KC_POD" -- \
     curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "username=$ADMIN_USER" \
@@ -27,8 +27,8 @@ fi
 
 # Enable TOTP authenticator
 echo "📝 Enabling TOTP authenticator..."
-kubectl exec -n stack4things-auth "$KC_POD" -- \
-    curl -s -X POST "$KC_URL/admin/realms/stack4things/authentication/executors" \
+kubectl exec -n nxr-auth "$KC_POD" -- \
+    curl -s -X POST "$KC_URL/admin/realms/nxr/authentication/executors" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<EOF || true
@@ -49,8 +49,8 @@ EOF
 
 # Enable email OTP authenticator
 echo "📝 Enabling Email OTP authenticator..."
-kubectl exec -n stack4things-auth "$KC_POD" -- \
-    curl -s -X POST "$KC_URL/admin/realms/stack4things/authentication/executors" \
+kubectl exec -n nxr-auth "$KC_POD" -- \
+    curl -s -X POST "$KC_URL/admin/realms/nxr/authentication/executors" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<EOF || true
@@ -70,8 +70,8 @@ EOF
 
 # Configure MFA flow
 echo "📝 Configuring MFA flow..."
-kubectl exec -n stack4things-auth "$KC_POD" -- \
-    curl -s -X POST "$KC_URL/admin/realms/stack4things/authentication/flows/browser/executions/execution" \
+kubectl exec -n nxr-auth "$KC_POD" -- \
+    curl -s -X POST "$KC_URL/admin/realms/nxr/authentication/flows/browser/executions/execution" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<EOF || true

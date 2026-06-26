@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest
 
-from lightningrod_gateway.core.config import (
+from nexora_edge.core.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_TOPIC_PREFIX,
     KAFKA_ENABLED,
@@ -31,9 +31,9 @@ from lightningrod_gateway.core.config import (
     SESSION_TTL_SECONDS,
     DISPATCH_TTL_SECONDS,
 )
-from lightningrod_gateway.core.tracing import setup_tracing, extract_trace_context, tracer as _tracer
+from nexora_edge.core.tracing import setup_tracing, extract_trace_context, tracer as _tracer
 from opentelemetry import trace as _otel_trace
-from lightningrod_gateway.core.metrics import (
+from nexora_edge.core.metrics import (
     DISPATCH_EVENTS_TOTAL,
     DELIVERY_ATTEMPTS_TOTAL,
     DELIVERY_FAILURES_TOTAL,
@@ -51,7 +51,7 @@ from lightningrod_gateway.core.metrics import (
 app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger("lightningrod-gateway")
+logger = logging.getLogger("nexora-edge")
 
 producer: aiokafka.AIOKafkaProducer | None = None
 consumer: aiokafka.AIOKafkaConsumer | None = None
@@ -187,7 +187,7 @@ async def _poll_consumer_lag(interval_seconds: float = 15.0) -> None:
                     position = await consumer.position(tp)
                     lag = max(0, end_offset - position)
                     KAFKA_CONSUMER_LAG.labels(
-                        service="lightningrod-gateway",
+                        service="nexora-edge",
                         topic=tp.topic,
                         partition=str(tp.partition),
                     ).set(lag)
@@ -208,7 +208,7 @@ async def _consume_dispatched() -> None:
         topic,
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS.split(","),
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        group_id="lightningrod-gateway",
+        group_id="nexora-edge",
         auto_offset_reset="latest",
     )
     try:
@@ -247,15 +247,15 @@ async def _consume_dispatched() -> None:
 
             if kafka_dispatched_at is not None:
                 kafka_ingestion_s = gateway_received_at - float(kafka_dispatched_at)
-                KAFKA_INGESTION_LATENCY.labels("lightningrod-gateway").observe(kafka_ingestion_s)
+                KAFKA_INGESTION_LATENCY.labels("nexora-edge").observe(kafka_ingestion_s)
 
                 if kafka_broker_ts is not None:
                     broker_commit_lag_s = kafka_broker_ts - float(kafka_dispatched_at)
-                    BROKER_COMMIT_LAG.labels("lightningrod-gateway").observe(broker_commit_lag_s)
+                    BROKER_COMMIT_LAG.labels("nexora-edge").observe(broker_commit_lag_s)
 
                 logger.info(json.dumps({
                     "event": "dispatch_kafka_ingested",
-                    "service": "lightningrod-gateway",
+                    "service": "nexora-edge",
                     "execution_id": execution_id,
                     "device_id": device_id,
                     "kafka_dispatched_at": kafka_dispatched_at,
@@ -276,10 +276,10 @@ async def _consume_dispatched() -> None:
             }
             await _dispatch_set(execution_id, dispatch_data)
 
-            DISPATCH_EVENTS_TOTAL.labels("lightningrod-gateway").inc()
-            PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
+            DISPATCH_EVENTS_TOTAL.labels("nexora-edge").inc()
+            PENDING_DISPATCH_GAUGE.labels("nexora-edge").set(await _dispatch_count())
             if device_id:
-                PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
+                PER_DEVICE_PENDING_GAUGE.labels("nexora-edge", device_id).set(
                     await _dispatch_count_for_device(device_id)
                 )
 
@@ -302,7 +302,7 @@ async def _publish_event(action: str, resource_id: str, payload: dict[str, Any])
     topic = f"{KAFKA_TOPIC_PREFIX}.{event_type}"
     event = {
         "event_type": event_type,
-        "service": "lightningrod-gateway",
+        "service": "nexora-edge",
         "resource": "execution",
         "action": action,
         "resource_id": resource_id,
@@ -394,11 +394,11 @@ async def observability_middleware(request: Request, call_next):
     elapsed = time.perf_counter() - started
     response.headers["x-trace-id"] = trace_id
     response.headers["x-correlation-id"] = correlation_id
-    REQUEST_DURATION.labels("lightningrod-gateway", request.method, request.url.path).observe(elapsed)
+    REQUEST_DURATION.labels("nexora-edge", request.method, request.url.path).observe(elapsed)
     logger.info(
         json.dumps(
             {
-                "service": "lightningrod-gateway",
+                "service": "nexora-edge",
                 "trace_id": trace_id,
                 "correlation_id": correlation_id,
                 "method": request.method,
@@ -417,7 +417,7 @@ async def observability_middleware(request: Request, call_next):
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "lightningrod-gateway"}
+    return {"status": "healthy", "service": "nexora-edge"}
 
 
 @app.get("/ready")
@@ -429,7 +429,7 @@ async def ready() -> dict[str, Any]:
     redis_status = "ok" if redis_client is not None else ("disabled" if not REDIS_ENABLED else "degraded")
     return {
         "status": "ready",
-        "service": "lightningrod-gateway",
+        "service": "nexora-edge",
         "kafka": "ok" if producer else "disabled",
         "redis": redis_status,
         "sessions": sessions,
@@ -455,7 +455,7 @@ async def register_agent_session(payload: dict[str, Any]) -> dict[str, Any]:
         "metadata": {k: v for k, v in payload.items() if k != "device_id"},
     }
     await _session_set(device_id, session)
-    AGENT_SESSIONS_GAUGE.labels("lightningrod-gateway").set(await _session_count())
+    AGENT_SESSIONS_GAUGE.labels("nexora-edge").set(await _session_count())
     logger.info("Agent session registered: device_id=%s", device_id)
     return session
 
@@ -496,7 +496,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
     for attempt in range(attempts + 1, MAX_DELIVERY_ATTEMPTS + 1):
         cached["delivery_attempts"] = attempt
         await _dispatch_set(execution_id, cached)
-        DELIVERY_ATTEMPTS_TOTAL.labels("lightningrod-gateway", device_id).inc()
+        DELIVERY_ATTEMPTS_TOTAL.labels("nexora-edge", device_id).inc()
 
         if session:
             delivered_at = time.time()
@@ -516,11 +516,11 @@ async def deliver(execution_id: str) -> dict[str, Any]:
 
             if gateway_received_at_val is not None:
                 queue_wait_s = delivered_at - float(gateway_received_at_val)
-                QUEUE_WAIT.labels("lightningrod-gateway").observe(queue_wait_s)
+                QUEUE_WAIT.labels("nexora-edge").observe(queue_wait_s)
 
             if kafka_dispatched_at_val is not None:
                 dispatch_latency_s = delivered_at - float(kafka_dispatched_at_val)
-                DISPATCH_LATENCY.labels("lightningrod-gateway").observe(dispatch_latency_s)
+                DISPATCH_LATENCY.labels("nexora-edge").observe(dispatch_latency_s)
 
                 if gateway_received_at_val is not None:
                     kafka_ingestion_s_val = float(gateway_received_at_val) - float(kafka_dispatched_at_val)
@@ -546,7 +546,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
 
             logger.info(json.dumps({
                 "event": "dispatch_delivered",
-                "service": "lightningrod-gateway",
+                "service": "nexora-edge",
                 "execution_id": execution_id,
                 "device_id": device_id,
                 "kafka_dispatched_at": kafka_dispatched_at_val,
@@ -562,9 +562,9 @@ async def deliver(execution_id: str) -> dict[str, Any]:
             }))
 
             await _dispatch_delete(execution_id)
-            PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
+            PENDING_DISPATCH_GAUGE.labels("nexora-edge").set(await _dispatch_count())
             if device_id != "unknown":
-                PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
+                PER_DEVICE_PENDING_GAUGE.labels("nexora-edge", device_id).set(
                     await _dispatch_count_for_device(device_id)
                 )
             # Full timing breakdown returned to the caller (benchmark board agent).
@@ -596,7 +596,7 @@ async def deliver(execution_id: str) -> dict[str, Any]:
             await asyncio.sleep(DELIVERY_BACKOFF_SECONDS * attempt)
 
     last_error = cached.get("delivery_last_error", "")
-    DELIVERY_FAILURES_TOTAL.labels("lightningrod-gateway", device_id).inc()
+    DELIVERY_FAILURES_TOTAL.labels("nexora-edge", device_id).inc()
 
     await _publish_event("delivery_failed", execution_id, {
         "execution_id": execution_id,
@@ -606,9 +606,9 @@ async def deliver(execution_id: str) -> dict[str, Any]:
     })
 
     await _dispatch_delete(execution_id)
-    PENDING_DISPATCH_GAUGE.labels("lightningrod-gateway").set(await _dispatch_count())
+    PENDING_DISPATCH_GAUGE.labels("nexora-edge").set(await _dispatch_count())
     if device_id != "unknown":
-        PER_DEVICE_PENDING_GAUGE.labels("lightningrod-gateway", device_id).set(
+        PER_DEVICE_PENDING_GAUGE.labels("nexora-edge", device_id).set(
             await _dispatch_count_for_device(device_id)
         )
 

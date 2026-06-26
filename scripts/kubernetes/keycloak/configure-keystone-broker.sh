@@ -5,13 +5,13 @@ set -e
 
 echo "🔗 Configuring Keystone Identity Broker in Keycloak"
 
-KC_POD=$(kubectl get pods -n stack4things-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
+KC_POD=$(kubectl get pods -n nxr-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
 KC_URL="http://localhost:8080"
 ADMIN_USER="admin"
-ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n stack4things-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
+ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n nxr-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
 
 # Get admin token
-TOKEN=$(kubectl exec -n stack4things-auth "$KC_POD" -- \
+TOKEN=$(kubectl exec -n nxr-auth "$KC_POD" -- \
     curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "username=$ADMIN_USER" \
@@ -39,8 +39,8 @@ echo "  Domain: $KEYSTONE_DOMAIN"
 echo "  Project: $KEYSTONE_PROJECT"
 
 # Create identity provider (Keystone)
-kubectl exec -n stack4things-auth "$KC_POD" -- \
-    curl -s -X POST "$KC_URL/admin/realms/stack4things/identity-provider/instances" \
+kubectl exec -n nxr-auth "$KC_POD" -- \
+    curl -s -X POST "$KC_URL/admin/realms/nxr/identity-provider/instances" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<EOF || true

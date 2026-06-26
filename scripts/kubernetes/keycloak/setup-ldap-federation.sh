@@ -5,13 +5,13 @@ set -e
 
 echo "🔗 Setting up LDAP/AD user federation in Keycloak"
 
-KC_POD=$(kubectl get pods -n stack4things-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
+KC_POD=$(kubectl get pods -n nxr-auth -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].metadata.name}')
 KC_URL="http://localhost:8080"
 ADMIN_USER="admin"
-ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n stack4things-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
+ADMIN_PASSWORD=$(kubectl get secret keycloak-secrets -n nxr-auth -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "admin")
 
 # Get admin token
-TOKEN=$(kubectl exec -n stack4things-auth "$KC_POD" -- \
+TOKEN=$(kubectl exec -n nxr-auth "$KC_POD" -- \
     curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "username=$ADMIN_USER" \
@@ -39,8 +39,8 @@ echo "  Bind DN: $LDAP_BIND_DN"
 echo "  User DN: $LDAP_USER_DN"
 
 # Create LDAP user federation
-kubectl exec -n stack4things-auth "$KC_POD" -- \
-    curl -s -X POST "$KC_URL/admin/realms/stack4things/user-federations/ldap" \
+kubectl exec -n nxr-auth "$KC_POD" -- \
+    curl -s -X POST "$KC_URL/admin/realms/nxr/user-federations/ldap" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d @- <<EOF || true
@@ -65,8 +65,8 @@ EOF
 
 # Sync users from LDAP
 echo "📝 Syncing users from LDAP..."
-kubectl exec -n stack4things-auth "$KC_POD" -- \
-    curl -s -X POST "$KC_URL/admin/realms/stack4things/user-federations/ldap/sync?action=triggerFullSync" \
+kubectl exec -n nxr-auth "$KC_POD" -- \
+    curl -s -X POST "$KC_URL/admin/realms/nxr/user-federations/ldap/sync?action=triggerFullSync" \
     -H "Authorization: Bearer $TOKEN" || true
 
 echo ""
@@ -78,5 +78,5 @@ echo "  Connection URL: $LDAP_URL"
 echo "  User DN: $LDAP_USER_DN"
 echo "  Enabled: true"
 echo ""
-echo "💡 Users from LDAP can now login to Stack4Things"
+echo "💡 Users from LDAP can now login to Nxr"
 

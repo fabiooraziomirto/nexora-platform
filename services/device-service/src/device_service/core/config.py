@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = Field(
-        default="mysql+pymysql://stack4things:stack4things@mysql:3306/stack4things",
+        default="mysql+pymysql://nxr:nxr@mysql:3306/nxr",
         description="Database connection string",
-        example="mysql+pymysql://user:password@localhost:3306/stack4things",
+        example="mysql+pymysql://user:password@localhost:3306/nxr",
     )
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
         default="kafka:9092",
         description="Kafka bootstrap servers",
     )
-    KAFKA_TOPIC_PREFIX: str = "stack4things"
+    KAFKA_TOPIC_PREFIX: str = "nxr"
     KAFKA_ENABLED: bool = True
     KAFKA_REQUIRED: bool = False
     
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         default="http://keycloak:8080",
         description="Keycloak server URL"
     )
-    KEYCLOAK_REALM: str = "stack4things"
+    KEYCLOAK_REALM: str = "nxr"
     KEYCLOAK_CLIENT_ID: str = "device-service"
     KEYCLOAK_CLIENT_SECRET: str | None = None
     
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     AUTH_ENABLED: bool = True
     AUTH_DEV_TOKEN: str = "dev-token"          # bypass when AUTH_ENABLED=false or in dev
     KEYCLOAK_JWKS_URL: str = Field(
-        default="http://keycloak:8080/realms/stack4things/protocol/openid-connect/certs",
+        default="http://keycloak:8080/realms/nxr/protocol/openid-connect/certs",
         description="Keycloak JWKS endpoint for JWT signature verification",
     )
     # Role that grants platform-operator privileges (sees topology, not device data)

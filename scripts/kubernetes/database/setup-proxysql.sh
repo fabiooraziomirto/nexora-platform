@@ -18,10 +18,10 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Create namespace if it doesn't exist
-kubectl create namespace stack4things-infrastructure --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace nxr-infrastructure --dry-run=client -o yaml | kubectl apply -f -
 
 # Check if MySQL/MariaDB is installed
-if ! kubectl get svc mariadb -n stack4things-infrastructure &> /dev/null; then
+if ! kubectl get svc mariadb -n nxr-infrastructure &> /dev/null; then
     echo "⚠️  MySQL/MariaDB not found. Installing it first..."
     ./scripts/kubernetes/database/setup-mysql.sh
 fi
@@ -34,16 +34,16 @@ if command -v helm &> /dev/null; then
     helm repo update
     
     # Get MySQL root password
-    MYSQL_ROOT_PASSWORD=$(kubectl get secret --namespace stack4things-infrastructure mariadb -o jsonpath="{.data.mariadb-root-password}" | base64 -d)
+    MYSQL_ROOT_PASSWORD=$(kubectl get secret --namespace nxr-infrastructure mariadb -o jsonpath="{.data.mariadb-root-password}" | base64 -d)
     
     # Install ProxySQL
     helm install proxysql proxysql/proxysql \
-        --namespace stack4things-infrastructure \
+        --namespace nxr-infrastructure \
         --set config.mysql_servers='
         {
           "mysql_servers": [
             {
-              "hostname": "mariadb.stack4things-infrastructure.svc.cluster.local",
+              "hostname": "mariadb.nxr-infrastructure.svc.cluster.local",
               "port": 3306,
               "weight": 1000,
               "comment": "Primary MySQL server"
@@ -54,8 +54,8 @@ if command -v helm &> /dev/null; then
         {
           "mysql_users": [
             {
-              "username": "stack4things",
-              "password": "stack4things",
+              "username": "nxr",
+              "password": "nxr",
               "default_hostgroup": 0,
               "active": 1
             }
@@ -90,16 +90,16 @@ kubectl apply -f infrastructure/kubernetes/database/proxysql/ || true
 # Verify installation
 echo ""
 echo "📋 ProxySQL Status:"
-kubectl get pods -n stack4things-infrastructure | grep proxysql
+kubectl get pods -n nxr-infrastructure | grep proxysql
 
 echo ""
 echo "✅ ProxySQL setup complete!"
 echo ""
 echo "📋 ProxySQL Connection Info:"
-echo "  Host: proxysql.stack4things-infrastructure.svc.cluster.local"
+echo "  Host: proxysql.nxr-infrastructure.svc.cluster.local"
 echo "  Port: 3306"
-echo "  Username: stack4things"
-echo "  Password: stack4things"
+echo "  Username: nxr"
+echo "  Password: nxr"
 echo ""
 echo "💡 ProxySQL automatically routes:"
 echo "  - Reads to read replicas (hostgroup 1)"

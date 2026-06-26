@@ -18,7 +18,7 @@ FAIL_RATE="${FAIL_RATE:-0.0}"
 DELAY_MS="${DELAY_MS:-0}"
 DURATION="${DURATION:-60}"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:8007}"
-EMULATOR="${EMULATOR:-services/lr-board-emulator/emulator.py}"
+EMULATOR="${EMULATOR:-services/nexora-device-emulator/emulator.py}"
 
 TIMESTAMP=$(date +%Y%m%dT%H%M%S)
 RESULTS_DIR="results"

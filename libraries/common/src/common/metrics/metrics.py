@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 class Metrics:
     """Prometheus metrics manager."""
 
-    def __init__(self, prefix: str = "stack4things"):
+    def __init__(self, prefix: str = "nxr"):
         self.prefix = prefix
         self._counters: Dict[str, Counter] = {}
         self._histograms: Dict[str, Histogram] = {}
@@ -119,7 +119,7 @@ class Metrics:
 _metrics: Optional[Metrics] = None
 
 
-def get_metrics(prefix: str = "stack4things") -> Metrics:
+def get_metrics(prefix: str = "nxr") -> Metrics:
     """Get or create global metrics instance."""
     global _metrics
     

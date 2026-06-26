@@ -2,14 +2,14 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: alertmanager-config
-  namespace: stack4things-monitoring
+  namespace: nxr-monitoring
 data:
   alertmanager.yml: |
     global:
       resolve_timeout: 5m
       # Configure SMTP for email notifications
       # smtp_smarthost: 'smtp.example.com:587'
-      # smtp_from: 'alerts@stack4things.io'
+      # smtp_from: 'alerts@nxr.io'
     
     route:
       group_by: ['alertname', 'cluster', 'service']
@@ -36,7 +36,7 @@ data:
           - url: 'http://localhost:5001/webhook'
             send_resolved: true
         # email_configs:
-        #   - to: 'ops-team@stack4things.io'
+        #   - to: 'ops-team@nxr.io'
         #     subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
       
       - name: 'warning-alerts'

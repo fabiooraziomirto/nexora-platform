@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Nexora is a cloud-native IoT device management platform built as Python/FastAPI microservices. It is a rewrite/replacement of a legacy Stack4Things/OpenStack-based system, preserving wire compatibility with legacy clients where needed. All services are Docker/Kubernetes native.
+Nexora is a cloud-native IoT device management platform built as Python/FastAPI microservices. It is a rewrite/replacement of a legacy Nxr/OpenStack-based system, preserving wire compatibility with legacy clients where needed. All services are Docker/Kubernetes native.
 
 ## Commands
 
@@ -41,7 +41,7 @@ bash scripts/test-all.sh                    # full local baseline (structure + s
 bash scripts/postalpha-validation.sh        # post-alpha checklist
 bash scripts/integration-cross-service.sh   # cross-service flow
 python3 scripts/contract-tests-api.py       # API contract assertions
-bash scripts/lr-emulator-e2e.sh             # LightningRod edge E2E
+bash scripts/nexora-device-emulator-e2e.sh             # NexoraEdge edge E2E
 bash scripts/chaos-drill.sh                 # chaos/fault injection
 bash scripts/perf-baseline.sh               # performance baseline
 ```
@@ -67,8 +67,8 @@ alembic history
 | `dns-service` | 8004 | DNS record lifecycle |
 | `webservice-service` | 8005 | Endpoint publication metadata |
 | `fleet-service` | 8006 | Fleet grouping metadata |
-| `lightningrod-gateway` (edge-gateway) | 8007 | Kafka consumer, edge agent sessions |
-| `iotronic-ui` | varies | Legacy iotronic-ui adapter |
+| `nexora-edge` (edge-gateway) | 8007 | Kafka consumer, edge agent sessions |
+| `nexora-dashboard` | varies | Legacy nexora-dashboard adapter |
 | `legacy-keystone` | 15000 | Optional OpenStack Keystone compat |
 | `legacy-horizon` | 18089 | Optional Horizon dashboard compat |
 
@@ -84,7 +84,7 @@ There are two patterns in use across services — be aware of which one you're w
 
 ### Event flow
 
-Write operations follow: API request → persist to MySQL → publish Kafka event. Kafka topic names follow `{KAFKA_TOPIC_PREFIX}.{service}.{action}` (default prefix: `stack4things`). The `execution-service` additionally implements a dispatch pipeline with explicit state machine transitions (`queued → dispatched → running → succeeded/failed/timeout/cancelled`).
+Write operations follow: API request → persist to MySQL → publish Kafka event. Kafka topic names follow `{KAFKA_TOPIC_PREFIX}.{service}.{action}` (default prefix: `nxr`). The `execution-service` additionally implements a dispatch pipeline with explicit state machine transitions (`queued → dispatched → running → succeeded/failed/timeout/cancelled`).
 
 ### Shared libraries
 
@@ -107,7 +107,7 @@ Services default to `sqlite:///./service_name.db` when `DATABASE_URL` is unset �
 
 ### Legacy compatibility
 
-`legacy-keystone` and `legacy-horizon` services provide OpenStack API compatibility. The `iotronic-ui` service is a FastAPI adapter for the legacy iotronic dashboard. `plugin-service` also responds on `/api/v2/plugins` (legacy name) in addition to `/api/v2/modules`.
+`legacy-keystone` and `legacy-horizon` services provide OpenStack API compatibility. The `nexora-dashboard` service is a FastAPI adapter for the legacy nexora dashboard. `plugin-service` also responds on `/api/v2/plugins` (legacy name) in addition to `/api/v2/modules`.
 
 ## Release discipline
 

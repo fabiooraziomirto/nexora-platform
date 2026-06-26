@@ -1,9 +1,9 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xstacks.database.stack4things.io
+  name: xstacks.database.nxr.io
 spec:
-  group: database.stack4things.io
+  group: database.nxr.io
   names:
     kind: XStackDatabase
     plural: xstacks
@@ -40,9 +40,9 @@ spec:
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xstacks.cache.stack4things.io
+  name: xstacks.cache.nxr.io
 spec:
-  group: cache.stack4things.io
+  group: cache.nxr.io
   names:
     kind: XStackCache
     plural: xstacks
@@ -76,9 +76,9 @@ spec:
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xstacks.messaging.stack4things.io
+  name: xstacks.messaging.nxr.io
 spec:
-  group: messaging.stack4things.io
+  group: messaging.nxr.io
   names:
     kind: XStackMessaging
     plural: xstacks
@@ -115,9 +115,9 @@ spec:
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xstacks.storage.stack4things.io
+  name: xstacks.storage.nxr.io
 spec:
-  group: storage.stack4things.io
+  group: storage.nxr.io
   names:
     kind: XStackStorage
     plural: xstacks
@@ -154,9 +154,9 @@ spec:
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xstacks.loadbalancer.stack4things.io
+  name: xstacks.loadbalancer.nxr.io
 spec:
-  group: loadbalancer.stack4things.io
+  group: loadbalancer.nxr.io
   names:
     kind: XStackLoadBalancer
     plural: xstacks

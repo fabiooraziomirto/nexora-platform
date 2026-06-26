@@ -8,7 +8,7 @@
 
 ## Context
 
-Stack4Things / IoTronic assumes that the platform operator and the physical device owner are the same entity — an OpenStack project tenant. This assumption breaks down in the smart building scenario, where a single infrastructure (managed by a building operator) hosts devices owned by multiple independent parties: facility companies, security contractors, individual tenants.
+Nxr / IoTronic assumes that the platform operator and the physical device owner are the same entity — an OpenStack project tenant. This assumption breaks down in the smart building scenario, where a single infrastructure (managed by a building operator) hosts devices owned by multiple independent parties: facility companies, security contractors, individual tenants.
 
 Concretely:
 
@@ -103,7 +103,7 @@ The owner can query `GET /api/v2/devices/{id}/privacy/events` to see the full hi
 
 ## Roles
 
-Three distinct roles replace the single "project member" model of Stack4Things:
+Three distinct roles replace the single "project member" model of Nxr:
 
 | Role | Keycloak role name | Access |
 |---|---|---|
@@ -131,7 +131,7 @@ Three distinct roles replace the single "project member" model of Stack4Things:
 
 **Positive**
 - Physical device owner and platform operator are distinct, enforceable identities.
-- Device cannot be used until an authenticated human approves it — eliminates the "device appears and is automatically operational" pattern of Stack4Things.
+- Device cannot be used until an authenticated human approves it — eliminates the "device appears and is automatically operational" pattern of Nxr.
 - Privacy is opt-in and revocable — defensible under GDPR Articles 7, 25.
 - Audit trail gives owners visibility into who did what with their device — defensible under GDPR Article 15.
 - The pairing protocol (RFC 8628) is an IETF standard, independently reviewable.

@@ -9,7 +9,7 @@ The legacy IoTronic stack uses WAMP/Crossbar.io for cloud-to-edge communication
 and oslo.messaging RPC for internal coordination.  These transports are tightly
 coupled to OpenStack and are difficult to operate outside that ecosystem.
 
-Stack4Things v2.0 needs a cloud-to-edge command pipeline that is:
+Nxr v2.0 needs a cloud-to-edge command pipeline that is:
 - Decoupled from OpenStack infrastructure
 - Observable (metrics, tracing, audit logs)
 - Resilient to partial outages (Kafka down, agent offline)
@@ -19,7 +19,7 @@ Stack4Things v2.0 needs a cloud-to-edge command pipeline that is:
 1. **Execution lifecycle** is managed by `execution-service` via REST
    (create → dispatch → callback).
 2. **Dispatch events** are published to Kafka topic
-   `stack4things.execution.dispatched`.
+   `nxr.execution.dispatched`.
 3. **Lightningrod Gateway** consumes dispatch events from Kafka, caches them,
    and delivers them to edge agents via the `/deliver` endpoint.
 4. **Edge agents** send results back via `POST /executions/{id}/callback`

@@ -6,7 +6,7 @@ set -e
 echo "🚪 Configuring API Gateway for dual authentication"
 
 # Check if Kong is installed
-if ! kubectl get deployment kong -n stack4things &> /dev/null; then
+if ! kubectl get deployment kong -n nxr &> /dev/null; then
     echo "⚠️  Kong API Gateway not found. Installing..."
     # TODO: Add Kong installation script
     echo "Please install Kong first"

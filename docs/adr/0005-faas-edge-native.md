@@ -53,7 +53,7 @@ execution-service                              └─ permissions: WasiConfig
      POST /api/v2/functions/{id}/invoke
      POST /api/v2/devices/{id}/functions/{id}/invoke
 
-lightningrod-gateway
+nexora-edge
   └─ no changes — passes enriched dispatch payload transparently
 ```
 
@@ -173,7 +173,7 @@ ownership boundaries native to the device identity model.
 - Functions run on devices with <1 MB available RAM (WASM overhead)
 - Cross-architecture: same .wasm runs on x86_64 and ARM64 without recompilation
 - Immutable, content-addressed artifacts with SHA256 integrity verification
-- Zero changes to lightningrod-gateway (delivery path unchanged)
+- Zero changes to nexora-edge (delivery path unchanged)
 - FaaS executions appear in full audit/history alongside command executions
 
 ### Negative / Limitations

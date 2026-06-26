@@ -12,7 +12,7 @@ spec:
     name: mysql-connection-secret
     namespace: crossplane-system
   compositeTypeRef:
-    apiVersion: database.stack4things.io/v1alpha1
+    apiVersion: database.nxr.io/v1alpha1
     kind: XDatabase
   resources:
     - name: cloudsql-instance
