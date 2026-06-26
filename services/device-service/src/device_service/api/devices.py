@@ -1,3 +1,4 @@
+import hmac
 import time
 from datetime import datetime, timezone
 from uuid import UUID
@@ -61,7 +62,7 @@ def _validate_bootstrap_token(header_value: str) -> None:
     if not entry:
         raise HTTPException(status_code=401, detail="Unknown bootstrap token")
     expected_secret, expiry = entry
-    if secret != expected_secret:
+    if not hmac.compare_digest(secret, expected_secret):
         raise HTTPException(status_code=401, detail="Invalid bootstrap token")
     if _time.time() > expiry:
         raise HTTPException(status_code=401, detail="Bootstrap token has expired")

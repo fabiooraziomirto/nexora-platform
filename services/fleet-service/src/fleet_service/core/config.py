@@ -3,7 +3,7 @@ import os
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./fleet_service.db")
 DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
 
-AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 AUTH_DEV_TOKEN = os.getenv("AUTH_DEV_TOKEN", "dev-token")
 AUTH_DEV_BYPASS_ENABLED = os.getenv("AUTH_DEV_BYPASS_ENABLED", "false").lower() == "true"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")

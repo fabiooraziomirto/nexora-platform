@@ -6,12 +6,15 @@ from typing import Any
 from sqlalchemy import Column, String, Integer, Text, DateTime
 
 from execution_service.core.database import Base
+import hmac
+
 from execution_service.core.config import (
     VALID_STATUSES,
     ACTIVE_STATUSES,
     _ALLOWED_TRANSITIONS,
     _CALLBACK_ALLOWED_FIELDS,
     CALLBACK_REPLAY_REQUIRED,
+    AGENT_CALLBACK_SECRET,
 )
 
 logger = logging.getLogger("execution-service")
@@ -102,10 +105,19 @@ def validate_callback_payload(payload: dict[str, Any]) -> str | None:
 
 
 def check_and_store_callback_key(db, execution: Execution, key: str | None) -> str | None:
-    if not CALLBACK_REPLAY_REQUIRED:
+    if not AGENT_CALLBACK_SECRET:
         return None
     if not key:
         return "callback_key is required"
+    expected = hmac.new(
+        AGENT_CALLBACK_SECRET.encode(),
+        execution.id.encode(),
+        digestmod="sha256",
+    ).hexdigest()
+    if not hmac.compare_digest(key, expected):
+        return "invalid callback_key"
+    if CALLBACK_REPLAY_REQUIRED and getattr(execution, "callback_received", False):
+        return "callback already received"
     return None
 
 

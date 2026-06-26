@@ -15,6 +15,7 @@ Dispatch flow:
 Port: RUNTIME_PORT (default 9000) — loopback only, not exposed externally.
 """
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -22,10 +23,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import PlainTextResponse
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -37,10 +39,20 @@ INSTALL_DIR = Path(os.getenv("FUNCTION_INSTALL_DIR", "/var/nexora/functions"))
 RUNTIME_PORT = int(os.getenv("RUNTIME_PORT", "9000"))
 DOWNLOAD_TIMEOUT_SECONDS = float(os.getenv("DOWNLOAD_TIMEOUT_SECONDS", "30"))
 MAX_MEMORY_MB_DEFAULT = int(os.getenv("MAX_MEMORY_MB_DEFAULT", "64"))
+RUNTIME_API_KEY = os.getenv("RUNTIME_API_KEY", "")
+ARTIFACT_ALLOWED_SCHEMES = {"https"}
+_ARTIFACT_SCHEME_WARN_LOGGED = False
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Nexora Function Runtime", version="0.1.0")
+
+
+async def _require_api_key(x_runtime_api_key: str = Header(default="")) -> None:
+    if not RUNTIME_API_KEY:
+        return
+    if not hmac.compare_digest(x_runtime_api_key, RUNTIME_API_KEY):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid runtime api key")
 
 # In-memory registry of installed functions.
 # Persisted to INSTALL_DIR/<function_id>.meta.json on install.
@@ -118,7 +130,7 @@ async def get_function_status(function_id: str) -> dict[str, Any]:
     }
 
 
-@app.post("/runtime/functions/install", status_code=201)
+@app.post("/runtime/functions/install", status_code=201, dependencies=[Depends(_require_api_key)])
 async def install_function(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Download a WASM artifact, verify its SHA256 checksum, and persist it.
@@ -144,10 +156,13 @@ async def install_function(payload: dict[str, Any]) -> dict[str, Any]:
 
     if not artifact_uri:
         raise HTTPException(status_code=400, detail="artifact_uri is required")
+    parsed = urlparse(artifact_uri)
+    if parsed.scheme not in ARTIFACT_ALLOWED_SCHEMES:
+        raise HTTPException(status_code=400, detail=f"artifact_uri scheme must be one of: {ARTIFACT_ALLOWED_SCHEMES}")
 
-    # Download artifact
+    # Download artifact (no redirects to prevent redirect-based SSRF)
     try:
-        resp = httpx.get(artifact_uri, timeout=DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=True)
+        resp = httpx.get(artifact_uri, timeout=DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=False)
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"artifact download failed: {exc}") from exc
@@ -199,7 +214,7 @@ async def install_function(payload: dict[str, Any]) -> dict[str, Any]:
     return meta
 
 
-@app.post("/runtime/functions/{function_id}/invoke")
+@app.post("/runtime/functions/{function_id}/invoke", dependencies=[Depends(_require_api_key)])
 async def invoke_function(function_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """
     Execute a WASM/WASI function with the provided args.
@@ -247,7 +262,7 @@ async def invoke_function(function_id: str, payload: dict[str, Any]) -> dict[str
     return {**result, "duration_seconds": duration, "function_id": function_id}
 
 
-@app.delete("/runtime/functions/{function_id}", status_code=204)
+@app.delete("/runtime/functions/{function_id}", status_code=204, dependencies=[Depends(_require_api_key)])
 async def remove_function(function_id: str) -> None:
     if function_id not in _installed:
         raise HTTPException(status_code=404, detail="function not installed")

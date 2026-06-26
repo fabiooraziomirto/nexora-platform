@@ -14,6 +14,9 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+import jwt as _pyjwt
+from jwt import PyJWKClient as _PyJWKClient
+
 import aiokafka
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -68,7 +71,32 @@ async def shutdown() -> None:
         _events.producer = None
 
 
+_jwks_client: "_PyJWKClient | None" = None
+
+
+def _get_jwks_client() -> "_PyJWKClient | None":
+    global _jwks_client
+    if _jwks_client is None and KEYCLOAK_ISSUER:
+        jwks_url = KEYCLOAK_ISSUER.rstrip("/") + "/protocol/openid-connect/certs"
+        _jwks_client = _PyJWKClient(jwks_url, cache_keys=True)
+    return _jwks_client
+
+
 def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
+    client = _get_jwks_client()
+    if client:
+        try:
+            signing_key = client.get_signing_key_from_jwt(token)
+            return _pyjwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
+                options={"verify_exp": True},
+                issuer=KEYCLOAK_ISSUER or None,
+            )
+        except Exception:
+            return None
+    # Dev fallback: decode without signature verification (only when KEYCLOAK_ISSUER unset)
     try:
         parts = token.split(".")
         if len(parts) != 3:
