@@ -16,3 +16,6 @@ KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
 KAFKA_REQUIRED = os.getenv("KAFKA_REQUIRED", "false").lower() == "true"
 KAFKA_RETRY_ATTEMPTS = int(os.getenv("KAFKA_RETRY_ATTEMPTS", "3"))
 KAFKA_RETRY_DELAY_SECONDS = float(os.getenv("KAFKA_RETRY_DELAY_SECONDS", "0.5"))
+
+# Upstream services
+DEVICE_SERVICE_URL = os.getenv("DEVICE_SERVICE_URL", "http://device-service:8000")
