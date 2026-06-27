@@ -22,6 +22,7 @@ interface AuthContextValue {
 const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL ?? ''
 const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM ?? 'nxr'
 const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? 'nexora-ui'
+const DEV_AUTH_ENABLED = (import.meta.env.VITE_DEV_AUTH_ENABLED ?? 'true') !== 'false'
 const STORAGE_KEY = 'nexora.auth'
 const VERIFIER_KEY = 'nexora.pkce.verifier'
 
@@ -56,6 +57,35 @@ function authBase() {
 
 function isConfigured() {
   return Boolean(KEYCLOAK_URL && KEYCLOAK_REALM && KEYCLOAK_CLIENT_ID)
+}
+
+function isDevAuthConfigured() {
+  return !isConfigured() && DEV_AUTH_ENABLED
+}
+
+function tokenMatchesConfiguredIssuer(token: string) {
+  if (!isConfigured()) return true
+  try {
+    const claims = decodeJwt(token)
+    return claims.iss === `${KEYCLOAK_URL.replace(/\/$/, '')}/realms/${KEYCLOAK_REALM}`
+  } catch {
+    return false
+  }
+}
+
+function devJwt() {
+  const now = Math.floor(Date.now() / 1000)
+  const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: 'none', typ: 'JWT' })))
+  const payload = b64url(new TextEncoder().encode(JSON.stringify({
+    sub: 'dev-admin',
+    preferred_username: 'admin',
+    name: 'Development Admin',
+    groups: ['/tenant-dev'],
+    realm_access: { roles: ['platform-admin', 'tenant-admin', 'operator'] },
+    iat: now,
+    exp: now + 86400,
+  })))
+  return `${header}.${payload}.`
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -107,6 +137,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login() {
+    if (isDevAuthConfigured()) {
+      persist(devJwt(), null)
+      window.location.assign('/dashboard')
+      return
+    }
     if (!isConfigured()) return
     const verifier = randomVerifier()
     const challenge = b64url(await sha256(verifier))
@@ -153,8 +188,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const saved = localStorage.getItem(STORAGE_KEY)
         if (saved) {
           const parsed = JSON.parse(saved)
-          setToken(parsed.token ?? null)
-          setRefreshToken(parsed.refreshToken ?? null)
+          const savedToken = parsed.token ?? null
+          if (savedToken && tokenMatchesConfiguredIssuer(savedToken)) {
+            setToken(savedToken)
+            setRefreshToken(parsed.refreshToken ?? null)
+          } else {
+            localStorage.removeItem(STORAGE_KEY)
+          }
         }
       } finally {
         setLoading(false)

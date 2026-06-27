@@ -1,0 +1,77 @@
+{
+  "realm": "nxr",
+  "enabled": true,
+  "displayName": "Nexora",
+  "loginTheme": "nexora",
+  "roles": {
+    "realm": [
+      { "name": "platform-admin" },
+      { "name": "tenant-admin" },
+      { "name": "operator" },
+      { "name": "viewer" }
+    ]
+  },
+  "groups": [
+    { "name": "research-lab-a" },
+    { "name": "public-agency-a" }
+  ],
+  "clients": [
+    {
+      "clientId": "nexora-ui",
+      "name": "Nexora UI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://127.0.0.1:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "nexora-api",
+      "name": "Nexora API",
+      "enabled": true,
+      "bearerOnly": true
+    }
+  ],
+  "users": [
+    {
+      "username": "pilot-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": ["/research-lab-a"],
+      "credentials": [
+        { "type": "password", "value": "ChangeMe-Admin-123", "temporary": false }
+      ],
+      "realmRoles": ["tenant-admin", "operator", "viewer"]
+    },
+    {
+      "username": "pilot-viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": ["/research-lab-a"],
+      "credentials": [
+        { "type": "password", "value": "ChangeMe-Viewer-123", "temporary": false }
+      ],
+      "realmRoles": ["viewer"]
+    },
+    {
+      "username": "platform-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": ["/public-agency-a"],
+      "credentials": [
+        { "type": "password", "value": "ChangeMe-Platform-123", "temporary": false }
+      ],
+      "realmRoles": ["platform-admin", "tenant-admin", "operator", "viewer"]
+    }
+  ]
+}
