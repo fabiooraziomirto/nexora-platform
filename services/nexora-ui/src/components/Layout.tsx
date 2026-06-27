@@ -97,8 +97,12 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-60 shrink-0 bg-slate-800 flex flex-col">
         <div className="px-4 py-4 border-b border-slate-700">
-          <div className="text-white font-semibold text-base tracking-tight">Nexora</div>
-          <div className="text-slate-400 text-xs mt-0.5">IoT Platform</div>
+          <img
+            src="/nexora-logo.svg"
+            alt="Nexora"
+            className="h-6 w-auto"
+          />
+          <div className="text-slate-400 text-xs mt-1">IoT Platform</div>
         </div>
 
         <nav className="flex-1 py-3">

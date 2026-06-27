@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="Nexora">
+  <title>Nexora (monochrome)</title>
+  <desc>Single-color version. Inherits the surrounding text color via currentColor.</desc>
+  <circle cx="50" cy="50" r="33" fill="none" stroke="currentColor" stroke-width="4"/>
+  <circle cx="50" cy="50" r="14" fill="currentColor"/>
+  <circle cx="50" cy="17" r="6.5" fill="currentColor"/>
+  <circle cx="21" cy="67" r="5.5" fill="currentColor"/>
+  <circle cx="79" cy="67" r="5.5" fill="currentColor"/>
+</svg>

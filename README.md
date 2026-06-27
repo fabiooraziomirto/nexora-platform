@@ -1,4 +1,4 @@
-![Nexora Logo](nexora.png)
+![Nexora Logo](docs/brand/nexora-logo.svg)
 
 # Nexora
 

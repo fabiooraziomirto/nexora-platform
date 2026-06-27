@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100" width="340" height="100" role="img" aria-label="Nexora">
+  <title>Nexora logo</title>
+  <desc>Orbit mark followed by the nexora wordmark.</desc>
+  <g transform="translate(8,8) scale(0.84)">
+    <circle cx="50" cy="50" r="33" fill="none" stroke="#4F46E5" stroke-width="4"/>
+    <circle cx="50" cy="50" r="14" fill="#4F46E5"/>
+    <circle cx="50" cy="17" r="6.5" fill="#14B8A6"/>
+    <circle cx="21" cy="67" r="5.5" fill="#14B8A6"/>
+    <circle cx="79" cy="67" r="5.5" fill="#14B8A6"/>
+  </g>
+  <text x="104" y="63" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif" font-size="46" font-weight="500" letter-spacing="0.5" fill="#1B1B2E">nexora</text>
+</svg>
