@@ -8,6 +8,11 @@ from sqlalchemy import func, select
 from common.audit import emit_audit_event
 from common.auth.context import auth_settings_from_env, current_user_from_request
 
+from plugin_service.core.config import (
+    PLUGIN_SECURITY_MAX_CRITICAL,
+    PLUGIN_SECURITY_MAX_HIGH,
+    PLUGIN_SECURITY_SCAN_REQUIRED,
+)
 from plugin_service.core.database import SessionLocal, engine
 from plugin_service.models.plugin import Plugin
 
@@ -20,6 +25,7 @@ _STATUS_TRANSITIONS = {
     "active": {"deprecated"},
     "deprecated": {"archived"},
 }
+_VALID_SCAN_STATUSES = {"pending", "passed", "failed"}
 
 
 def _plugin_to_dict(p: Plugin) -> dict[str, Any]:
@@ -39,11 +45,38 @@ def _plugin_to_dict(p: Plugin) -> dict[str, Any]:
         "required_capabilities": json.loads(p.required_capabilities) if p.required_capabilities else [],
         "input_schema": json.loads(p.input_schema) if p.input_schema else None,
         "env_schema": json.loads(p.env_schema) if p.env_schema else None,
+        "sbom_uri": p.sbom_uri,
+        "security_scan_tool": p.security_scan_tool,
+        "security_scan_status": p.security_scan_status or "pending",
+        "security_scan_summary": json.loads(p.security_scan_summary) if p.security_scan_summary else None,
+        "scanned_at": p.scanned_at.isoformat() if p.scanned_at else None,
         "owner_id": p.owner_id,
         "tenant_id": p.tenant_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
+
+
+def _normalize_severity_counts(payload: dict[str, Any]) -> dict[str, int]:
+    raw = payload.get("vulnerability_counts") or {}
+    counts = {
+        "critical": int(raw.get("critical", 0) or 0),
+        "high": int(raw.get("high", 0) or 0),
+        "medium": int(raw.get("medium", 0) or 0),
+        "low": int(raw.get("low", 0) or 0),
+        "unknown": int(raw.get("unknown", 0) or 0),
+    }
+    if any(v < 0 for v in counts.values()):
+        raise HTTPException(status_code=400, detail="vulnerability counts must be >= 0")
+    return counts
+
+
+def _scan_verdict(counts: dict[str, int]) -> str:
+    if counts["critical"] > PLUGIN_SECURITY_MAX_CRITICAL:
+        return "failed"
+    if counts["high"] > PLUGIN_SECURITY_MAX_HIGH:
+        return "failed"
+    return "passed"
 
 
 @router.get("/api/v2/plugins")
@@ -153,6 +186,8 @@ async def update_plugin(plugin_id: str, payload: dict[str, Any], request: Reques
         for json_field in ("permissions", "required_capabilities", "input_schema", "env_schema"):
             if json_field in payload:
                 setattr(plugin, json_field, json.dumps(payload[json_field]))
+        if "sbom_uri" in payload:
+            plugin.sbom_uri = payload.get("sbom_uri")
         plugin.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(plugin)
@@ -213,6 +248,11 @@ async def activate_plugin(plugin_id: str, request: Request) -> dict[str, Any]:
                 raise HTTPException(status_code=400, detail="artifact_uri required to activate a function")
             if not plugin.entrypoint:
                 raise HTTPException(status_code=400, detail="entrypoint required to activate a function")
+            if PLUGIN_SECURITY_SCAN_REQUIRED:
+                if not plugin.sbom_uri:
+                    raise HTTPException(status_code=400, detail="sbom_uri required before activating a function")
+                if (plugin.security_scan_status or "pending") != "passed":
+                    raise HTTPException(status_code=409, detail="security scan must pass before activating a function")
         plugin.status = "active"
         plugin.updated_at = datetime.now(timezone.utc)
         db.commit()
@@ -273,6 +313,55 @@ async def get_plugin_schema(plugin_id: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="plugin not found")
     schema = json.loads(plugin.input_schema) if plugin.input_schema else {}
     return {"plugin_id": plugin_id, "input_schema": schema}
+
+
+@router.post("/api/v2/plugins/{plugin_id}/security/scan")
+async def record_plugin_security_scan(plugin_id: str, payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Record SBOM + vulnerability scan result and compute deployment verdict."""
+    user = current_user_from_request(request)
+    scan_tool = str(payload.get("scan_tool") or "unknown").strip()
+    requested_status = payload.get("status")
+    counts = _normalize_severity_counts(payload)
+    status = _scan_verdict(counts) if not requested_status else str(requested_status).strip().lower()
+    if status not in _VALID_SCAN_STATUSES:
+        raise HTTPException(status_code=400, detail="status must be pending|passed|failed")
+
+    with SessionLocal() as db:
+        plugin = db.get(Plugin, plugin_id)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="plugin not found")
+        if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
+            raise HTTPException(status_code=404, detail="plugin not found")
+
+        if payload.get("sbom_uri"):
+            plugin.sbom_uri = str(payload.get("sbom_uri"))
+        plugin.security_scan_tool = scan_tool
+        plugin.security_scan_status = status
+        plugin.security_scan_summary = json.dumps({
+            "vulnerability_counts": counts,
+            "max_allowed": {
+                "critical": PLUGIN_SECURITY_MAX_CRITICAL,
+                "high": PLUGIN_SECURITY_MAX_HIGH,
+            },
+            "verdict": status,
+        })
+        plugin.scanned_at = datetime.now(timezone.utc)
+        plugin.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(plugin)
+
+    emit_audit_event(
+        service="plugin-service",
+        action="plugin.security_scanned",
+        resource_type="plugin",
+        resource_id=plugin.id,
+        tenant_id=plugin.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
+    return _plugin_to_dict(plugin)
 
 
 @router.get("/ready")

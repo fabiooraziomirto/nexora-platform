@@ -22,9 +22,21 @@ function requestHeaders(json = false): HeadersInit {
   return headers
 }
 
+async function buildError(r: Response, url?: string): Promise<Error> {
+  try {
+    const body = await r.json() as { detail?: string }
+    if (body?.detail) {
+      return new Error(`${r.status} ${r.statusText}${url ? ` - ${url}` : ''}: ${body.detail}`)
+    }
+  } catch {
+    // fall back to status-only error
+  }
+  return new Error(`${r.status} ${r.statusText}${url ? ` - ${url}` : ''}`)
+}
+
 async function get<T>(url: string): Promise<T> {
   const r = await fetch(url, { headers: requestHeaders() })
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} — ${url}`)
+  if (!r.ok) throw await buildError(r, url)
   return r.json() as Promise<T>
 }
 
@@ -34,7 +46,7 @@ async function post<T>(url: string, body: unknown): Promise<T> {
     headers: requestHeaders(true),
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+  if (!r.ok) throw await buildError(r, url)
   return r.json() as Promise<T>
 }
 
@@ -44,7 +56,7 @@ async function postVoid(url: string, body: unknown): Promise<void> {
     headers: requestHeaders(true),
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+  if (!r.ok) throw await buildError(r, url)
 }
 
 async function patch<T>(url: string, body: unknown): Promise<T> {
@@ -53,13 +65,13 @@ async function patch<T>(url: string, body: unknown): Promise<T> {
     headers: requestHeaders(true),
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+  if (!r.ok) throw await buildError(r, url)
   return r.json() as Promise<T>
 }
 
 async function del(url: string): Promise<void> {
   const r = await fetch(url, { method: 'DELETE', headers: requestHeaders() })
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+  if (!r.ok) throw await buildError(r, url)
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -161,6 +173,15 @@ export interface Plugin {
   memory_limit_mb: number
   permissions: string[]
   required_capabilities: string[]
+  sbom_uri?: string | null
+  security_scan_tool?: string | null
+  security_scan_status?: 'pending' | 'passed' | 'failed' | null
+  security_scan_summary?: {
+    vulnerability_counts?: { critical?: number; high?: number; medium?: number; low?: number; unknown?: number }
+    max_allowed?: { critical?: number; high?: number }
+    verdict?: string
+  } | null
+  scanned_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -178,6 +199,18 @@ export interface PluginCreate {
   timeout_seconds?: number
   memory_limit_mb?: number
   permissions?: string[]
+}
+
+export interface PluginSecurityScanRequest {
+  scan_tool: string
+  sbom_uri: string
+  vulnerability_counts: {
+    critical: number
+    high: number
+    medium: number
+    low: number
+    unknown?: number
+  }
 }
 
 export interface Execution {
@@ -425,6 +458,9 @@ export const api = {
 
   activatePlugin: (id: string) =>
     patch<Plugin>(`${PLUGIN_BASE}/api/v2/plugins/${id}/activate`, {}),
+
+  scanPluginSecurity: (id: string, body: PluginSecurityScanRequest) =>
+    post<Plugin>(`${PLUGIN_BASE}/api/v2/plugins/${id}/security/scan`, body),
 
   deprecatePlugin: (id: string) =>
     patch<Plugin>(`${PLUGIN_BASE}/api/v2/plugins/${id}/deprecate`, {}),

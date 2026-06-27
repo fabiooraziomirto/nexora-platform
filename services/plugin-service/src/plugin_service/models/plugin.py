@@ -25,6 +25,11 @@ class Plugin(Base):
     required_capabilities = Column(Text, nullable=True)     # JSON list: ["wasm_wasi"]
     env_schema = Column(Text, nullable=True)                # JSON Schema for env vars
     input_schema = Column(Text, nullable=True)              # JSON Schema for function args
+    sbom_uri = Column(String(1024), nullable=True)          # URI to CycloneDX/SPDX SBOM
+    security_scan_tool = Column(String(64), nullable=True)  # e.g. grype, trivy
+    security_scan_status = Column(String(30), nullable=True, default="pending")
+    security_scan_summary = Column(Text, nullable=True)      # JSON summary (counts/verdict)
+    scanned_at = Column(DateTime, nullable=True)
     # draft → active → deprecated | archived
     status = Column(String(30), nullable=False, default="draft")
     owner_id = Column(String(64), nullable=True, index=True)

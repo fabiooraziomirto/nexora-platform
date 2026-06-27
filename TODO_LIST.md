@@ -136,6 +136,7 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 - [x] Runbook Automation v1 (execution-service): `docs/go-to-market/14-runbook-automation-v1.md`
 - [x] Drift Detection v1 (execution-service): `docs/go-to-market/15-drift-detection-v1.md`
 - [x] SLO Assistant v1 (device-service): `docs/go-to-market/16-slo-assistant-v1.md`
+- [x] Plugin SBOM/Security Scan v1 (plugin-service): `docs/go-to-market/17-plugin-sbom-security-scan-v1.md`
 
 ---
 

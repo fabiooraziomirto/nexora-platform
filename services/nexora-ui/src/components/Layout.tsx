@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ChevronDown, LayoutDashboard, Monitor, BarChart2, AlertCircle, Layers, Package, Terminal, Network, Globe, BrainCircuit, Gauge, Code2, ClipboardList, Wand2, LogOut } from 'lucide-react'
+import { ChevronDown, LayoutDashboard, Monitor, BarChart2, AlertCircle, Layers, Package, Terminal, Network, Globe, BrainCircuit, Gauge, Code2, ClipboardList, Wand2, LogOut, Sparkles } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 type NavItem = {
@@ -95,17 +95,24 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen w-full">
       {/* Sidebar */}
-      <aside className="w-60 shrink-0 bg-slate-800 flex flex-col">
-        <div className="px-4 py-4 border-b border-slate-700">
+      <aside className="relative w-64 shrink-0 overflow-hidden border-r border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col">
+        <div className="pointer-events-none absolute -top-20 -left-16 h-40 w-40 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute top-1/3 -right-16 h-44 w-44 rounded-full bg-indigo-500/20 blur-3xl" />
+
+        <div className="relative px-4 py-5 border-b border-slate-800/90">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
+            <Sparkles size={11} />
+            Control Plane
+          </div>
           <img
-            src="/nexora-logo.svg"
+            src="/nexora-logo-reversed.svg"
             alt="Nexora"
-            className="h-6 w-auto"
+            className="mt-3 h-6 w-auto"
           />
-          <div className="text-slate-400 text-xs mt-1">IoT Platform</div>
+          <div className="text-slate-300/80 text-xs mt-1">Edge orchestration platform</div>
         </div>
 
-        <nav className="flex-1 py-3">
+        <nav className="relative flex-1 py-3">
           {NAV_SECTIONS.map((section) => {
             const isOpen = openSections[section.id]
             const hasActiveItem = activeSectionIds.includes(section.id)
@@ -113,8 +120,10 @@ export default function Layout() {
               <div key={section.id} className="mb-2">
                 <button
                   onClick={() => toggleSection(section.id)}
-                  className={`w-full flex items-center justify-between px-4 py-2 text-xs uppercase tracking-wide transition-colors ${
-                    hasActiveItem ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'
+                  className={`mx-2 w-[calc(100%-1rem)] flex items-center justify-between rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+                    hasActiveItem
+                      ? 'bg-slate-800/80 text-cyan-200'
+                      : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
                   }`}
                 >
                   <span>{section.label}</span>
@@ -125,21 +134,27 @@ export default function Layout() {
                 </button>
 
                 {isOpen && (
-                  <div className="space-y-0.5">
+                  <div className="mt-1 space-y-1 px-2">
                     {section.items.map(({ to, label, icon: Icon }) => (
                       <NavLink
                         key={to}
                         to={to}
                         className={({ isActive }) =>
-                          `mx-2 flex items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors ${
+                          `group relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all ${
                             isActive
-                              ? 'bg-blue-600 text-white font-medium'
-                              : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                              ? 'bg-gradient-to-r from-cyan-500/90 to-blue-500/90 text-white font-medium shadow-[0_8px_24px_-12px_rgba(6,182,212,0.95)]'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                           }`
                         }
                       >
-                        <Icon size={15} />
-                        {label}
+                        {({ isActive }) => (
+                          <>
+                            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md ${isActive ? 'bg-white/20 text-white' : 'bg-slate-700/70 text-slate-200 group-hover:bg-slate-700 group-hover:text-white'}`}>
+                              <Icon size={14} />
+                            </span>
+                            <span>{label}</span>
+                          </>
+                        )}
                       </NavLink>
                     ))}
                   </div>
@@ -149,23 +164,23 @@ export default function Layout() {
           })}
         </nav>
 
-        <div className="px-4 py-3 border-t border-slate-700">
+        <div className="relative px-4 py-3 border-t border-slate-800/90">
           {auth.user && (
-            <div className="mb-3">
-              <div className="truncate text-xs font-medium text-slate-200">{auth.user.name}</div>
+            <div className="mb-3 rounded-xl border border-slate-700/80 bg-slate-800/65 px-3 py-2">
+              <div className="truncate text-xs font-semibold text-slate-100">{auth.user.name}</div>
               <div className="truncate text-xs text-slate-400">{auth.user.tenantId}</div>
             </div>
           )}
           {auth.authenticated && (
             <button
               onClick={auth.logout}
-              className="mb-3 inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white"
+              className="mb-3 inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
             >
               <LogOut size={13} />
               Sign out
             </button>
           )}
-          <div className="text-slate-500 text-xs">v0.3.0</div>
+          <div className="text-slate-500 text-xs">Nexora v0.3.0</div>
         </div>
       </aside>
 
