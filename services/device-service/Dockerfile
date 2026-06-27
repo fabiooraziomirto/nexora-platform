@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip install poetry==1.7.1
 
 # Copy dependency files
-COPY pyproject.toml poetry.lock* ./
+COPY services/device-service/pyproject.toml ./
 
 # Install dependencies
 RUN poetry config virtualenvs.create false \
@@ -44,7 +44,8 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY . .
+COPY services/device-service/ .
+COPY libraries/common/src/common ./src/common
 ENV PYTHONPATH=/app/src
 
 # Create non-root user
@@ -60,4 +61,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Run application
 CMD ["python", "-m", "uvicorn", "device_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

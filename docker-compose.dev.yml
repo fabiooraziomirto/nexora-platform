@@ -88,6 +88,15 @@ services:
       - "16686:16686"   # Jaeger UI
       - "4317:4317"     # OTLP gRPC receiver
 
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    container_name: nxr-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
   # ---------------------------------------------------------------------------
   # Core microservices
   # ---------------------------------------------------------------------------
@@ -97,8 +106,8 @@ services:
     env_file:
       - .env.dev
     build:
-      context: ./services/device-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/device-service/Dockerfile
     container_name: nxr-device-service
     depends_on:
       mysql:
@@ -125,8 +134,8 @@ services:
     env_file:
       - .env.dev
     build:
-      context: ./services/plugin-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/plugin-service/Dockerfile
     container_name: nxr-plugin-service
     depends_on:
       mysql:
@@ -149,8 +158,8 @@ services:
     env_file:
       - .env.dev
     build:
-      context: ./services/execution-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/execution-service/Dockerfile
     container_name: nxr-execution-service
     depends_on:
       mysql:
@@ -177,8 +186,8 @@ services:
     env_file:
       - .env.dev
     build:
-      context: ./services/network-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/network-service/Dockerfile
     container_name: nxr-network-service
     depends_on:
       mysql:
@@ -219,8 +228,8 @@ services:
     env_file:
       - .env.dev
     build:
-      context: ./services/webservice-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/webservice-service/Dockerfile
     container_name: nxr-webservice-service
     depends_on:
       mysql:
@@ -240,8 +249,8 @@ services:
     env_file:
       - .env.dev
     build:
-      context: ./services/fleet-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/fleet-service/Dockerfile
     container_name: nxr-fleet-service
     depends_on:
       mysql:
@@ -252,6 +261,35 @@ services:
     ports:
       - "8006:8000"
 
+  ai-pipeline-service:
+    profiles: ["dev", "test", "smoke"]
+    env_file:
+      - .env.dev
+    build:
+      context: ./services/ai-pipeline-service
+      dockerfile: Dockerfile
+    container_name: nxr-ai-pipeline-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.2:1b
+      AI_LLM_ENABLED: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8008:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   nexora-ui:
     profiles: ["dev", "smoke"]
     build:
@@ -261,12 +299,22 @@ services:
     depends_on:
       device-service:
         condition: service_healthy
+      plugin-service:
+        condition: service_started
+      execution-service:
+        condition: service_started
+      network-service:
+        condition: service_started
+      webservice-service:
+        condition: service_started
       fleet-service:
         condition: service_started
+      ai-pipeline-service:
+        condition: service_healthy
     ports:
       - "8080:80"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -342,7 +390,12 @@ services:
       N_BOARDS: "1"
       POLL_SECONDS: "2"
       HEARTBEAT_SECONDS: "10"
+      PAIRING_UI_ENABLED: "true"
+      PAIRING_UI_PORT: "8091"
+    ports:
+      - "8091:8091"
 
 volumes:
   mysql_data:
   function_artifacts:
+  ollama_data:

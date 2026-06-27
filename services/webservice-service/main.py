@@ -6,7 +6,6 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 import asyncio
-import base64
 import json
 import logging
 import time
@@ -14,24 +13,26 @@ from typing import Any
 from uuid import uuid4
 
 import aiokafka
-import jwt as _pyjwt
-from jwt import PyJWKClient as _PyJWKClient
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import func, select
+from common.audit import emit_audit_event
+from common.auth.context import RequestAuthenticator, auth_settings_from_env, current_user_from_request
 
 from webservice_service.core.config import (
-    AUTH_DEV_BYPASS_ENABLED, AUTH_DEV_TOKEN, AUTH_ENABLED, AUTH_WRITE_ROLE,
-    ENVIRONMENT, KAFKA_BOOTSTRAP_SERVERS, KAFKA_ENABLED, KAFKA_REQUIRED, KEYCLOAK_ISSUER,
+    AUTH_DEV_BYPASS_ENABLED, AUTH_ENABLED,
+    ENVIRONMENT, KAFKA_BOOTSTRAP_SERVERS, KAFKA_ENABLED, KAFKA_REQUIRED,
 )
-from webservice_service.core.database import Base, engine, SessionLocal
+from webservice_service.core.database import Base, engine, SessionLocal, ensure_webservice_columns
 from webservice_service.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 import webservice_service.core.events as _events
 from webservice_service.models.webservice import Webservice, _VALID_STATUSES as _VALID_WS_STATUSES
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("webservice-service")
+AUTH_SETTINGS = auth_settings_from_env()
+authenticator = RequestAuthenticator(AUTH_SETTINGS)
 
 app = FastAPI(title="Webservice Service", version="0.1.0")
 
@@ -45,6 +46,7 @@ async def startup() -> None:
             raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
         logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
     Base.metadata.create_all(bind=engine)
+    ensure_webservice_columns()
     if not KAFKA_ENABLED:
         logger.info("Kafka publisher disabled by configuration")
         return
@@ -68,68 +70,9 @@ async def shutdown() -> None:
         _events.producer = None
 
 
-_jwks_client: "_PyJWKClient | None" = None
-
-
-def _get_jwks_client() -> "_PyJWKClient | None":
-    global _jwks_client
-    if _jwks_client is None and KEYCLOAK_ISSUER:
-        jwks_url = KEYCLOAK_ISSUER.rstrip("/") + "/protocol/openid-connect/certs"
-        _jwks_client = _PyJWKClient(jwks_url, cache_keys=True)
-    return _jwks_client
-
-
-def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
-    client = _get_jwks_client()
-    if client:
-        try:
-            signing_key = client.get_signing_key_from_jwt(token)
-            return _pyjwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256", "ES256"],
-                options={"verify_exp": True},
-                issuer=KEYCLOAK_ISSUER or None,
-            )
-        except Exception:
-            return None
-    try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            return None
-        payload = parts[1] + "=" * (-len(parts[1]) % 4)
-        data = base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8")
-        return json.loads(data)
-    except Exception:
-        return None
-
-
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if not AUTH_ENABLED:
-        return await call_next(request)
-    if request.url.path in {"/health", "/ready", "/metrics"}:
-        return await call_next(request)
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"detail": "missing bearer token"})
-    token = auth.split(" ", 1)[1]
-    if AUTH_DEV_BYPASS_ENABLED and token == AUTH_DEV_TOKEN:
-        return await call_next(request)
-    payload = _decode_jwt_payload(token)
-    if not payload:
-        return JSONResponse(status_code=401, content={"detail": "invalid token"})
-    exp = payload.get("exp")
-    if exp and float(exp) < time.time():
-        return JSONResponse(status_code=401, content={"detail": "token expired"})
-    if KEYCLOAK_ISSUER and payload.get("iss") != KEYCLOAK_ISSUER:
-        return JSONResponse(status_code=401, content={"detail": "invalid issuer"})
-    if request.method in {"POST", "PATCH", "PUT", "DELETE"}:
-        realm_access = payload.get("realm_access", {})
-        roles = set(realm_access.get("roles", []))
-        if AUTH_WRITE_ROLE and AUTH_WRITE_ROLE not in roles:
-            return JSONResponse(status_code=403, content={"detail": "forbidden"})
-    return await call_next(request)
+    return await authenticator.middleware(request, call_next)
 
 
 @app.middleware("http")
@@ -184,18 +127,25 @@ def _ws_to_dict(w: Webservice) -> dict[str, Any]:
         "status": w.status,
         "hostname": w.hostname,
         "tls_enabled": w.tls_enabled if w.tls_enabled is not None else True,
+        "owner_id": w.owner_id,
+        "tenant_id": w.tenant_id,
     }
 
 
 @app.get("/api/v2/webservices")
-async def list_webservices() -> dict[str, Any]:
+async def list_webservices(request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
-        items = db.execute(select(Webservice)).scalars().all()
+        q = select(Webservice)
+        if not user.is_platform_admin(AUTH_SETTINGS):
+            q = q.where(Webservice.tenant_id == user.tenant_id)
+        items = db.execute(q).scalars().all()
     return {"items": [_ws_to_dict(w) for w in items], "total": len(items)}
 
 
 @app.post("/api/v2/webservices", status_code=201)
-async def create_webservice(payload: dict[str, Any]) -> dict[str, Any]:
+async def create_webservice(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     status = payload.get("status", "enabled")
     if status not in _VALID_WS_STATUSES:
         raise HTTPException(status_code=400, detail=f"invalid status, must be one of {sorted(_VALID_WS_STATUSES)}")
@@ -207,29 +157,48 @@ async def create_webservice(payload: dict[str, Any]) -> dict[str, Any]:
         status=status,
         hostname=payload.get("hostname"),
         tls_enabled=payload.get("tls_enabled", True),
+        owner_id=user.user_id,
+        tenant_id=user.tenant_id,
     )
     with SessionLocal() as db:
         db.add(webservice)
         db.commit()
     response = _ws_to_dict(webservice)
+    emit_audit_event(
+        service="webservice-service",
+        action="webservice.created",
+        resource_type="webservice",
+        resource_id=webservice.id,
+        tenant_id=webservice.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("created", webservice.id, response)
     return response
 
 
 @app.get("/api/v2/webservices/{webservice_id}")
-async def get_webservice(webservice_id: str) -> dict[str, Any]:
+async def get_webservice(webservice_id: str, request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         webservice = db.get(Webservice, webservice_id)
     if not webservice:
+        raise HTTPException(status_code=404, detail="webservice not found")
+    if webservice.tenant_id and webservice.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
         raise HTTPException(status_code=404, detail="webservice not found")
     return _ws_to_dict(webservice)
 
 
 @app.patch("/api/v2/webservices/{webservice_id}")
-async def update_webservice(webservice_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def update_webservice(webservice_id: str, payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         webservice = db.get(Webservice, webservice_id)
         if not webservice:
+            raise HTTPException(status_code=404, detail="webservice not found")
+        if webservice.tenant_id and webservice.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
             raise HTTPException(status_code=404, detail="webservice not found")
         if "device_id" in payload:
             webservice.device_id = payload.get("device_id")
@@ -246,17 +215,42 @@ async def update_webservice(webservice_id: str, payload: dict[str, Any]) -> dict
         db.commit()
         db.refresh(webservice)
     response = _ws_to_dict(webservice)
+    emit_audit_event(
+        service="webservice-service",
+        action="webservice.updated",
+        resource_type="webservice",
+        resource_id=webservice.id,
+        tenant_id=webservice.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("updated", webservice.id, response)
     return response
 
 
 @app.delete("/api/v2/webservices/{webservice_id}", status_code=204)
-async def delete_webservice(webservice_id: str) -> None:
+async def delete_webservice(webservice_id: str, request: Request) -> None:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         webservice = db.get(Webservice, webservice_id)
         if not webservice:
             raise HTTPException(status_code=404, detail="webservice not found")
+        if webservice.tenant_id and webservice.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
+            raise HTTPException(status_code=404, detail="webservice not found")
         deleted_payload = _ws_to_dict(webservice)
         db.delete(webservice)
         db.commit()
+    emit_audit_event(
+        service="webservice-service",
+        action="webservice.deleted",
+        resource_type="webservice",
+        resource_id=webservice_id,
+        tenant_id=deleted_payload.get("tenant_id"),
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("deleted", webservice_id, deleted_payload)

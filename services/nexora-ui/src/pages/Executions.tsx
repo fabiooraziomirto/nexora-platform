@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
 import { SkeletonRows } from '../components/Skeleton'
+import { useAuth } from '../auth/AuthContext'
 
 interface FormState extends ExecutionCreate { submitting: boolean; error: string; args_raw: string }
 
@@ -27,6 +28,7 @@ export default function Executions() {
   const [acting, setActing]     = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const toast = useToast()
+  const auth = useAuth()
 
   const executions = data?.items ?? []
 
@@ -128,6 +130,7 @@ export default function Executions() {
           </button>
           <button
             onClick={() => setShowAdd(true)}
+            disabled={!auth.canWrite}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus size={14} />
@@ -200,7 +203,7 @@ export default function Executions() {
                       {ex.status === 'queued' && (
                         <button
                           onClick={() => handleDispatch(ex.id)}
-                          disabled={acting === ex.id}
+                          disabled={acting === ex.id || !auth.canWrite}
                           title="Dispatch"
                           className="p-1 rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
                         >
@@ -210,7 +213,7 @@ export default function Executions() {
                       {(ex.status === 'dispatched' || ex.status === 'running') && (
                         <button
                           onClick={() => handleCancel(ex.id)}
-                          disabled={acting === ex.id}
+                          disabled={acting === ex.id || !auth.canWrite}
                           title="Cancel"
                           className="p-1 rounded text-slate-300 hover:text-orange-500 hover:bg-orange-50 transition-colors disabled:opacity-40"
                         >
@@ -220,7 +223,7 @@ export default function Executions() {
                       {TERMINAL_STATUSES.has(ex.status) && (
                         <button
                           onClick={() => handleDelete(ex.id)}
-                          disabled={acting === ex.id}
+                          disabled={acting === ex.id || !auth.canWrite}
                           title="Delete"
                           className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
                         >

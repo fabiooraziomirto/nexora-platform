@@ -115,4 +115,13 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 
 ---
 
+## Go-To-Market Execution (30 giorni)
+
+- [x] Piano operativo 30 giorni: `docs/go-to-market/01-30-day-implementation-plan.md`
+- [x] Template operativo settimanale: `docs/go-to-market/02-weekly-operating-template.md`
+- [x] Pitch template 6 slide: `docs/go-to-market/03-pitch-6-slide-template.md`
+- [x] Scorecard prospect: `docs/go-to-market/04-prospect-scorecard.md`
+
+---
+
 *Aggiornato dopo implementazione e verifica su filesystem il 2026-03-28.*

@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import func, select, and_
 from opentelemetry import trace
+from common.audit import emit_audit_event
 
 # ── Submodule imports ───────────────────────────────────────────────────────────────────────────────
 from execution_service.core.config import (
@@ -217,7 +218,7 @@ async def _fire_trigger(trigger: FunctionTrigger, event_payload: dict) -> None:
             )
             db.add(execution)
             db.commit()
-        await dispatch_execution(execution_id)
+        await dispatch_execution(execution_id, None)
         logger.info("trigger %s fired execution %s for event %s", trigger.id, execution_id, trigger.event_type)
     except Exception:
         logger.exception("trigger %s: failed to fire for event %s", trigger.id, trigger.event_type)
@@ -329,6 +330,7 @@ async def auth_middleware(request: Request, call_next):
         request.state.user_id = "dev-user"
         request.state.tenant_id = "dev"
         request.state.is_operator = True
+        request.state.roles = [AUTH_OPERATOR_ROLE, AUTH_WRITE_ROLE]
         return await call_next(request)
     payload = _decode_jwt_payload(token)
     if not payload:
@@ -349,6 +351,7 @@ async def auth_middleware(request: Request, call_next):
     request.state.user_id = payload.get("sub", "")
     request.state.tenant_id = groups[0].lstrip("/") if groups else "global"
     request.state.is_operator = AUTH_OPERATOR_ROLE in roles_list
+    request.state.roles = roles_list
     return await call_next(request)
 
 
@@ -445,7 +448,9 @@ async def create_execution(
         execution_id = str(uuid4())
         now = datetime.now(timezone.utc)
         caller_owner_id = getattr(request.state, "user_id", None)
-        caller_tenant_id = getattr(request.state, "tenant_id", x_tenant_id)
+        caller_tenant_id = getattr(request.state, "tenant_id", None)
+        if not AUTH_ENABLED:
+            caller_tenant_id = caller_tenant_id or x_tenant_id
         execution_type = payload.get("type", payload.get("execution_type", "command"))
         plugin_id = payload.get("plugin_id")
         if execution_type in {"function.install", "function.invoke"} and not plugin_id:
@@ -472,6 +477,17 @@ async def create_execution(
         response = execution_to_dict(execution)
 
     audit_log("created", execution.id)
+    emit_audit_event(
+        service="execution-service",
+        action="execution.created",
+        resource_type="execution",
+        resource_id=execution.id,
+        tenant_id=execution.tenant_id,
+        actor_user_id=execution.owner_id,
+        actor_tenant_id=execution.tenant_id,
+        actor_roles=getattr(request.state, "roles", []),
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("created", execution.id, response)
     return response
 
@@ -494,7 +510,7 @@ async def get_execution(execution_id: str, request: Request) -> dict[str, Any]:
 
 
 @app.delete("/api/v2/executions/{execution_id}", status_code=204)
-async def delete_execution(execution_id: str) -> None:
+async def delete_execution(execution_id: str, request: Request) -> None:
     with SessionLocal() as db:
         execution = db.get(Execution, execution_id)
         if not execution:
@@ -503,11 +519,22 @@ async def delete_execution(execution_id: str) -> None:
         db.delete(execution)
         db.commit()
     audit_log("deleted", execution_id)
+    emit_audit_event(
+        service="execution-service",
+        action="execution.deleted",
+        resource_type="execution",
+        resource_id=execution_id,
+        tenant_id=deleted_payload.get("tenant_id"),
+        actor_user_id=getattr(request.state, "user_id", None),
+        actor_tenant_id=getattr(request.state, "tenant_id", None),
+        actor_roles=getattr(request.state, "roles", []),
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("deleted", execution_id, deleted_payload)
 
 
 @app.post("/api/v2/executions/{execution_id}/dispatch")
-async def dispatch_execution(execution_id: str) -> dict[str, Any]:
+async def dispatch_execution(execution_id: str, request: Request) -> dict[str, Any]:
     with _tracer.start_as_current_span(
         "execution.dispatch",
         attributes={"execution_id": execution_id},
@@ -593,6 +620,17 @@ async def dispatch_execution(execution_id: str) -> dict[str, Any]:
             envelope["args"] = json.loads(execution.args)
 
     audit_log("dispatched", execution_id)
+    emit_audit_event(
+        service="execution-service",
+        action="execution.dispatched",
+        resource_type="execution",
+        resource_id=execution_id,
+        tenant_id=execution.tenant_id,
+        actor_user_id=getattr(request.state, "user_id", None) if request else "system",
+        actor_tenant_id=getattr(request.state, "tenant_id", None) if request else execution.tenant_id,
+        actor_roles=getattr(request.state, "roles", []) if request else ["system"],
+        correlation_id=request.headers.get("x-correlation-id") if request else execution.correlation_id,
+    )
     await _events.publish_event("dispatched", execution.id, envelope)
     return response
 
@@ -667,7 +705,7 @@ async def _create_and_dispatch_function(
     created = await create_execution(fake_payload, create_req, x_tenant_id=None)
     exec_id = created["id"]
     # Dispatch immediately
-    dispatched = await dispatch_execution(exec_id)
+    dispatched = await dispatch_execution(exec_id, request)
     return dispatched
 
 
@@ -705,7 +743,7 @@ async def invoke_function_on_device(
 
 
 @app.post("/api/v2/executions/{execution_id}/cancel")
-async def cancel_execution(execution_id: str) -> dict[str, Any]:
+async def cancel_execution(execution_id: str, request: Request) -> dict[str, Any]:
     with SessionLocal() as db:
         execution = db.get(Execution, execution_id)
         if not execution:
@@ -720,6 +758,17 @@ async def cancel_execution(execution_id: str) -> dict[str, Any]:
         db.refresh(execution)
         response = execution_to_dict(execution)
     audit_log("cancelled", execution_id)
+    emit_audit_event(
+        service="execution-service",
+        action="execution.cancelled",
+        resource_type="execution",
+        resource_id=execution_id,
+        tenant_id=execution.tenant_id,
+        actor_user_id=getattr(request.state, "user_id", None),
+        actor_tenant_id=getattr(request.state, "tenant_id", None),
+        actor_roles=getattr(request.state, "roles", []),
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("cancelled", execution.id, response)
     return response
 

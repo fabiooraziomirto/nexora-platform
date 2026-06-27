@@ -3,7 +3,7 @@
 # For NodePort on a bare-metal VM apply k8s/nodeport/services.yaml on top.
 #
 # Images are built locally and loaded into k3s/kind:
-#   docker build -t nxr/device-service:latest services/device-service/
+#   docker build -f services/device-service/Dockerfile -t nxr/device-service:latest .
 #   k3s ctr images import <(docker save nxr/device-service:latest)
 
 ---

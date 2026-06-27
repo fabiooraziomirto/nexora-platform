@@ -6,7 +6,6 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 import asyncio
-import base64
 import json
 import logging
 import time
@@ -14,22 +13,21 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-import jwt as _pyjwt
-from jwt import PyJWKClient as _PyJWKClient
-
 import aiokafka
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import exc as sa_exc, func, select
+from common.audit import emit_audit_event
+from common.auth.context import RequestAuthenticator, auth_settings_from_env, current_user_from_request
 
 from fleet_service.core.config import (
-    AUTH_DEV_BYPASS_ENABLED, AUTH_DEV_TOKEN, AUTH_ENABLED, AUTH_WRITE_ROLE,
+    AUTH_DEV_BYPASS_ENABLED, AUTH_ENABLED,
     DEVICE_SERVICE_URL, ENVIRONMENT, KAFKA_BOOTSTRAP_SERVERS, KAFKA_ENABLED,
-    KAFKA_REQUIRED, KEYCLOAK_ISSUER,
+    KAFKA_REQUIRED,
 )
-from fleet_service.core.database import Base, engine, SessionLocal
+from fleet_service.core.database import Base, engine, SessionLocal, ensure_fleet_columns
 from fleet_service.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 import fleet_service.core.events as _events
 from fleet_service.models.fleet import Fleet
@@ -37,6 +35,8 @@ from fleet_service.models.fleet_member import FleetMember
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("fleet-service")
+AUTH_SETTINGS = auth_settings_from_env()
+authenticator = RequestAuthenticator(AUTH_SETTINGS)
 
 app = FastAPI(title="Fleet Service", version="0.1.0")
 
@@ -50,6 +50,7 @@ async def startup() -> None:
             raise RuntimeError("AUTH_DEV_BYPASS_ENABLED=true is not allowed when ENVIRONMENT=production")
         logger.warning("AUTH DEV BYPASS ENABLED — NOT FOR PRODUCTION")
     Base.metadata.create_all(bind=engine)
+    ensure_fleet_columns()
     if not KAFKA_ENABLED:
         logger.info("Kafka publisher disabled by configuration")
         return
@@ -73,69 +74,9 @@ async def shutdown() -> None:
         _events.producer = None
 
 
-_jwks_client: "_PyJWKClient | None" = None
-
-
-def _get_jwks_client() -> "_PyJWKClient | None":
-    global _jwks_client
-    if _jwks_client is None and KEYCLOAK_ISSUER:
-        jwks_url = KEYCLOAK_ISSUER.rstrip("/") + "/protocol/openid-connect/certs"
-        _jwks_client = _PyJWKClient(jwks_url, cache_keys=True)
-    return _jwks_client
-
-
-def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
-    client = _get_jwks_client()
-    if client:
-        try:
-            signing_key = client.get_signing_key_from_jwt(token)
-            return _pyjwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256", "ES256"],
-                options={"verify_exp": True},
-                issuer=KEYCLOAK_ISSUER or None,
-            )
-        except Exception:
-            return None
-    # Dev fallback: decode without signature verification (only when KEYCLOAK_ISSUER unset)
-    try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            return None
-        payload = parts[1] + "=" * (-len(parts[1]) % 4)
-        data = base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8")
-        return json.loads(data)
-    except Exception:
-        return None
-
-
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if not AUTH_ENABLED:
-        return await call_next(request)
-    if request.url.path in {"/health", "/ready", "/metrics"}:
-        return await call_next(request)
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"detail": "missing bearer token"})
-    token = auth.split(" ", 1)[1]
-    if AUTH_DEV_BYPASS_ENABLED and token == AUTH_DEV_TOKEN:
-        return await call_next(request)
-    payload = _decode_jwt_payload(token)
-    if not payload:
-        return JSONResponse(status_code=401, content={"detail": "invalid token"})
-    exp = payload.get("exp")
-    if exp and float(exp) < time.time():
-        return JSONResponse(status_code=401, content={"detail": "token expired"})
-    if KEYCLOAK_ISSUER and payload.get("iss") != KEYCLOAK_ISSUER:
-        return JSONResponse(status_code=401, content={"detail": "invalid issuer"})
-    if request.method in {"POST", "PATCH", "PUT", "DELETE"}:
-        realm_access = payload.get("realm_access", {})
-        roles = set(realm_access.get("roles", []))
-        if AUTH_WRITE_ROLE and AUTH_WRITE_ROLE not in roles:
-            return JSONResponse(status_code=403, content={"detail": "forbidden"})
-    return await call_next(request)
+    return await authenticator.middleware(request, call_next)
 
 
 @app.middleware("http")
@@ -182,79 +123,139 @@ async def metrics() -> PlainTextResponse:
     return PlainTextResponse(content=generate_latest(), media_type="text/plain")
 
 
+def _fleet_to_dict(f: Fleet) -> dict[str, Any]:
+    return {
+        "id": f.id,
+        "name": f.name,
+        "description": f.description,
+        "owner_id": f.owner_id,
+        "tenant_id": f.tenant_id,
+    }
+
+
+def _ensure_fleet_visible(fleet: Fleet | None, request: Request) -> Fleet:
+    if not fleet:
+        raise HTTPException(status_code=404, detail="fleet not found")
+    user = current_user_from_request(request)
+    if fleet.tenant_id and fleet.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
+        raise HTTPException(status_code=404, detail="fleet not found")
+    return fleet
+
+
 @app.get("/api/v2/fleets")
-async def list_fleets() -> dict[str, Any]:
+async def list_fleets(request: Request, tenant_id: str | None = Query(default=None)) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
-        items = db.execute(select(Fleet)).scalars().all()
-        payload = [{"id": f.id, "name": f.name, "description": f.description} for f in items]
+        q = select(Fleet)
+        if user.is_platform_admin(AUTH_SETTINGS):
+            if tenant_id:
+                q = q.where(Fleet.tenant_id == tenant_id)
+        else:
+            q = q.where(Fleet.tenant_id == user.tenant_id)
+        items = db.execute(q).scalars().all()
+        payload = [_fleet_to_dict(f) for f in items]
     return {"items": payload, "total": len(payload)}
 
 
 @app.post("/api/v2/fleets", status_code=201)
-async def create_fleet(payload: dict[str, Any]) -> dict[str, Any]:
+async def create_fleet(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     fleet_id = str(uuid4())
     fleet = Fleet(
         id=fleet_id,
         name=payload.get("name", "default-fleet"),
         description=payload.get("description"),
+        owner_id=user.user_id,
+        tenant_id=user.tenant_id,
     )
     with SessionLocal() as db:
         db.add(fleet)
         db.commit()
-    response = {"id": fleet.id, "name": fleet.name, "description": fleet.description}
+    response = _fleet_to_dict(fleet)
+    emit_audit_event(
+        service="fleet-service",
+        action="fleet.created",
+        resource_type="fleet",
+        resource_id=fleet.id,
+        tenant_id=fleet.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("created", fleet.id, response)
     return response
 
 
 @app.get("/api/v2/fleets/{fleet_id}")
-async def get_fleet(fleet_id: str) -> dict[str, Any]:
+async def get_fleet(fleet_id: str, request: Request) -> dict[str, Any]:
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-    if not fleet:
-        raise HTTPException(status_code=404, detail="fleet not found")
-    return {"id": fleet.id, "name": fleet.name, "description": fleet.description}
+    return _fleet_to_dict(_ensure_fleet_visible(fleet, request))
 
 
 @app.patch("/api/v2/fleets/{fleet_id}")
-async def update_fleet(fleet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def update_fleet(fleet_id: str, payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
+        _ensure_fleet_visible(fleet, request)
         if "name" in payload and payload["name"]:
             fleet.name = payload["name"]
         if "description" in payload:
             fleet.description = payload.get("description")
         db.commit()
         db.refresh(fleet)
-    response = {"id": fleet.id, "name": fleet.name, "description": fleet.description}
+    response = _fleet_to_dict(fleet)
+    emit_audit_event(
+        service="fleet-service",
+        action="fleet.updated",
+        resource_type="fleet",
+        resource_id=fleet.id,
+        tenant_id=fleet.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("updated", fleet.id, response)
     return response
 
 
 @app.delete("/api/v2/fleets/{fleet_id}", status_code=204)
-async def delete_fleet(fleet_id: str) -> None:
+async def delete_fleet(fleet_id: str, request: Request) -> None:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
-        deleted_payload = {"id": fleet.id, "name": fleet.name, "description": fleet.description}
+        _ensure_fleet_visible(fleet, request)
+        deleted_payload = _fleet_to_dict(fleet)
         db.delete(fleet)
         db.commit()
+    emit_audit_event(
+        service="fleet-service",
+        action="fleet.deleted",
+        resource_type="fleet",
+        resource_id=fleet_id,
+        tenant_id=deleted_payload.get("tenant_id"),
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     await _events.publish_event("deleted", fleet_id, deleted_payload)
 
 
 # ── Fleet Membership ────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/v2/fleets/{fleet_id}/members", status_code=201)
-async def add_fleet_member(fleet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def add_fleet_member(fleet_id: str, payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     device_id = payload.get("device_id")
     if not device_id:
         raise HTTPException(status_code=400, detail="device_id is required")
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
+        _ensure_fleet_visible(fleet, request)
         member = FleetMember(
             id=str(uuid4()),
             fleet_id=fleet_id,
@@ -270,16 +271,27 @@ async def add_fleet_member(fleet_id: str, payload: dict[str, Any]) -> dict[str, 
         db.refresh(member)
     response = {"id": member.id, "fleet_id": member.fleet_id, "device_id": member.device_id,
                 "joined_at": member.joined_at.isoformat() if member.joined_at else None}
+    emit_audit_event(
+        service="fleet-service",
+        action="fleet.member_added",
+        resource_type="fleet",
+        resource_id=fleet_id,
+        tenant_id=fleet.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+        reason=f"device_id={device_id}",
+    )
     await _events.publish_event("member_added", fleet_id, response)
     return response
 
 
 @app.get("/api/v2/fleets/{fleet_id}/members")
-async def list_fleet_members(fleet_id: str) -> dict[str, Any]:
+async def list_fleet_members(fleet_id: str, request: Request) -> dict[str, Any]:
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
+        _ensure_fleet_visible(fleet, request)
         members = db.execute(
             select(FleetMember).where(FleetMember.fleet_id == fleet_id)
         ).scalars().all()
@@ -292,11 +304,11 @@ async def list_fleet_members(fleet_id: str) -> dict[str, Any]:
 
 
 @app.delete("/api/v2/fleets/{fleet_id}/members/{device_id}", status_code=204)
-async def remove_fleet_member(fleet_id: str, device_id: str) -> None:
+async def remove_fleet_member(fleet_id: str, device_id: str, request: Request) -> None:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
+        _ensure_fleet_visible(fleet, request)
         member = db.execute(
             select(FleetMember).where(
                 FleetMember.fleet_id == fleet_id,
@@ -307,18 +319,34 @@ async def remove_fleet_member(fleet_id: str, device_id: str) -> None:
             raise HTTPException(status_code=404, detail="device not in fleet")
         db.delete(member)
         db.commit()
+    emit_audit_event(
+        service="fleet-service",
+        action="fleet.member_removed",
+        resource_type="fleet",
+        resource_id=fleet_id,
+        tenant_id=fleet.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+        reason=f"device_id={device_id}",
+    )
     await _events.publish_event("member_removed", fleet_id, {"fleet_id": fleet_id, "device_id": device_id})
 
 
 @app.get("/api/v2/devices/{device_id}/fleets")
-async def list_device_fleets(device_id: str) -> dict[str, Any]:
+async def list_device_fleets(device_id: str, request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         rows = db.execute(
             select(FleetMember).where(FleetMember.device_id == device_id)
         ).scalars().all()
         fleet_ids = [m.fleet_id for m in rows]
-        fleets = db.execute(select(Fleet).where(Fleet.id.in_(fleet_ids))).scalars().all()
-        items = [{"id": f.id, "name": f.name, "description": f.description} for f in fleets]
+        q = select(Fleet).where(Fleet.id.in_(fleet_ids))
+        if not user.is_platform_admin(AUTH_SETTINGS):
+            q = q.where(Fleet.tenant_id == user.tenant_id)
+        fleets = db.execute(q).scalars().all()
+        items = [_fleet_to_dict(f) for f in fleets]
     return {"device_id": device_id, "items": items, "total": len(items)}
 
 
@@ -327,7 +355,7 @@ async def list_device_fleets(device_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/v2/fleets/{fleet_id}/health")
-async def fleet_health(fleet_id: str) -> dict[str, Any]:
+async def fleet_health(fleet_id: str, request: Request) -> dict[str, Any]:
     """Aggregate online/offline/unknown health status for all fleet members.
 
     Calls device-service for each member in parallel and returns per-device
@@ -335,8 +363,7 @@ async def fleet_health(fleet_id: str) -> dict[str, Any]:
     """
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
+        _ensure_fleet_visible(fleet, request)
         members = db.execute(
             select(FleetMember).where(FleetMember.fleet_id == fleet_id)
         ).scalars().all()
@@ -393,6 +420,7 @@ async def fleet_health(fleet_id: str) -> dict[str, Any]:
 @app.get("/api/v2/fleets/{fleet_id}/telemetry/latest")
 async def fleet_telemetry_latest(
     fleet_id: str,
+    request: Request,
     metric: str = Query(..., description="Metric name to aggregate across the fleet"),
 ) -> dict[str, Any]:
     """Return the latest value of a given metric for every fleet member.
@@ -403,8 +431,7 @@ async def fleet_telemetry_latest(
     """
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        if not fleet:
-            raise HTTPException(status_code=404, detail="fleet not found")
+        _ensure_fleet_visible(fleet, request)
         members = db.execute(
             select(FleetMember).where(FleetMember.fleet_id == fleet_id)
         ).scalars().all()

@@ -3,10 +3,12 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN pip install poetry==1.7.1
-COPY pyproject.toml poetry.lock* ./
-RUN poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi
+COPY services/plugin-service/pyproject.toml ./
+RUN poetry config virtualenvs.create false && poetry install --no-root --no-interaction --no-ansi
+RUN pip install pydantic-settings==2.1.0 structlog==24.1.0 redis[hiredis]==5.0.1
 
-COPY src ./src
+COPY services/plugin-service/src ./src
+COPY libraries/common/src/common ./src/common
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8000

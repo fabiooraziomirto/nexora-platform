@@ -27,6 +27,8 @@ class Plugin(Base):
     input_schema = Column(Text, nullable=True)              # JSON Schema for function args
     # draft → active → deprecated | archived
     status = Column(String(30), nullable=False, default="draft")
+    owner_id = Column(String(64), nullable=True, index=True)
+    tenant_id = Column(String(255), nullable=True, index=True)
 
     created_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=True)

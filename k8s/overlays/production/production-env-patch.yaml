@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: device-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: device-service
+          envFrom:
+            - configMapRef:
+                name: nexora-production-config
+            - secretRef:
+                name: nexora-production-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: execution-service
+          envFrom:
+            - configMapRef:
+                name: nexora-production-config
+            - secretRef:
+                name: nexora-production-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plugin-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: plugin-service
+          envFrom:
+            - configMapRef:
+                name: nexora-production-config
+            - secretRef:
+                name: nexora-production-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: fleet-service
+          envFrom:
+            - configMapRef:
+                name: nexora-production-config
+            - secretRef:
+                name: nexora-production-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexora-edge
+spec:
+  template:
+    spec:
+      containers:
+        - name: nexora-edge
+          envFrom:
+            - configMapRef:
+                name: nexora-production-config
+            - secretRef:
+                name: nexora-production-secrets

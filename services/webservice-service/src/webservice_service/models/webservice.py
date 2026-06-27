@@ -14,3 +14,5 @@ class Webservice(Base):
     status = Column(String(64), nullable=False, default="enabled")
     hostname = Column(String(255), nullable=True)
     tls_enabled = Column(Boolean, nullable=True, default=True)
+    owner_id = Column(String(64), nullable=True, index=True)
+    tenant_id = Column(String(255), nullable=True, index=True)

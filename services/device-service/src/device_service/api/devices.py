@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+from common.audit import emit_audit_event
 
 from device_service.core.config import settings
 from device_service.core.database import get_db
@@ -80,6 +81,11 @@ async def list_devices(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """List all devices with pagination and filtering."""
+    if current_user and not current_user.is_operator:
+        if tenant_id and tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=403, detail="tenant filter requires platform role")
+        tenant_id = current_user.tenant_id
+        owner_id = owner_id or None
     service = DeviceService(db)
     return await service.list_devices(
         page=page,
@@ -113,11 +119,22 @@ async def create_device(
 ):
     """Create a new device."""
     service = DeviceService(db)
-    return await service.create_device(
+    created = await service.create_device(
         device_data,
         owner_id=current_user.user_id if current_user else None,
         tenant_id=current_user.tenant_id if current_user else None,
     )
+    emit_audit_event(
+        service="device-service",
+        action="device.created",
+        resource_type="device",
+        resource_id=str(created.id),
+        tenant_id=created.tenant_id,
+        actor_user_id=current_user.user_id if current_user else None,
+        actor_tenant_id=current_user.tenant_id if current_user else None,
+        actor_roles=current_user.roles if current_user else [],
+    )
+    return created
 
 
 @router.patch("/devices/{device_id}", response_model=DeviceResponse)
@@ -138,6 +155,16 @@ async def update_device(
     updated = await service.update_device(device_id, device_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Device not found")
+    emit_audit_event(
+        service="device-service",
+        action="device.updated",
+        resource_type="device",
+        resource_id=str(device_id),
+        tenant_id=updated.tenant_id,
+        actor_user_id=current_user.user_id if current_user else None,
+        actor_tenant_id=current_user.tenant_id if current_user else None,
+        actor_roles=current_user.roles if current_user else [],
+    )
     return updated
 
 
@@ -158,6 +185,16 @@ async def delete_device(
     success = await service.delete_device(device_id)
     if not success:
         raise HTTPException(status_code=404, detail="Device not found")
+    emit_audit_event(
+        service="device-service",
+        action="device.deleted",
+        resource_type="device",
+        resource_id=str(device_id),
+        tenant_id=device_raw.tenant_id,
+        actor_user_id=current_user.user_id if current_user else None,
+        actor_tenant_id=current_user.tenant_id if current_user else None,
+        actor_roles=current_user.roles if current_user else [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +213,19 @@ async def agent_register(
     """Register an agent (or re-register an existing device)."""
     _validate_bootstrap_token(x_bootstrap_token)
     service = DeviceService(db)
-    return await service.register_agent(body)
+    result = await service.register_agent(body)
+    emit_audit_event(
+        service="device-service",
+        action="agent.registered",
+        resource_type="device",
+        resource_id=str(result.device_id),
+        tenant_id=getattr(result, "tenant_id", None),
+        actor_user_id="agent-bootstrap",
+        actor_tenant_id=getattr(result, "tenant_id", None),
+        actor_roles=["agent"],
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
+    return result
 
 
 @router.post(

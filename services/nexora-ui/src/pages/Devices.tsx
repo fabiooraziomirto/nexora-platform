@@ -7,23 +7,43 @@ import { useToast } from '../components/Toast'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
 import { SkeletonRows } from '../components/Skeleton'
+import { useAuth } from '../auth/AuthContext'
 
 interface FormState extends DeviceCreate { submitting: boolean; error: string }
 const EMPTY_FORM: FormState = { name: '', device_type: '', description: '', submitting: false, error: '' }
 
 export default function Devices() {
   const { data, loading, error, reload } = useApi(() => api.listDevices(1, 200))
+  const {
+    data: pendingData,
+    loading: pendingLoading,
+    error: pendingError,
+    reload: reloadPending,
+  } = useApi(() => api.listPendingDevices())
   const [search, setSearch]     = useState('')
   const [showAdd, setShowAdd]   = useState(false)
   const [form, setForm]         = useState<FormState>(EMPTY_FORM)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [pairingAction, setPairingAction] = useState<string | null>(null)
   const navigate = useNavigate()
   const toast = useToast()
+  const auth = useAuth()
 
   const devices = data?.items.filter(d =>
     d.name.toLowerCase().includes(search.toLowerCase()) ||
     d.device_type.toLowerCase().includes(search.toLowerCase())
   ) ?? []
+
+  const pendingDevices = pendingData?.filter(d =>
+    d.hardware_id.toLowerCase().includes(search.toLowerCase()) ||
+    d.device_type.toLowerCase().includes(search.toLowerCase()) ||
+    d.user_code.toLowerCase().includes(search.toLowerCase())
+  ) ?? []
+
+  const reloadAll = () => {
+    reload()
+    reloadPending()
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +56,7 @@ export default function Devices() {
       })
       setShowAdd(false)
       setForm(EMPTY_FORM)
-      reload()
+      reloadAll()
       toast.show('success', `Device "${created.name}" registered`, `ID: ${created.id}`)
     } catch (err) {
       setForm(f => ({ ...f, submitting: false, error: String(err) }))
@@ -49,12 +69,42 @@ export default function Devices() {
     setDeleting(id)
     try {
       await api.deleteDevice(id)
-      reload()
+      reloadAll()
       toast.show('success', `Device "${name}" deleted`)
     } catch {
       toast.show('error', 'Failed to delete device')
     } finally {
       setDeleting(null)
+    }
+  }
+
+  async function handleApprovePending(discoveryId: string, hardwareId: string) {
+    const suggestedName = `device-${hardwareId.slice(-6)}`
+    const name = prompt('Device name for approval:', suggestedName)?.trim()
+    if (!name) return
+    setPairingAction(discoveryId)
+    try {
+      const claimed = await api.claimPendingDevice(discoveryId, { name })
+      reloadAll()
+      toast.show('success', `Pending device approved`, `Created device: ${claimed.name}`)
+    } catch (err) {
+      toast.show('error', 'Failed to approve pending device', String(err))
+    } finally {
+      setPairingAction(null)
+    }
+  }
+
+  async function handleRejectPending(discoveryId: string) {
+    if (!confirm('Reject this pending device?')) return
+    setPairingAction(discoveryId)
+    try {
+      await api.rejectPendingDevice(discoveryId)
+      reloadAll()
+      toast.show('success', 'Pending device rejected')
+    } catch (err) {
+      toast.show('error', 'Failed to reject pending device', String(err))
+    } finally {
+      setPairingAction(null)
     }
   }
 
@@ -70,7 +120,7 @@ export default function Devices() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={reload}
+            onClick={reloadAll}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-50 transition-colors"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
@@ -78,6 +128,7 @@ export default function Devices() {
           </button>
           <button
             onClick={() => setShowAdd(true)}
+            disabled={!auth.canWrite}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus size={14} />
@@ -102,6 +153,66 @@ export default function Devices() {
           {error}
         </div>
       )}
+
+      {pendingError && (
+        <div className="rounded border border-amber-200 bg-amber-50 text-amber-800 text-sm px-4 py-2.5 mb-4">
+          Pending discovery list unavailable: {pendingError}
+        </div>
+      )}
+
+      <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium text-amber-900">In attesa di collegamento</p>
+          <p className="text-sm text-amber-800">
+            {pendingLoading ? '…' : `${pendingDevices.length} pending`}
+          </p>
+        </div>
+        {pendingDevices.length > 0 && (
+          <div className="mt-2 overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-amber-800">
+                  <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wide">Hardware ID</th>
+                  <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wide">Type</th>
+                  <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wide">User Code</th>
+                  <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wide">Announced</th>
+                  <th className="px-2 py-1 text-right text-xs font-medium uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingDevices.map(d => (
+                  <tr key={d.discovery_id} className="border-t border-amber-100 text-amber-900">
+                    <td className="px-2 py-1.5 font-mono text-xs">{d.hardware_id}</td>
+                    <td className="px-2 py-1.5">{d.device_type}</td>
+                    <td className="px-2 py-1.5 font-semibold">{d.user_code}</td>
+                    <td className="px-2 py-1.5 text-xs">
+                      {new Date(d.announced_at).toLocaleString()}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleApprovePending(d.discovery_id, d.hardware_id)}
+                          disabled={!auth.canWrite || pairingAction === d.discovery_id}
+                          className="px-2 py-1 rounded bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectPending(d.discovery_id)}
+                          disabled={!auth.canWrite || pairingAction === d.discovery_id}
+                          className="px-2 py-1 rounded border border-amber-300 text-amber-900 text-xs font-medium hover:bg-amber-100 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded overflow-hidden">
@@ -150,7 +261,7 @@ export default function Devices() {
                 <td className="px-4 py-2.5">
                   <button
                     onClick={e => handleDelete(e, d.id, d.name)}
-                    disabled={deleting === d.id}
+                    disabled={deleting === d.id || !auth.canWrite}
                     className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
                     title="Delete device"
                   >

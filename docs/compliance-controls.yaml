@@ -3,6 +3,11 @@ controls:
     description: "Access control and least privilege"
     evidence:
       - "scripts/test-all.sh"
+      - "services/execution-service/tests/test_privacy.py"
+      - "services/device-service/tests/test_discovery_privacy.py"
+      - "docs/deployment/enterprise-core-hardening.md"
+      - "k8s/overlays/production/kustomization.yaml"
+      - "k8s/overlays/istio-mtls/kustomization.yaml"
       - "infrastructure/kubernetes/policies/kyverno-security.yaml"
   - id: OPS-002
     description: "Backup and restore procedure validated"

@@ -32,6 +32,8 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("env_schema", "TEXT"),
     ("input_schema", "TEXT"),
     ("status", "VARCHAR(30) NOT NULL DEFAULT 'draft'"),
+    ("owner_id", "VARCHAR(64)"),
+    ("tenant_id", "VARCHAR(255)"),
     ("created_at", "TIMESTAMP"),
     ("updated_at", "TIMESTAMP"),
 ]

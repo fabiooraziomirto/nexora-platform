@@ -22,12 +22,15 @@ All options are also readable from environment variables (CLI wins over env):
 
 import argparse
 import json
+import http.server
 import os
 import random
+import socketserver
 import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from typing import Any
@@ -56,6 +59,8 @@ BOARD_NAME = os.getenv("BOARD_NAME", "")  # auto-generated per board if empty
 BOARD_TYPE = os.getenv("BOARD_TYPE", "nexoraedge-emulator")
 HEARTBEAT_SECONDS = float(os.getenv("HEARTBEAT_SECONDS", "10"))
 POLL_SECONDS = float(os.getenv("POLL_SECONDS", "4"))
+PAIRING_UI_ENABLED = os.getenv("PAIRING_UI_ENABLED", "").lower() in ("true", "1", "yes")
+PAIRING_UI_PORT = int(os.getenv("PAIRING_UI_PORT", "8091"))
 
 
 def _parse_args() -> argparse.Namespace:
@@ -95,7 +100,174 @@ def _parse_args() -> argparse.Namespace:
         default=float(os.getenv("RECONNECT_INTERVAL", "0")),
         help="Force WS reconnect after this many seconds (0 = never, simulates NAT rebind/churn)",
     )
+    p.add_argument(
+        "--pairing-ui", action="store_true",
+        default=PAIRING_UI_ENABLED,
+        help="Start local web UI to request device pairing and poll status",
+    )
+    p.add_argument(
+        "--pairing-ui-port", type=int,
+        default=PAIRING_UI_PORT,
+        help="Port for embedded pairing UI server (default: 8091)",
+    )
     return p.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Pairing UI server (device-side)
+# ---------------------------------------------------------------------------
+
+_PAIRING_HTML = """<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexora Device Pairing</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; background: #f8fafc; color: #0f172a; }
+        .card { max-width: 760px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; }
+        h1 { margin: 0 0 14px; font-size: 20px; }
+        .row { display: grid; grid-template-columns: 160px 1fr; gap: 8px; margin-bottom: 10px; align-items: center; }
+        input { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+        button { background: #2563eb; color: white; border: none; border-radius: 6px; padding: 9px 14px; cursor: pointer; }
+        button.secondary { background: #475569; }
+        .actions { display: flex; gap: 8px; margin-top: 12px; }
+        .mono { font-family: Consolas, monospace; font-size: 13px; }
+        .out { margin-top: 14px; padding: 10px; border-radius: 6px; background: #f1f5f9; border: 1px solid #cbd5e1; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Device Pairing Request</h1>
+        <div class="row">
+            <label for="hardware_id">Hardware ID</label>
+            <input id="hardware_id" placeholder="demo-hw-001" />
+        </div>
+        <div class="row">
+            <label for="device_type">Device Type</label>
+            <input id="device_type" value="nexoraedge-emulator" />
+        </div>
+        <div class="row">
+            <label for="firmware_version">Firmware Version</label>
+            <input id="firmware_version" value="1.0.0" />
+        </div>
+        <div class="actions">
+            <button id="announce_btn">Request Pairing</button>
+            <button id="poll_btn" class="secondary">Poll Status</button>
+        </div>
+        <div id="out" class="out mono">Ready.</div>
+    </div>
+    <script>
+        let current = null;
+        const out = document.getElementById('out');
+        function log(v) { out.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2); }
+
+        document.getElementById('announce_btn').addEventListener('click', async () => {
+            const payload = {
+                hardware_id: document.getElementById('hardware_id').value || ('hw-' + Math.random().toString(16).slice(2, 10)),
+                device_type: document.getElementById('device_type').value || 'nexoraedge-emulator',
+                firmware_version: document.getElementById('firmware_version').value || '1.0.0'
+            };
+            const r = await fetch('/api/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await r.json();
+            if (!r.ok) { log(data); return; }
+            current = data;
+            log({
+                message: 'Pairing requested. Give user_code to owner for approval.',
+                discovery_id: data.discovery_id,
+                user_code: data.user_code,
+                device_code: data.device_code,
+                expires_in: data.expires_in,
+                poll_interval: data.poll_interval
+            });
+        });
+
+        document.getElementById('poll_btn').addEventListener('click', async () => {
+            const deviceCode = current?.device_code;
+            if (!deviceCode) { log('Request pairing first.'); return; }
+            const r = await fetch('/api/poll?device_code=' + encodeURIComponent(deviceCode));
+            const data = await r.json();
+            log(data);
+        });
+    </script>
+</body>
+</html>
+"""
+
+
+def _start_pairing_ui_server(port: int) -> None:
+        class _Handler(http.server.BaseHTTPRequestHandler):
+                def _send_json(self, code: int, payload: dict) -> None:
+                        raw = json.dumps(payload).encode("utf-8")
+                        self.send_response(code)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(raw)))
+                        self.end_headers()
+                        self.wfile.write(raw)
+
+                def _send_html(self, html: str) -> None:
+                        raw = html.encode("utf-8")
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.send_header("Content-Length", str(len(raw)))
+                        self.end_headers()
+                        self.wfile.write(raw)
+
+                def do_GET(self) -> None:
+                        parsed = urllib.parse.urlparse(self.path)
+                        if parsed.path == "/":
+                                self._send_html(_PAIRING_HTML)
+                                return
+
+                        if parsed.path == "/api/poll":
+                                query = urllib.parse.parse_qs(parsed.query)
+                                device_code = (query.get("device_code") or [""])[0].strip()
+                                if not device_code:
+                                        self._send_json(400, {"detail": "device_code is required"})
+                                        return
+                                try:
+                                        encoded = urllib.parse.quote(device_code, safe="")
+                                        data = _http_json("GET", f"{DEVICE_URL}/api/v2/devices/announce/poll?device_code={encoded}")
+                                        self._send_json(200, data)
+                                except Exception as exc:
+                                        self._send_json(502, {"detail": str(exc)})
+                                return
+
+                        self._send_json(404, {"detail": "not found"})
+
+                def do_POST(self) -> None:
+                        if self.path != "/api/announce":
+                                self._send_json(404, {"detail": "not found"})
+                                return
+
+                        try:
+                                length = int(self.headers.get("Content-Length", "0"))
+                                body_raw = self.rfile.read(length) if length > 0 else b"{}"
+                                body = json.loads(body_raw.decode("utf-8") or "{}")
+                        except Exception:
+                                self._send_json(400, {"detail": "invalid JSON payload"})
+                                return
+
+                        hw = str(body.get("hardware_id") or f"hw-{uuid.uuid4().hex[:8]}")
+                        dt = str(body.get("device_type") or BOARD_TYPE)
+                        fw = body.get("firmware_version")
+                        payload = {"hardware_id": hw, "device_type": dt, "firmware_version": fw}
+
+                        try:
+                                data = _http_json("POST", f"{DEVICE_URL}/api/v2/devices/announce", payload)
+                                self._send_json(200, data)
+                        except Exception as exc:
+                                self._send_json(502, {"detail": str(exc)})
+
+                def log_message(self, fmt: str, *args: Any) -> None:
+                        return
+
+        class _ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+                daemon_threads = True
+
+        server = _ThreadedHTTPServer(("0.0.0.0", port), _Handler)
+        t = threading.Thread(target=server.serve_forever, daemon=True, name="pairing-ui")
+        t.start()
 
 
 # ---------------------------------------------------------------------------
@@ -555,10 +727,17 @@ def main() -> None:
     prefix = args.board_name_prefix
     ws_mode = args.ws_mode
     reconnect_interval = max(0.0, args.reconnect_interval)
+    pairing_ui = args.pairing_ui
+    pairing_ui_port = max(1, min(65535, args.pairing_ui_port))
+
+    if pairing_ui:
+        _start_pairing_ui_server(pairing_ui_port)
+        _log("__pairing_ui__", "started", port=pairing_ui_port, base_url=f"http://localhost:{pairing_ui_port}")
 
     _log("__launcher__", "start", n_boards=n, fail_rate=fail_rate,
          delay_ms=delay_ms, kill_after=kill_after, prefix=prefix,
-         ws_mode=ws_mode, reconnect_interval=reconnect_interval)
+         ws_mode=ws_mode, reconnect_interval=reconnect_interval,
+         pairing_ui=pairing_ui, pairing_ui_port=pairing_ui_port)
 
     if ws_mode and not HAS_WEBSOCKETS:
         _log("__launcher__", "ws_mode_unavailable",

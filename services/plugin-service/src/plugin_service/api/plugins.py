@@ -3,13 +3,16 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import func, select
+from common.audit import emit_audit_event
+from common.auth.context import auth_settings_from_env, current_user_from_request
 
 from plugin_service.core.database import SessionLocal, engine
 from plugin_service.models.plugin import Plugin
 
 router = APIRouter()
+AUTH_SETTINGS = auth_settings_from_env()
 
 _VALID_STATUSES = {"draft", "active", "deprecated", "archived"}
 _STATUS_TRANSITIONS = {
@@ -36,38 +39,50 @@ def _plugin_to_dict(p: Plugin) -> dict[str, Any]:
         "required_capabilities": json.loads(p.required_capabilities) if p.required_capabilities else [],
         "input_schema": json.loads(p.input_schema) if p.input_schema else None,
         "env_schema": json.loads(p.env_schema) if p.env_schema else None,
+        "owner_id": p.owner_id,
+        "tenant_id": p.tenant_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
 
 
 @router.get("/api/v2/plugins")
-async def list_plugins() -> dict[str, Any]:
+async def list_plugins(request: Request, tenant_id: str | None = Query(default=None)) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
-        items = db.execute(select(Plugin)).scalars().all()
+        q = select(Plugin)
+        if user.is_platform_admin(AUTH_SETTINGS):
+            if tenant_id:
+                q = q.where(Plugin.tenant_id == tenant_id)
+        else:
+            q = q.where(Plugin.tenant_id == user.tenant_id)
+        items = db.execute(q).scalars().all()
     return {"items": [_plugin_to_dict(p) for p in items], "total": len(items)}
 
 
 # Semantic alias: list only FaaS functions
 @router.get("/api/v2/functions")
-async def list_functions() -> dict[str, Any]:
+async def list_functions(request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
-        items = db.execute(
-            select(Plugin).where(Plugin.module_type == "function")
-        ).scalars().all()
+        q = select(Plugin).where(Plugin.module_type == "function")
+        if not user.is_platform_admin(AUTH_SETTINGS):
+            q = q.where(Plugin.tenant_id == user.tenant_id)
+        items = db.execute(q).scalars().all()
     return {"items": [_plugin_to_dict(p) for p in items], "total": len(items)}
 
 
 # Legacy alias
 @router.get("/api/v2/modules")
-async def list_modules() -> dict[str, Any]:
-    return await list_plugins()
+async def list_modules(request: Request) -> dict[str, Any]:
+    return await list_plugins(request)
 
 
 @router.post("/api/v2/plugins", status_code=201)
-async def create_plugin(payload: dict[str, Any]) -> dict[str, Any]:
+async def create_plugin(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     if "name" not in payload or not payload["name"]:
         raise HTTPException(status_code=400, detail="name is required")
+    user = current_user_from_request(request)
     now = datetime.now(timezone.utc)
     plugin = Plugin(
         id=str(uuid4()),
@@ -85,6 +100,8 @@ async def create_plugin(payload: dict[str, Any]) -> dict[str, Any]:
         input_schema=json.dumps(payload["input_schema"]) if payload.get("input_schema") else None,
         env_schema=json.dumps(payload["env_schema"]) if payload.get("env_schema") else None,
         status="draft",
+        owner_id=user.user_id,
+        tenant_id=user.tenant_id,
         created_at=now,
         updated_at=now,
     )
@@ -92,23 +109,40 @@ async def create_plugin(payload: dict[str, Any]) -> dict[str, Any]:
         db.add(plugin)
         db.commit()
         db.refresh(plugin)
+    emit_audit_event(
+        service="plugin-service",
+        action="plugin.created",
+        resource_type="plugin",
+        resource_id=plugin.id,
+        tenant_id=plugin.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     return _plugin_to_dict(plugin)
 
 
 @router.get("/api/v2/plugins/{plugin_id}")
-async def get_plugin(plugin_id: str) -> dict[str, Any]:
+async def get_plugin(plugin_id: str, request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)
     if not plugin:
+        raise HTTPException(status_code=404, detail="plugin not found")
+    if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
         raise HTTPException(status_code=404, detail="plugin not found")
     return _plugin_to_dict(plugin)
 
 
 @router.patch("/api/v2/plugins/{plugin_id}")
-async def update_plugin(plugin_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def update_plugin(plugin_id: str, payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)
         if not plugin:
+            raise HTTPException(status_code=404, detail="plugin not found")
+        if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
             raise HTTPException(status_code=404, detail="plugin not found")
         if plugin.status not in {"draft"}:
             raise HTTPException(status_code=409, detail="only draft plugins can be updated")
@@ -122,25 +156,54 @@ async def update_plugin(plugin_id: str, payload: dict[str, Any]) -> dict[str, An
         plugin.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(plugin)
+    emit_audit_event(
+        service="plugin-service",
+        action="plugin.updated",
+        resource_type="plugin",
+        resource_id=plugin.id,
+        tenant_id=plugin.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     return _plugin_to_dict(plugin)
 
 
 @router.delete("/api/v2/plugins/{plugin_id}", status_code=204)
-async def delete_plugin(plugin_id: str) -> None:
+async def delete_plugin(plugin_id: str, request: Request) -> None:
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)
         if not plugin:
             raise HTTPException(status_code=404, detail="plugin not found")
+        if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
+            raise HTTPException(status_code=404, detail="plugin not found")
+        tenant_id = plugin.tenant_id
         db.delete(plugin)
         db.commit()
+    emit_audit_event(
+        service="plugin-service",
+        action="plugin.deleted",
+        resource_type="plugin",
+        resource_id=plugin_id,
+        tenant_id=tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
 
 
 @router.patch("/api/v2/plugins/{plugin_id}/activate")
-async def activate_plugin(plugin_id: str) -> dict[str, Any]:
+async def activate_plugin(plugin_id: str, request: Request) -> dict[str, Any]:
     """Transition a draft plugin/function to active. Requires artifact_uri + entrypoint for functions."""
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)
         if not plugin:
+            raise HTTPException(status_code=404, detail="plugin not found")
+        if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
             raise HTTPException(status_code=404, detail="plugin not found")
         current_status = plugin.status or "draft"
         if current_status != "draft":
@@ -154,15 +217,29 @@ async def activate_plugin(plugin_id: str) -> dict[str, Any]:
         plugin.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(plugin)
+    emit_audit_event(
+        service="plugin-service",
+        action="plugin.activated",
+        resource_type="plugin",
+        resource_id=plugin.id,
+        tenant_id=plugin.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     return _plugin_to_dict(plugin)
 
 
 @router.patch("/api/v2/plugins/{plugin_id}/deprecate")
-async def deprecate_plugin(plugin_id: str) -> dict[str, Any]:
+async def deprecate_plugin(plugin_id: str, request: Request) -> dict[str, Any]:
     """Transition an active plugin/function to deprecated."""
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)
         if not plugin:
+            raise HTTPException(status_code=404, detail="plugin not found")
+        if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
             raise HTTPException(status_code=404, detail="plugin not found")
         if (plugin.status or "draft") != "active":
             raise HTTPException(status_code=409, detail="only active plugins can be deprecated")
@@ -170,15 +247,29 @@ async def deprecate_plugin(plugin_id: str) -> dict[str, Any]:
         plugin.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(plugin)
+    emit_audit_event(
+        service="plugin-service",
+        action="plugin.deprecated",
+        resource_type="plugin",
+        resource_id=plugin.id,
+        tenant_id=plugin.tenant_id,
+        actor_user_id=user.user_id,
+        actor_tenant_id=user.tenant_id,
+        actor_roles=user.roles,
+        correlation_id=request.headers.get("x-correlation-id"),
+    )
     return _plugin_to_dict(plugin)
 
 
 @router.get("/api/v2/plugins/{plugin_id}/schema")
-async def get_plugin_schema(plugin_id: str) -> dict[str, Any]:
+async def get_plugin_schema(plugin_id: str, request: Request) -> dict[str, Any]:
     """Return the input JSON Schema for a function (used for client-side validation)."""
+    user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)
     if not plugin:
+        raise HTTPException(status_code=404, detail="plugin not found")
+    if plugin.tenant_id and plugin.tenant_id != user.tenant_id and not user.is_platform_admin(AUTH_SETTINGS):
         raise HTTPException(status_code=404, detail="plugin not found")
     schema = json.loads(plugin.input_schema) if plugin.input_schema else {}
     return {"plugin_id": plugin_id, "input_schema": schema}

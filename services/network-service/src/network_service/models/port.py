@@ -11,3 +11,5 @@ class Port(Base):
     network_id = Column(String(64), nullable=True, index=True)
     status = Column(String(64), nullable=False, default="created")
     ip_address = Column(String(45), nullable=True)
+    owner_id = Column(String(64), nullable=True, index=True)
+    tenant_id = Column(String(255), nullable=True, index=True)

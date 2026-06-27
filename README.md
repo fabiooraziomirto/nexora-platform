@@ -320,7 +320,7 @@ These adapters provide interoperability hooks while preserving service modularit
 ### Start Stack
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build
+bash scripts/dev-compose.sh up
 ```
 
 ### Smoke Check
@@ -338,7 +338,7 @@ curl -fsS http://localhost:8006/health
 ### Stop/Clean
 
 ```bash
-docker compose -f docker-compose.dev.yml down -v
+bash scripts/dev-compose.sh clean
 ```
 
 ## 9) Validation and Test Entry Points
@@ -357,7 +357,7 @@ docker compose -f docker-compose.dev.yml down -v
 
 ### Recommended Validation Sequence (Local)
 
-1. `docker compose -f docker-compose.dev.yml up -d --build`
+1. `bash scripts/dev-compose.sh up`
 2. `bash scripts/test-all.sh`
 3. `bash scripts/postalpha-validation.sh`
 4. targeted script(s) for the component you changed

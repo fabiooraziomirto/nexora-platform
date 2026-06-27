@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     )
     # Role that grants platform-operator privileges (sees topology, not device data)
     AUTH_OPERATOR_ROLE: str = "platform-operator"
+    AUTH_PLATFORM_ADMIN_ROLE: str = "platform-admin"
+    AUTH_TENANT_ADMIN_ROLE: str = "tenant-admin"
+    AUTH_VIEWER_ROLE: str = "viewer"
 
     # Device discovery pairing (RFC 8628)
     DISCOVERY_EXPIRY_SECONDS: int = 900    # 15 minutes

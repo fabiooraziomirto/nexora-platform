@@ -76,7 +76,11 @@ async def get_current_user(
         user_id=claims.sub,
         tenant_id=tenant_id,
         roles=roles,
-        is_operator=settings.AUTH_OPERATOR_ROLE in roles,
+        is_operator=(
+            settings.AUTH_OPERATOR_ROLE in roles
+            or settings.AUTH_PLATFORM_ADMIN_ROLE in roles
+            or settings.AUTH_TENANT_ADMIN_ROLE in roles
+        ),
     )
 
 

@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -27,6 +29,8 @@ from device_service.core.events import event_bus
 from device_service.core.metrics import setup_metrics, get_metrics_response
 from device_service.core.rate_limit import limiter
 from device_service.core.tracing import setup_tracing
+from device_service.core.auth import CurrentUser, get_current_user
+from common.audit import read_audit_events
 
 logger = structlog.get_logger()
 
@@ -152,3 +156,56 @@ async def readiness_check():
 async def metrics():
     """Prometheus metrics endpoint."""
     return get_metrics_response()
+
+
+@app.get("/api/v2/audit/events")
+async def list_audit_events(
+    tenant_id: str | None = Query(default=None),
+    actor_user_id: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    resource_type: str | None = Query(default=None),
+    resource_id: str | None = Query(default=None),
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not settings.AUTH_ENABLED:
+        events = read_audit_events(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            from_ts=from_,
+            to_ts=to,
+        )
+        events = list(reversed(events))
+        start = (page - 1) * page_size
+        end = start + page_size
+        return {"items": events[start:end], "total": len(events), "page": page, "page_size": page_size}
+
+    roles = set(current_user.roles)
+    is_platform_admin = (
+        settings.AUTH_PLATFORM_ADMIN_ROLE in roles
+        or settings.AUTH_OPERATOR_ROLE in roles
+        or current_user.is_operator
+    )
+    is_tenant_admin = settings.AUTH_TENANT_ADMIN_ROLE in roles or is_platform_admin
+    if not is_tenant_admin:
+        raise HTTPException(status_code=403, detail="tenant-admin role required")
+    effective_tenant = tenant_id if is_platform_admin else current_user.tenant_id
+    events = read_audit_events(
+        tenant_id=effective_tenant,
+        actor_user_id=actor_user_id,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        from_ts=from_,
+        to_ts=to,
+    )
+    events = list(reversed(events))
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {"items": events[start:end], "total": len(events), "page": page, "page_size": page_size}
