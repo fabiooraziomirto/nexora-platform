@@ -28,6 +28,7 @@ export default function Devices() {
   const navigate = useNavigate()
   const toast = useToast()
   const auth = useAuth()
+  const writePermissionHint = 'Write permission required (operator, tenant-admin, or platform-admin)'
 
   const devices = data?.items.filter(d =>
     d.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -129,6 +130,7 @@ export default function Devices() {
           <button
             onClick={() => setShowAdd(true)}
             disabled={!auth.canWrite}
+            title={!auth.canWrite ? writePermissionHint : undefined}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus size={14} />
@@ -157,6 +159,12 @@ export default function Devices() {
       {pendingError && (
         <div className="rounded border border-amber-200 bg-amber-50 text-amber-800 text-sm px-4 py-2.5 mb-4">
           Pending discovery list unavailable: {pendingError}
+        </div>
+      )}
+
+      {!auth.canWrite && (
+        <div className="rounded border border-indigo-200 bg-indigo-50 text-indigo-800 text-sm px-4 py-2.5 mb-4">
+          Read-only mode: actions are disabled for your current role. {writePermissionHint}.
         </div>
       )}
 
@@ -193,6 +201,7 @@ export default function Devices() {
                         <button
                           onClick={() => handleApprovePending(d.discovery_id, d.hardware_id)}
                           disabled={!auth.canWrite || pairingAction === d.discovery_id}
+                          title={!auth.canWrite ? writePermissionHint : undefined}
                           className="px-2 py-1 rounded bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
                         >
                           Approve
@@ -200,6 +209,7 @@ export default function Devices() {
                         <button
                           onClick={() => handleRejectPending(d.discovery_id)}
                           disabled={!auth.canWrite || pairingAction === d.discovery_id}
+                          title={!auth.canWrite ? writePermissionHint : undefined}
                           className="px-2 py-1 rounded border border-amber-300 text-amber-900 text-xs font-medium hover:bg-amber-100 disabled:opacity-50"
                         >
                           Reject
@@ -238,6 +248,8 @@ export default function Devices() {
                     {!search && (
                       <button
                         onClick={() => setShowAdd(true)}
+                        disabled={!auth.canWrite}
+                        title={!auth.canWrite ? writePermissionHint : undefined}
                         className="mt-3 text-sm text-blue-600 hover:underline"
                       >
                         Register your first device
@@ -263,7 +275,7 @@ export default function Devices() {
                     onClick={e => handleDelete(e, d.id, d.name)}
                     disabled={deleting === d.id || !auth.canWrite}
                     className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                    title="Delete device"
+                    title={!auth.canWrite ? writePermissionHint : 'Delete device'}
                   >
                     <Trash2 size={14} />
                   </button>

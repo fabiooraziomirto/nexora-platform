@@ -442,6 +442,9 @@ export const api = {
   createExecution: (body: ExecutionCreate) =>
     post<Execution>(`${EXEC_BASE}/api/v2/executions`, body),
 
+  getExecution: (id: string) =>
+    get<Execution>(`${EXEC_BASE}/api/v2/executions/${id}`),
+
   dispatchExecution: (id: string) =>
     post<Execution>(`${EXEC_BASE}/api/v2/executions/${id}/dispatch`, {}),
 

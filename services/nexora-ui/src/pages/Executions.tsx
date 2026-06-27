@@ -29,6 +29,7 @@ export default function Executions() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const toast = useToast()
   const auth = useAuth()
+  const writePermissionHint = 'Write permission required (operator, tenant-admin, or platform-admin)'
 
   const executions = data?.items ?? []
 
@@ -131,6 +132,7 @@ export default function Executions() {
           <button
             onClick={() => setShowAdd(true)}
             disabled={!auth.canWrite}
+            title={!auth.canWrite ? writePermissionHint : undefined}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus size={14} />
@@ -142,6 +144,12 @@ export default function Executions() {
       {error && (
         <div className="rounded border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-2.5 mb-4">
           {error}
+        </div>
+      )}
+
+      {!auth.canWrite && (
+        <div className="rounded border border-indigo-200 bg-indigo-50 text-indigo-800 text-sm px-4 py-2.5 mb-4">
+          Read-only mode: execution actions are disabled for your current role. {writePermissionHint}.
         </div>
       )}
 
@@ -204,7 +212,7 @@ export default function Executions() {
                         <button
                           onClick={() => handleDispatch(ex.id)}
                           disabled={acting === ex.id || !auth.canWrite}
-                          title="Dispatch"
+                          title={!auth.canWrite ? writePermissionHint : 'Dispatch'}
                           className="p-1 rounded text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
                         >
                           <Play size={13} />
@@ -214,7 +222,7 @@ export default function Executions() {
                         <button
                           onClick={() => handleCancel(ex.id)}
                           disabled={acting === ex.id || !auth.canWrite}
-                          title="Cancel"
+                          title={!auth.canWrite ? writePermissionHint : 'Cancel'}
                           className="p-1 rounded text-slate-300 hover:text-orange-500 hover:bg-orange-50 transition-colors disabled:opacity-40"
                         >
                           <XIcon size={13} />
@@ -224,7 +232,7 @@ export default function Executions() {
                         <button
                           onClick={() => handleDelete(ex.id)}
                           disabled={acting === ex.id || !auth.canWrite}
-                          title="Delete"
+                          title={!auth.canWrite ? writePermissionHint : 'Delete'}
                           className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
                         >
                           <Trash2 size={13} />

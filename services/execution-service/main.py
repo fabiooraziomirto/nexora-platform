@@ -53,6 +53,9 @@ from execution_service.core.config import (
     EXECUTION_RUNNING_TIMEOUT_SECONDS,
     EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS,
     REQUEST_TIMEOUT_SECONDS,
+    GUARDRAILS_ENABLED,
+    GUARDRAILS_DENY_COMMAND_PREFIXES,
+    GUARDRAILS_BLOCKED_EXECUTION_TYPES,
     TERMINAL_STATUSES,
     VALID_STATUSES,
     ACTIVE_STATUSES,
@@ -103,6 +106,23 @@ def _count_active_for_device(db, device_id: str) -> int:
             and_(Execution.device_id == device_id, Execution.status.in_(ACTIVE_STATUSES))
         )
     ).scalar() or 0
+
+
+def _guardrails_violation(execution_type: str, command: str | None) -> str | None:
+    if not GUARDRAILS_ENABLED:
+        return None
+
+    normalized_type = (execution_type or "command").strip().lower()
+    if normalized_type in GUARDRAILS_BLOCKED_EXECUTION_TYPES:
+        return f"execution type '{normalized_type}' blocked by policy"
+
+    if normalized_type == "command":
+        normalized_command = (command or "").strip().lower()
+        for prefix in GUARDRAILS_DENY_COMMAND_PREFIXES:
+            if normalized_command.startswith(prefix):
+                return f"command blocked by policy (prefix '{prefix}')"
+
+    return None
 
 
 _jwks_client: "_PyJWKClient | None" = None
@@ -452,6 +472,10 @@ async def create_execution(
         if not AUTH_ENABLED:
             caller_tenant_id = caller_tenant_id or x_tenant_id
         execution_type = payload.get("type", payload.get("execution_type", "command"))
+        command = payload.get("command", "noop")
+        violation = _guardrails_violation(execution_type, command)
+        if violation:
+            raise HTTPException(status_code=403, detail=violation)
         plugin_id = payload.get("plugin_id")
         if execution_type in {"function.install", "function.invoke"} and not plugin_id:
             raise HTTPException(status_code=400, detail="plugin_id is required for function executions")
@@ -459,7 +483,7 @@ async def create_execution(
         execution = Execution(
             id=execution_id,
             device_id=device_id,
-            command=payload.get("command", "noop"),
+            command=command,
             status="queued",
             correlation_id=str(uuid4()),
             idempotency_key=idempotency_key,
@@ -544,6 +568,10 @@ async def dispatch_execution(execution_id: str, request: Request) -> dict[str, A
             if not execution:
                 span.set_status(trace.StatusCode.ERROR, "execution not found")
                 raise HTTPException(status_code=404, detail="execution not found")
+            violation = _guardrails_violation(execution.execution_type or "command", execution.command)
+            if violation:
+                span.set_status(trace.StatusCode.ERROR, violation)
+                raise HTTPException(status_code=403, detail=violation)
             if not transition_allowed(execution.status, "dispatched"):
                 span.set_status(trace.StatusCode.ERROR, f"invalid transition from {execution.status}")
                 raise HTTPException(
@@ -773,6 +801,245 @@ async def cancel_execution(execution_id: str, request: Request) -> dict[str, Any
     return response
 
 
+# ── Runbook Automation v1 ─────────────────────────────────────────────────────────────────────────────
+
+def _build_runbook_step_payload(step: dict[str, Any], device_id: str) -> dict[str, Any]:
+    execution_type = str(step.get("execution_type", "command"))
+    command = step.get("command")
+    plugin_id = step.get("plugin_id")
+
+    if execution_type in {"function.install", "function.invoke"}:
+        if not plugin_id:
+            raise HTTPException(status_code=400, detail=f"step '{step.get('name', 'unnamed')}' requires plugin_id")
+        if not command:
+            command = f"{execution_type}:{plugin_id}"
+    else:
+        if not command:
+            raise HTTPException(status_code=400, detail=f"step '{step.get('name', 'unnamed')}' requires command")
+
+    payload: dict[str, Any] = {
+        "device_id": device_id,
+        "execution_type": execution_type,
+        "command": command,
+        "mode": step.get("mode", "async"),
+    }
+    if plugin_id:
+        payload["plugin_id"] = plugin_id
+    if "args" in step:
+        payload["args"] = step.get("args")
+    return payload
+
+
+def _parse_expected_plugins(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = payload.get("expected_plugins")
+    if not isinstance(raw, list) or len(raw) == 0:
+        raise HTTPException(status_code=400, detail="expected_plugins must be a non-empty list")
+
+    parsed: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, str):
+            plugin_id = item.strip()
+            if not plugin_id:
+                continue
+            parsed.append({
+                "plugin_id": plugin_id,
+                "max_last_install_age_hours": None,
+            })
+            continue
+
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="expected_plugins items must be string or object")
+
+        plugin_id = str(item.get("plugin_id", "")).strip()
+        if not plugin_id:
+            raise HTTPException(status_code=400, detail="expected_plugins item requires plugin_id")
+
+        max_age = item.get("max_last_install_age_hours")
+        if max_age is not None:
+            max_age = float(max_age)
+            if max_age <= 0:
+                raise HTTPException(status_code=400, detail="max_last_install_age_hours must be > 0")
+
+        parsed.append({
+            "plugin_id": plugin_id,
+            "max_last_install_age_hours": max_age,
+        })
+
+    if not parsed:
+        raise HTTPException(status_code=400, detail="expected_plugins produced no valid plugin_id")
+    return parsed
+
+
+@app.post("/api/v2/drift/analyze")
+async def analyze_drift(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Analyze config/runtime drift based on expected function installs across devices."""
+    fleet_id = payload.get("fleet_id")
+    device_ids = payload.get("device_ids")
+
+    if fleet_id:
+        device_ids = await _get_fleet_members(str(fleet_id))
+    elif isinstance(device_ids, list) and device_ids:
+        device_ids = [str(d).strip() for d in device_ids if str(d).strip()]
+    else:
+        raise HTTPException(status_code=400, detail="provide fleet_id or non-empty device_ids")
+
+    if not device_ids:
+        raise HTTPException(status_code=400, detail="no devices found for drift analysis")
+
+    expected_plugins = _parse_expected_plugins(payload)
+    expected_plugin_ids = [p["plugin_id"] for p in expected_plugins]
+    expected_by_plugin = {p["plugin_id"]: p for p in expected_plugins}
+
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Execution).where(
+                Execution.execution_type == "function.install",
+                Execution.device_id.in_(device_ids),
+                Execution.plugin_id.in_(expected_plugin_ids),
+            )
+        ).scalars().all()
+
+    installs_by_key: dict[tuple[str, str], list[Execution]] = {}
+    for ex in rows:
+        key = (str(ex.device_id), str(ex.plugin_id))
+        installs_by_key.setdefault(key, []).append(ex)
+
+    for key in installs_by_key:
+        installs_by_key[key].sort(key=lambda e: e.created_at or datetime.min, reverse=True)
+
+    now = datetime.now(timezone.utc)
+    by_device: list[dict[str, Any]] = []
+    total_missing = 0
+    total_stale = 0
+    total_failed = 0
+
+    for device_id in device_ids:
+        issues: list[dict[str, Any]] = []
+        missing = 0
+        stale = 0
+        failed = 0
+
+        for plugin_id in expected_plugin_ids:
+            key = (device_id, plugin_id)
+            installs = installs_by_key.get(key, [])
+            latest = installs[0] if installs else None
+            has_success = any(i.status == "succeeded" for i in installs)
+
+            if not has_success:
+                missing += 1
+                issues.append({
+                    "plugin_id": plugin_id,
+                    "type": "missing_install",
+                    "detail": "no successful function.install execution found",
+                })
+                if latest and latest.status in {"failed", "timeout", "cancelled"}:
+                    failed += 1
+                    issues.append({
+                        "plugin_id": plugin_id,
+                        "type": "latest_install_failed",
+                        "detail": f"latest install status is '{latest.status}'",
+                    })
+                continue
+
+            policy = expected_by_plugin[plugin_id]
+            max_age_hours = policy.get("max_last_install_age_hours")
+            if max_age_hours and latest and latest.created_at:
+                latest_ts = make_aware(latest.created_at)
+                age_hours = (now - latest_ts).total_seconds() / 3600.0
+                if age_hours > float(max_age_hours):
+                    stale += 1
+                    issues.append({
+                        "plugin_id": plugin_id,
+                        "type": "stale_install",
+                        "detail": f"last install {age_hours:.1f}h ago exceeds {max_age_hours}h",
+                    })
+
+        drift_score = min(100, missing * 60 + stale * 25 + failed * 20)
+        by_device.append({
+            "device_id": device_id,
+            "drift_score": drift_score,
+            "missing_installs": missing,
+            "stale_installs": stale,
+            "failed_latest_installs": failed,
+            "issues": issues,
+            "has_drift": drift_score > 0,
+        })
+
+        total_missing += missing
+        total_stale += stale
+        total_failed += failed
+
+    devices_with_drift = sum(1 for d in by_device if d["has_drift"])
+    return {
+        "fleet_id": fleet_id,
+        "expected_plugins": expected_plugins,
+        "total_devices": len(device_ids),
+        "devices_with_drift": devices_with_drift,
+        "summary": {
+            "missing_installs": total_missing,
+            "stale_installs": total_stale,
+            "failed_latest_installs": total_failed,
+        },
+        "devices": by_device,
+    }
+
+
+@app.post("/api/v2/runbooks/execute", status_code=202)
+async def execute_runbook(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Execute an ordered runbook on a single device using execution pipeline steps."""
+    device_id = payload.get("device_id")
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id is required")
+
+    steps = payload.get("steps")
+    if not isinstance(steps, list) or len(steps) == 0:
+        raise HTTPException(status_code=400, detail="steps must be a non-empty list")
+
+    stop_on_failure = bool(payload.get("stop_on_failure", True))
+    runbook_id = str(uuid4())
+    runbook_name = payload.get("name", "runbook")
+
+    results: list[dict[str, Any]] = []
+    for idx, step in enumerate(steps, start=1):
+        if not isinstance(step, dict):
+            raise HTTPException(status_code=400, detail=f"step {idx} must be an object")
+
+        step_name = str(step.get("name", f"step-{idx}"))
+        try:
+            create_payload = _build_runbook_step_payload(step, device_id)
+            created = await create_execution(create_payload, request, x_tenant_id=None)
+            exec_id = created["id"]
+            await dispatch_execution(exec_id, request)
+            results.append({
+                "index": idx,
+                "name": step_name,
+                "execution_id": exec_id,
+                "status": "dispatched",
+            })
+        except HTTPException as exc:
+            results.append({
+                "index": idx,
+                "name": step_name,
+                "execution_id": None,
+                "status": "error",
+                "detail": exc.detail,
+            })
+            if stop_on_failure:
+                break
+
+    return {
+        "runbook_id": runbook_id,
+        "name": runbook_name,
+        "device_id": device_id,
+        "total_steps": len(steps),
+        "completed_steps": len(results),
+        "dispatched": sum(1 for r in results if r["status"] == "dispatched"),
+        "failed": sum(1 for r in results if r["status"] == "error"),
+        "status": "stopped_on_failure" if any(r["status"] == "error" for r in results) and stop_on_failure else "running",
+        "results": results,
+    }
+
+
 # ── Function Trigger CRUD ─────────────────────────────────────────────────────────────────────────────
 
 def _trigger_to_dict(t: FunctionTrigger) -> dict[str, Any]:
@@ -883,6 +1150,145 @@ async def _get_fleet_members(fleet_id: str) -> list[str]:
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"fleet-service unavailable: {exc}") from exc
+
+
+def _compute_canary_rings(total: int, payload: dict[str, Any]) -> list[int]:
+    if total <= 0:
+        return []
+
+    ring_sizes = payload.get("ring_sizes")
+    if isinstance(ring_sizes, list) and ring_sizes:
+        sizes = [int(x) for x in ring_sizes if int(x) > 0]
+        if not sizes:
+            raise HTTPException(status_code=400, detail="ring_sizes must contain positive integers")
+    else:
+        ring_size = int(payload.get("ring_size", 1))
+        if ring_size <= 0:
+            raise HTTPException(status_code=400, detail="ring_size must be > 0")
+        sizes = []
+        left = total
+        while left > 0:
+            chunk = min(ring_size, left)
+            sizes.append(chunk)
+            left -= chunk
+
+    max_rings_raw = payload.get("max_rings")
+    if max_rings_raw is not None:
+        max_rings = int(max_rings_raw)
+        if max_rings <= 0:
+            raise HTTPException(status_code=400, detail="max_rings must be > 0")
+        sizes = sizes[:max_rings]
+
+    # Ensure we always cover the full fleet unless max_rings intentionally truncates.
+    covered = sum(sizes)
+    if max_rings_raw is None and covered < total:
+        sizes.append(total - covered)
+
+    return sizes
+
+
+@app.post("/api/v2/fleets/{fleet_id}/executions/rollout", status_code=202)
+async def rollout_execution_to_fleet(
+    fleet_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Canary/Ring rollout for command/function executions across a fleet."""
+    device_ids = await _get_fleet_members(fleet_id)
+    if not device_ids:
+        raise HTTPException(status_code=400, detail="fleet has no members")
+
+    execution_type = payload.get("execution_type", "command")
+    command = payload.get("command")
+    plugin_id = payload.get("plugin_id")
+    args = payload.get("args")
+    mode = payload.get("mode", "async")
+    stop_on_failure = bool(payload.get("stop_on_failure", True))
+
+    if execution_type in {"function.install", "function.invoke"}:
+        if not plugin_id:
+            raise HTTPException(status_code=400, detail="plugin_id is required for function rollouts")
+        if not command:
+            command = f"{execution_type}:{plugin_id}"
+    elif not command:
+        raise HTTPException(status_code=400, detail="command is required for command rollouts")
+
+    ring_sizes = _compute_canary_rings(len(device_ids), payload)
+    rollout_id = str(uuid4())
+    ring_results: list[dict[str, Any]] = []
+    all_results: list[dict[str, Any]] = []
+
+    cursor = 0
+    for ring_index, ring_size in enumerate(ring_sizes, start=1):
+        ring_devices = device_ids[cursor: cursor + ring_size]
+        cursor += ring_size
+
+        dispatched = 0
+        failures = 0
+        ring_items: list[dict[str, Any]] = []
+        for device_id in ring_devices:
+            try:
+                create_payload: dict[str, Any] = {
+                    "device_id": device_id,
+                    "execution_type": execution_type,
+                    "command": command,
+                    "mode": mode,
+                }
+                if plugin_id:
+                    create_payload["plugin_id"] = plugin_id
+                if args is not None:
+                    create_payload["args"] = args
+
+                created = await create_execution(create_payload, request, x_tenant_id=None)
+                exec_id = created["id"]
+                await dispatch_execution(exec_id, request)
+                ring_items.append({"device_id": device_id, "execution_id": exec_id, "status": "dispatched"})
+                dispatched += 1
+            except HTTPException as exc:
+                ring_items.append({
+                    "device_id": device_id,
+                    "execution_id": None,
+                    "status": "error",
+                    "detail": exc.detail,
+                })
+                failures += 1
+
+        ring_result = {
+            "ring": ring_index,
+            "ring_size": len(ring_devices),
+            "dispatched": dispatched,
+            "failed": failures,
+            "results": ring_items,
+        }
+        ring_results.append(ring_result)
+        all_results.extend(ring_items)
+
+        if stop_on_failure and failures > 0:
+            return {
+                "rollout_id": rollout_id,
+                "fleet_id": fleet_id,
+                "execution_type": execution_type,
+                "total": len(device_ids),
+                "planned_rings": len(ring_sizes),
+                "completed_rings": ring_index,
+                "dispatched": sum(1 for r in all_results if r["status"] == "dispatched"),
+                "failed": sum(1 for r in all_results if r["status"] == "error"),
+                "status": "stopped_on_failure",
+                "rings": ring_results,
+            }
+
+    return {
+        "rollout_id": rollout_id,
+        "fleet_id": fleet_id,
+        "execution_type": execution_type,
+        "total": len(device_ids),
+        "planned_rings": len(ring_sizes),
+        "completed_rings": len(ring_results),
+        "dispatched": sum(1 for r in all_results if r["status"] == "dispatched"),
+        "failed": sum(1 for r in all_results if r["status"] == "error"),
+        "status": "rolling_out",
+        "rings": ring_results,
+    }
 
 
 @app.post("/api/v2/fleets/{fleet_id}/functions/{function_id}/deploy", status_code=202)

@@ -1,5 +1,11 @@
 import os
 
+
+def _csv_values(name: str, default: str = "") -> tuple[str, ...]:
+    raw = os.getenv(name, default)
+    parts = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    return tuple(parts)
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./execution_service.db")
 DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
 
@@ -34,6 +40,17 @@ EXECUTION_RUNNING_TIMEOUT_SECONDS = int(os.getenv("EXECUTION_RUNNING_TIMEOUT_SEC
 EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS = int(os.getenv("EXECUTION_TIMEOUT_CHECK_INTERVAL_SECONDS", "5"))
 
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "5"))
+
+# Guardrails Policy Engine v1
+GUARDRAILS_ENABLED = os.getenv("GUARDRAILS_ENABLED", "false").lower() == "true"
+GUARDRAILS_DENY_COMMAND_PREFIXES = _csv_values(
+    "GUARDRAILS_DENY_COMMAND_PREFIXES",
+    "",
+)
+GUARDRAILS_BLOCKED_EXECUTION_TYPES = _csv_values(
+    "GUARDRAILS_BLOCKED_EXECUTION_TYPES",
+    "",
+)
 
 TERMINAL_STATUSES = frozenset({"succeeded", "failed", "timeout", "cancelled"})
 VALID_STATUSES = frozenset({"queued", "dispatched", "running", "succeeded", "failed", "timeout", "cancelled"})

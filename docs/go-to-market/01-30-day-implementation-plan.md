@@ -1,7 +1,7 @@
 # Nexora Go-To-Market 30-Day Implementation Plan
 
 ## Objective
-Move from engineering-ready to pilot-ready with measurable outcomes and low delivery risk.
+Move from engineering-ready to startup-ready, with measurable pilot traction, repeatable onboarding, and low delivery risk.
 
 ## Success Criteria at Day 30
 - Device onboarding median time <= 15 minutes
@@ -9,6 +9,13 @@ Move from engineering-ready to pilot-ready with measurable outcomes and low deli
 - P95 dispatch latency <= 2 seconds
 - No open critical security findings
 - 2 qualified design-partner opportunities in pipeline
+- 1 live pilot negotiation with clear commercial scope
+- Defined pricing hypothesis for Starter/Pro/Enterprise
+
+## Strategic Track
+- Startup product track reference: `docs/go-to-market/08-startup-product-track.md`
+- Founder weekly board (4 settimane): `docs/go-to-market/09-founder-weekly-operating-board.md`
+- Feature priority matrix (impatto/sforzo): `docs/go-to-market/10-feature-priority-matrix.md`
 
 ## Week 1 - Reliability Baseline
 ### Outcomes
@@ -24,6 +31,25 @@ Move from engineering-ready to pilot-ready with measurable outcomes and low deli
 - Baseline KPI report.
 - Updated bug list with P0/P1 = 0.
 - Signed-off pilot scope document.
+
+### Execution Assets (Implemented)
+- KPI collector script: `scripts/gtm-baseline-kpi.py`
+- Baseline output artifact: `docs/go-to-market/baseline-kpi-latest.json`
+- Week 1 baseline report: `docs/go-to-market/07-week1-baseline-report-2026-06-27.md`
+- P0/P1 operational checklist: `docs/go-to-market/05-week1-p0-p1-checklist.md`
+- 10-minute demo runbook: `docs/go-to-market/06-demo-flow-10-min-runbook.md`
+
+### Week 1 Command Set
+```bash
+# Generate/update baseline KPI JSON (includes synthetic onboarding probe)
+python3 scripts/gtm-baseline-kpi.py --out-json docs/go-to-market/baseline-kpi-latest.json
+
+# Optional: collect only observed metrics (no synthetic announce/claim)
+python3 scripts/gtm-baseline-kpi.py --skip-synthetic --out-json docs/go-to-market/baseline-kpi-latest.json
+
+# End-to-end technical validation path for the demo environment
+./scripts/nexora-device-emulator-e2e.sh
+```
 
 ## Week 2 - Security and Tenant Safety
 ### Outcomes

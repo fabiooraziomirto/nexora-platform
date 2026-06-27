@@ -1,0 +1,22 @@
+{
+  "timestamp_utc": "2026-06-27T14:45:50.295881+00:00",
+  "kpis": {
+    "registered_devices": 3,
+    "online_devices": 0,
+    "offline_devices": 3,
+    "unknown_devices": 0,
+    "pending_pairings": 0,
+    "executions_sampled": 2,
+    "terminal_executions": 2,
+    "execution_success_rate_percent": 100.0,
+    "dispatch_latency_p95_ms": 0.0,
+    "dispatch_latency_p50_ms": 0.0,
+    "pending_age_p50_seconds": 0.0
+  },
+  "synthetic_onboarding": {
+    "hardware_id": "gtm-kpi-69be70b2cb",
+    "status": "approved",
+    "elapsed_ms": 62.36,
+    "approved": true
+  }
+}

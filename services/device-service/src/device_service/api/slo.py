@@ -78,6 +78,26 @@ class SLOViolationResponse(BaseModel):
     violated_at: datetime
 
 
+class SLOAssistantMetric(BaseModel):
+    metric: str
+    violations: int
+    latest_observed_value: Optional[float] = None
+    threshold: Optional[float] = None
+    operator: Optional[str] = None
+    severity: str
+    recommendation: str
+
+
+class SLOAssistantResponse(BaseModel):
+    device_id: str
+    hours: int
+    total_violations: int
+    status: str
+    top_metrics: list[SLOAssistantMetric]
+    recommendations: list[str]
+    suggested_runbook_steps: list[dict]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -270,3 +290,112 @@ async def list_violations(
         .limit(limit)
     )
     return [_violation_to_response(v) for v in result.scalars().all()]
+
+
+@router.get("/devices/{device_id}/slos/assistant", response_model=SLOAssistantResponse)
+async def slo_assistant(
+    device_id: UUID,
+    hours: int = Query(24, ge=1, le=720),
+    limit: int = Query(200, ge=1, le=2000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return actionable remediation hints based on recent SLO violations."""
+    await _assert_device_exists(device_id, db)
+
+    since = datetime.utcnow() - timedelta(hours=hours)
+    result = await db.execute(
+        select(SLOViolation)
+        .where(
+            and_(
+                SLOViolation.device_id == str(device_id),
+                SLOViolation.violated_at >= since,
+            )
+        )
+        .order_by(SLOViolation.violated_at.desc())
+        .limit(limit)
+    )
+    violations = result.scalars().all()
+
+    if not violations:
+        return SLOAssistantResponse(
+            device_id=str(device_id),
+            hours=hours,
+            total_violations=0,
+            status="healthy",
+            top_metrics=[],
+            recommendations=[
+                "No recent SLO violations detected. Keep current thresholds and monitor trend weekly.",
+            ],
+            suggested_runbook_steps=[
+                {"name": "health-check", "execution_type": "command", "command": "echo health-ok"},
+            ],
+        )
+
+    slo_rows = await db.execute(
+        select(DeviceSLO).where(DeviceSLO.device_id == str(device_id))
+    )
+    slo_by_id = {s.id: s for s in slo_rows.scalars().all()}
+
+    metric_agg: dict[str, dict] = {}
+    for v in violations:
+        data = metric_agg.setdefault(v.metric, {
+            "violations": 0,
+            "latest_observed_value": v.observed_value,
+            "threshold": v.threshold,
+            "operator": v.operator,
+        })
+        data["violations"] += 1
+
+    top_items = sorted(metric_agg.items(), key=lambda x: x[1]["violations"], reverse=True)[:5]
+    top_metrics: list[SLOAssistantMetric] = []
+    recommendations: list[str] = []
+    runbook_steps: list[dict] = []
+
+    for metric, data in top_items:
+        count = int(data["violations"])
+        severity = "high" if count >= 5 else "medium" if count >= 2 else "low"
+
+        operator = str(data.get("operator") or "")
+        threshold = data.get("threshold")
+        latest_value = data.get("latest_observed_value")
+
+        if operator in {"lt", "lte"}:
+            rec = f"Reduce {metric} pressure: latest {latest_value} breaches {operator} {threshold}."
+        elif operator in {"gt", "gte"}:
+            rec = f"Increase {metric} floor: latest {latest_value} breaches {operator} {threshold}."
+        else:
+            rec = f"Stabilize {metric}: latest {latest_value} deviates from expected threshold {threshold}."
+
+        top_metrics.append(SLOAssistantMetric(
+            metric=metric,
+            violations=count,
+            latest_observed_value=latest_value,
+            threshold=threshold,
+            operator=operator,
+            severity=severity,
+            recommendation=rec,
+        ))
+
+        recommendations.append(f"{metric}: {rec}")
+        runbook_steps.append({
+            "name": f"diagnose-{metric}",
+            "execution_type": "command",
+            "command": f"echo diagnose-{metric}",
+        })
+
+    # Add a generic verification step at the end.
+    runbook_steps.append({
+        "name": "verify-slo-stability",
+        "execution_type": "command",
+        "command": "echo verify-slo-stability",
+    })
+
+    return SLOAssistantResponse(
+        device_id=str(device_id),
+        hours=hours,
+        total_violations=len(violations),
+        status="attention_required",
+        top_metrics=top_metrics,
+        recommendations=recommendations,
+        suggested_runbook_steps=runbook_steps,
+    )

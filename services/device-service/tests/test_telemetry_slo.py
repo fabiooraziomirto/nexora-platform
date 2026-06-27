@@ -340,3 +340,47 @@ async def test_all_slo_operators(client, device_id):
         )
         got = resp.json()["violations"] > 0
         assert got == expect_violation, f"operator={operator} value={value} threshold={threshold}: expected violation={expect_violation}"
+
+
+@pytest.mark.asyncio
+async def test_slo_assistant_returns_recommendations(client, device_id):
+    await client.post(
+        f"/api/v2/devices/{device_id}/slos",
+        json={"metric": "temperature", "operator": "lt", "threshold": 30.0},
+    )
+    await client.post(
+        f"/api/v2/devices/{device_id}/telemetry",
+        json={"samples": [
+            {"metric": "temperature", "value": 35.0},
+            {"metric": "temperature", "value": 36.0},
+        ]},
+    )
+
+    resp = await client.get(f"/api/v2/devices/{device_id}/slos/assistant?hours=24")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "attention_required"
+    assert data["total_violations"] >= 1
+    assert len(data["top_metrics"]) >= 1
+    assert data["top_metrics"][0]["metric"] == "temperature"
+    assert len(data["recommendations"]) >= 1
+    assert len(data["suggested_runbook_steps"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_slo_assistant_healthy_without_violations(client, device_id):
+    await client.post(
+        f"/api/v2/devices/{device_id}/slos",
+        json={"metric": "temperature", "operator": "lt", "threshold": 30.0},
+    )
+    await client.post(
+        f"/api/v2/devices/{device_id}/telemetry",
+        json={"samples": [{"metric": "temperature", "value": 25.0}]},
+    )
+
+    resp = await client.get(f"/api/v2/devices/{device_id}/slos/assistant?hours=24")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "healthy"
+    assert data["total_violations"] == 0
+    assert data["top_metrics"] == []

@@ -18,6 +18,7 @@ import AIRisk from './pages/AIRisk'
 import AIFunctionBuilder from './pages/AIFunctionBuilder'
 import Login from './pages/Login'
 import Audit from './pages/Audit'
+import OnboardingWizard from './pages/OnboardingWizard'
 
 function AuthenticatedLayout() {
   const auth = useAuth()
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/" element={<AuthenticatedLayout />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="onboarding" element={<OnboardingWizard />} />
               <Route path="devices"     element={<Devices />} />
               <Route path="plugins"     element={<Plugins />} />
               <Route path="executions"  element={<Executions />} />

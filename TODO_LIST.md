@@ -121,6 +121,21 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 - [x] Template operativo settimanale: `docs/go-to-market/02-weekly-operating-template.md`
 - [x] Pitch template 6 slide: `docs/go-to-market/03-pitch-6-slide-template.md`
 - [x] Scorecard prospect: `docs/go-to-market/04-prospect-scorecard.md`
+- [x] Checklist P0/P1 Week 1: `docs/go-to-market/05-week1-p0-p1-checklist.md`
+- [x] Runbook demo 10 minuti: `docs/go-to-market/06-demo-flow-10-min-runbook.md`
+- [x] Script KPI baseline + output iniziale: `scripts/gtm-baseline-kpi.py`, `docs/go-to-market/baseline-kpi-latest.json`
+- [x] Report baseline Week 1 (2026-06-27): `docs/go-to-market/07-week1-baseline-report-2026-06-27.md`
+- [x] Second baseline dispatch latency (real Kafka): `docs/paper/results/perf-dispatch-kafka-20260627_170025.json`
+- [x] Confidence run dispatch latency n=30: `docs/paper/results/perf-dispatch-kafka-20260627_170232.json`
+- [x] Startup product track (90 giorni): `docs/go-to-market/08-startup-product-track.md`
+- [x] Founder weekly operating board (4 settimane): `docs/go-to-market/09-founder-weekly-operating-board.md`
+- [x] Feature priority matrix (impatto/sforzo): `docs/go-to-market/10-feature-priority-matrix.md`
+- [x] Guardrails Policy Engine v1 (execution-service): `docs/go-to-market/11-guardrails-policy-engine-v1.md`
+- [x] Onboarding Wizard v1 (nexora-ui): `docs/go-to-market/12-onboarding-wizard-v1.md`
+- [x] Canary/Ring Rollout v1 (execution-service): `docs/go-to-market/13-canary-ring-rollout-v1.md`
+- [x] Runbook Automation v1 (execution-service): `docs/go-to-market/14-runbook-automation-v1.md`
+- [x] Drift Detection v1 (execution-service): `docs/go-to-market/15-drift-detection-v1.md`
+- [x] SLO Assistant v1 (device-service): `docs/go-to-market/16-slo-assistant-v1.md`
 
 ---
 

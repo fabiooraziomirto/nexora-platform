@@ -126,3 +126,22 @@ safety-report.json
 requirements.txt
 *.dockerfile.bak
 .claude/worktrees/
+
+# Local notes / WIP docs (keep out of git)
+*.local.md
+*.wip.md
+WIP.md
+WIP-*.md
+scratch*.md
+**/wip/
+**/WIP/
+**/notes-local/
+
+# Local planning docs
+plan.local.md
+PLAN.local.md
+plan.wip.md
+PLAN.wip.md
+*-plan.local.md
+*-plan.wip.md
+**/plans-local/

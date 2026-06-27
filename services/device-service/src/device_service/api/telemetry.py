@@ -156,6 +156,8 @@ async def ingest_telemetry(
     # SLO evaluation — check each sample against enabled SLO definitions
     sample_tuples = [(r.metric, r.value, r.ts) for r in rows]
     violations = await evaluate_slos(str(device_id), sample_tuples, db)
+    # Persist generated violations so they are visible across requests.
+    await db.commit()
     for v in violations:
         logger.warning(
             "slo.violated",

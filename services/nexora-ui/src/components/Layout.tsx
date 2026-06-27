@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ChevronDown, LayoutDashboard, Monitor, BarChart2, AlertCircle, Layers, Package, Terminal, Network, Globe, BrainCircuit, Gauge, Code2, ClipboardList, LogOut } from 'lucide-react'
+import { ChevronDown, LayoutDashboard, Monitor, BarChart2, AlertCircle, Layers, Package, Terminal, Network, Globe, BrainCircuit, Gauge, Code2, ClipboardList, Wand2, LogOut } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 type NavItem = {
@@ -21,6 +21,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Core Platform',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/onboarding', label: 'Onboarding', icon: Wand2 },
       { to: '/devices', label: 'Devices', icon: Monitor },
       { to: '/plugins', label: 'Plugins', icon: Package },
       { to: '/executions', label: 'Executions', icon: Terminal },
