@@ -75,3 +75,18 @@ KAFKA_CONSUMER_LAG = Gauge(
     "Kafka consumer lag in messages (end_offset - consumer_position) per topic-partition",
     ["service", "topic", "partition"],
 )
+WS_CONNECTIONS_GAUGE = Gauge(
+    "s4t_lr_ws_connections",
+    "Active WebSocket tunnel connections from edge agents",
+    ["service"],
+)
+WS_PUSH_TOTAL = Counter(
+    "s4t_lr_ws_push_total",
+    "WebSocket control messages pushed to agents",
+    ["service"],
+)
+WS_RECONNECTS_TOTAL = Counter(
+    "s4t_lr_ws_reconnects_total",
+    "WebSocket reconnection events (device re-connected after disconnect)",
+    ["service"],
+)

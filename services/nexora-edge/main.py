@@ -14,12 +14,13 @@ from uuid import uuid4
 
 import aiokafka
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest
 
 from nexora_edge.core.config import (
     ENVIRONMENT,
+    GATEWAY_INSTANCE_ID,
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_TOPIC_PREFIX,
     KAFKA_ENABLED,
@@ -52,6 +53,9 @@ from nexora_edge.core.metrics import (
     KAFKA_INGESTION_LATENCY,
     QUEUE_WAIT,
     KAFKA_CONSUMER_LAG,
+    WS_CONNECTIONS_GAUGE,
+    WS_PUSH_TOTAL,
+    WS_RECONNECTS_TOTAL,
 )
 
 app = FastAPI(title="Lightningrod Gateway", version="0.1.0")
@@ -69,6 +73,10 @@ redis_client: aioredis.Redis | None = None
 # With fallback active the gateway is NOT horizontally scalable (single-instance only).
 _local_sessions: dict[str, dict[str, Any]] = {}
 _local_dispatches: dict[str, dict[str, Any]] = {}
+
+# Per-instance WebSocket connections: device_id -> active WebSocket.
+# Not shared across replicas; cross-replica delivery goes via Redis Pub/Sub.
+_ws_connections: dict[str, "WebSocket"] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +179,112 @@ async def _dispatch_count_for_device(device_id: str) -> int:
         except Exception:
             logger.warning("Redis error in _dispatch_count_for_device device=%s, falling back to local", device_id)
     return sum(1 for d in _local_dispatches.values() if d.get("device_id") == device_id)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket push helpers
+# ---------------------------------------------------------------------------
+
+_WS_PUSH_CHANNEL_PREFIX = "nxr:push:"
+
+
+async def _ws_push_dispatch(device_id: str, dispatch: dict[str, Any], websocket: "WebSocket") -> None:
+    """Send one dispatch as a control message over a WebSocket connection.
+
+    The dispatch remains in Redis until the agent ACKs — this provides
+    at-least-once delivery across reconnects.
+    """
+    execution_id = dispatch.get("execution_id", "")
+    delivered_at = time.time()
+
+    kafka_dispatched_at_val: float | None = (
+        dispatch.get("event", {}).get("payload", {}).get("kafka_dispatched_at")
+        or dispatch.get("event", {}).get("occurred_at")
+    )
+    gateway_received_at_val: float | None = dispatch.get("received_at")
+    queue_wait_s: float | None = (
+        delivered_at - float(gateway_received_at_val) if gateway_received_at_val is not None else None
+    )
+    dispatch_latency_s: float | None = (
+        delivered_at - float(kafka_dispatched_at_val) if kafka_dispatched_at_val is not None else None
+    )
+
+    try:
+        await websocket.send_json({
+            "type": "control",
+            "execution_id": execution_id,
+            "device_id": device_id,
+            "payload": dispatch.get("event", {}).get("payload", {}),
+            "received_at": gateway_received_at_val,
+            "kafka_dispatched_at": kafka_dispatched_at_val,
+            "delivered_at": delivered_at,
+            "queue_wait_seconds": queue_wait_s,
+            "dispatch_latency_seconds": dispatch_latency_s,
+        })
+    except Exception:
+        logger.warning("WS push failed for device=%s execution=%s", device_id, execution_id)
+        return
+
+    DELIVERY_ATTEMPTS_TOTAL.labels("nexora-edge", device_id).inc()
+    WS_PUSH_TOTAL.labels("nexora-edge").inc()
+
+    if queue_wait_s is not None:
+        QUEUE_WAIT.labels("nexora-edge").observe(queue_wait_s)
+    if dispatch_latency_s is not None:
+        DISPATCH_LATENCY.labels("nexora-edge").observe(dispatch_latency_s)
+
+    logger.info(json.dumps({
+        "event": "ws_push_dispatched",
+        "service": "nexora-edge",
+        "execution_id": execution_id,
+        "device_id": device_id,
+        "gateway_instance": GATEWAY_INSTANCE_ID,
+        "queue_wait_s": round(queue_wait_s, 6) if queue_wait_s is not None else None,
+        "dispatch_latency_s": round(dispatch_latency_s, 6) if dispatch_latency_s is not None else None,
+    }))
+
+
+async def _ws_replay_pending(device_id: str, websocket: "WebSocket") -> None:
+    """On (re)connect, push all cached dispatches for this device immediately."""
+    if redis_client is not None:
+        try:
+            keys = await redis_client.keys("gateway:dispatch:*")
+            for key in keys:
+                raw = await redis_client.get(key)
+                if raw:
+                    data = json.loads(raw)
+                    if data.get("device_id") == device_id:
+                        await _ws_push_dispatch(device_id, data, websocket)
+        except Exception:
+            logger.warning("Redis error in _ws_replay_pending device=%s", device_id)
+    else:
+        for data in list(_local_dispatches.values()):
+            if data.get("device_id") == device_id:
+                await _ws_push_dispatch(device_id, data, websocket)
+
+
+async def _ws_pubsub_listener(device_id: str, websocket: "WebSocket") -> None:
+    """Subscribe to the Redis Pub/Sub push channel for device_id.
+
+    Any gateway replica that receives a Kafka dispatch event publishes to
+    nxr:push:{device_id}. This instance, which owns the WS connection,
+    picks it up here and forwards it to the agent — enabling connection-
+    affinity delivery across 2+ gateway replicas without sticky LB sessions.
+    """
+    if redis_client is None:
+        return
+    channel = f"{_WS_PUSH_CHANNEL_PREFIX}{device_id}"
+    try:
+        async with redis_client.pubsub() as pubsub:
+            await pubsub.subscribe(channel)
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    data = json.loads(message["data"])
+                    await _ws_push_dispatch(device_id, data, websocket)
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.warning("WS pubsub listener error for device=%s", device_id)
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +404,22 @@ async def _consume_dispatched() -> None:
                 )
 
             logger.info("Dispatch event cached: execution_id=%s device_id=%s", execution_id, device_id)
+
+            # Push to agent immediately via WebSocket (Phase 1 tunnel plane).
+            # Cross-replica: publish to Redis Pub/Sub so the owning gateway instance
+            # receives and pushes over its local WS connection.
+            # Single-instance fallback: push directly if WS is local.
+            if device_id:
+                if redis_client is not None:
+                    try:
+                        await redis_client.publish(
+                            f"{_WS_PUSH_CHANNEL_PREFIX}{device_id}",
+                            json.dumps(dispatch_data),
+                        )
+                    except Exception:
+                        logger.warning("Redis publish failed for device=%s", device_id)
+                elif device_id in _ws_connections:
+                    await _ws_push_dispatch(device_id, dispatch_data, _ws_connections[device_id])
     except asyncio.CancelledError:
         pass
     except Exception:
@@ -489,6 +619,108 @@ async def get_session(device_id: str) -> dict[str, Any]:
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     return session
+
+
+@app.websocket("/api/v2/agents/ws/{device_id}")
+async def agent_ws_tunnel(websocket: WebSocket, device_id: str) -> None:
+    """Persistent WebSocket reverse tunnel from edge agent to gateway.
+
+    Logical streams via the "type" field in JSON messages:
+      - "control"     (gateway→agent) command push delivery
+      - "ack"         (agent→gateway) delivery acknowledgement; triggers dispatch delete
+      - "interactive" (bidirectional) reserved for reverse shell / remote access
+      - "ping"/"pong" keepalive
+
+    Connection-affinity delivery across replicas:
+      - This instance stores the WS in _ws_connections[device_id] (local).
+      - Kafka consumer publishes to Redis Pub/Sub nxr:push:{device_id}.
+      - _ws_pubsub_listener receives and forwards to the WS owned here.
+      - Single-instance fallback (Redis disabled): direct push via _ws_connections.
+    """
+    await websocket.accept()
+
+    was_reconnect = device_id in _ws_connections
+    _ws_connections[device_id] = websocket
+
+    session = await _session_get(device_id)
+    if session:
+        WS_RECONNECTS_TOTAL.labels("nexora-edge").inc()
+    else:
+        session = {
+            "device_id": device_id,
+            "registered_at": time.time(),
+            "metadata": {},
+        }
+    session["ws_connected"] = True
+    session["gateway_instance"] = GATEWAY_INSTANCE_ID
+    session["last_seen"] = time.time()
+    await _session_set(device_id, session)
+    WS_CONNECTIONS_GAUGE.labels("nexora-edge").inc()
+    AGENT_SESSIONS_GAUGE.labels("nexora-edge").set(await _session_count())
+
+    logger.info(json.dumps({
+        "event": "ws_tunnel_opened",
+        "service": "nexora-edge",
+        "device_id": device_id,
+        "gateway_instance": GATEWAY_INSTANCE_ID,
+        "reconnect": was_reconnect,
+    }))
+
+    # Replay any pending dispatches so commands survive agent reconnects.
+    await _ws_replay_pending(device_id, websocket)
+
+    # Subscribe to Redis Pub/Sub for cross-replica push routing.
+    pubsub_task: asyncio.Task | None = None
+    if redis_client is not None:
+        pubsub_task = asyncio.create_task(_ws_pubsub_listener(device_id, websocket))
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "ack":
+                # Agent confirmed receipt; safe to remove the dispatch.
+                exec_id = data.get("execution_id")
+                if exec_id:
+                    await _dispatch_delete(exec_id)
+                    PENDING_DISPATCH_GAUGE.labels("nexora-edge").set(await _dispatch_count())
+                    PER_DEVICE_PENDING_GAUGE.labels("nexora-edge", device_id).set(
+                        await _dispatch_count_for_device(device_id)
+                    )
+                    logger.info("WS ack received: execution_id=%s device_id=%s", exec_id, device_id)
+
+            elif msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
+            elif msg_type == "heartbeat":
+                session = await _session_get(device_id)
+                if session:
+                    session["last_seen"] = time.time()
+                    await _session_set(device_id, session)
+
+    except WebSocketDisconnect:
+        logger.info(json.dumps({
+            "event": "ws_tunnel_closed",
+            "service": "nexora-edge",
+            "device_id": device_id,
+        }))
+    finally:
+        _ws_connections.pop(device_id, None)
+        if pubsub_task and not pubsub_task.done():
+            pubsub_task.cancel()
+            try:
+                await pubsub_task
+            except asyncio.CancelledError:
+                pass
+
+        WS_CONNECTIONS_GAUGE.labels("nexora-edge").dec()
+        AGENT_SESSIONS_GAUGE.labels("nexora-edge").set(await _session_count())
+
+        session = await _session_get(device_id)
+        if session:
+            session["ws_connected"] = False
+            await _session_set(device_id, session)
 
 
 @app.post("/api/v2/deliver/{execution_id}")

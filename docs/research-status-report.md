@@ -1,9 +1,59 @@
 # Nexora Platform — Research Status Report
 
-**Data**: 25 Giugno 2026  
+**Data**: 27 Giugno 2026 (aggiornamento Phase 1 tunnel plane)  
 **Repository**: `nexora-platform`  
 **Maturity**: Pre-release (Nexora v0.1.0 — MVP Stage)  
 **Scopo**: Analisi dello stato reale del codice per pianificare la valutazione sperimentale di un paper accademico.
+
+---
+
+## AGGIORNAMENTO FASE 1 — WebSocket Tunnel Plane (2026-06-27)
+
+**Stato**: ✅ Implementato e testato
+
+### Cosa è cambiato
+
+| Componente | Prima | Dopo |
+|---|---|---|
+| Dispatch delivery | HTTP poll (`GET /executions` + `POST /deliver`) | WebSocket PUSH (`WS /api/v2/agents/ws/{device_id}`) |
+| Session state | Redis-backed (già implementato) | Redis-backed + `ws_connected`, `gateway_instance` |
+| Cross-replica routing | Redis shared state (read) | Redis Pub/Sub (`nxr:push:{device_id}`) per push delivery |
+| nexora-edge tests | 5 (test_api.py) | 17 (5 esistenti + 12 nuovi in test_ws_tunnel.py) |
+| Emulator modes | HTTP poll only | HTTP poll (default) + `--ws-mode` WS push |
+| Intermittency simulation | `--kill-after` only | + `--reconnect-interval` (NAT rebind / link flap) |
+| ADR | ADR-0001-0005 | + ADR-0006 (WS tunnel design) |
+
+### Latenza teorica
+
+- **Prima**: p99 latency = `O(POLL_SECONDS)` = O(4 s)
+- **Dopo**: p99 latency = `O(Kafka_ingestion + WS_push)` ≈ O(10-50 ms locale)
+- Misura sperimentale richiesta: test con stack in esecuzione + metriche `s4t_execution_dispatch_latency_seconds`
+
+### Resilienza (at-least-once delivery)
+
+- Dispatch non rimosso da Redis finché l'agent non invia `ack`
+- On reconnect: `_ws_replay_pending()` ripropone tutti i dispatch non ACKed
+- Test: `test_ws_unacked_dispatch_survives_reconnect` ✅
+
+### Scalabilità orizzontale
+
+- 2+ repliche condividono Redis per sessioni e dispatch
+- Cross-replica push via Redis Pub/Sub (nessun sticky LB necessario)
+- `REDIS_REQUIRED=true` consigliato in modalità multi-replica
+
+### Gap rimanenti per Phase 1 "Definition of Done"
+
+| Requisito | Stato |
+|---|---|
+| Dispatch p99 < 50ms locale | ⚠️ Richiede stack running — misura sperimentale pendente |
+| Commands survive agent churn | ✅ Test green (at-least-once via ack+replay) |
+| 2 gateway replicas sharing Redis | ✅ Design implementato; test di integrazione richiedono docker-compose |
+| Tests green (17 tests) | ✅ |
+| scripts/test-all.sh green | ⚠️ Pre-existing bug: set -e + ((PASSED++)) esce al primo test_pass |
+| Emulator e2e green | ⚠️ Richiede stack running |
+| ADR recorded | ✅ ADR-0006 |
+
+---
 
 ---
 

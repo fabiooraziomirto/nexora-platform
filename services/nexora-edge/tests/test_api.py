@@ -12,6 +12,7 @@ transport = ASGITransport(app=app)
 def reset_gateway_state(monkeypatch):
     main._local_sessions.clear()
     main._local_dispatches.clear()
+    main._ws_connections.clear()
     monkeypatch.setattr(main, "producer", None)
     monkeypatch.setattr(main, "redis_client", None)
     monkeypatch.setattr(main, "KAFKA_ENABLED", False)
@@ -21,6 +22,7 @@ def reset_gateway_state(monkeypatch):
     yield
     main._local_sessions.clear()
     main._local_dispatches.clear()
+    main._ws_connections.clear()
 
 
 async def _client() -> AsyncClient:

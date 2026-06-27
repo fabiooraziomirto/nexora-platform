@@ -1,6 +1,8 @@
 import os
+import socket
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+GATEWAY_INSTANCE_ID = os.getenv("GATEWAY_INSTANCE_ID", socket.gethostname())
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 KAFKA_TOPIC_PREFIX = os.getenv("KAFKA_TOPIC_PREFIX", "nxr")
