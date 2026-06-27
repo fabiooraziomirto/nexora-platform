@@ -1,0 +1,95 @@
+openapi: 3.0.3
+info:
+  title: Network Service API
+  version: 1.0.0
+  description: Port and network exposure APIs for controlled edge connectivity.
+servers:
+  - url: http://localhost:8004
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+  /ready:
+    get:
+      summary: Readiness check
+      responses:
+        "200":
+          description: Service dependencies are ready
+  /api/v2/ports:
+    get:
+      summary: List ports
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Port list
+    post:
+      summary: Create port
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortCreate"
+      responses:
+        "201":
+          description: Port created
+  /api/v2/ports/{port_id}:
+    get:
+      summary: Get port
+      parameters:
+        - $ref: "#/components/parameters/PortId"
+      responses:
+        "200":
+          description: Port
+    patch:
+      summary: Update port
+      parameters:
+        - $ref: "#/components/parameters/PortId"
+      responses:
+        "200":
+          description: Port updated
+    delete:
+      summary: Delete port
+      parameters:
+        - $ref: "#/components/parameters/PortId"
+      responses:
+        "204":
+          description: Port deleted
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 100
+    PortId:
+      name: port_id
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    PortCreate:
+      type: object
+      required: [device_id, network_id, ip_address]
+      properties:
+        device_id:
+          type: string
+        network_id:
+          type: string
+        ip_address:
+          type: string
+        status:
+          type: string

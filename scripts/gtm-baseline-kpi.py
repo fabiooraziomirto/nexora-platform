@@ -20,6 +20,15 @@ import urllib.request
 from datetime import datetime, timezone
 from uuid import uuid4
 
+AUDIT_REQUIRED_FIELDS = {
+    "timestamp",
+    "service",
+    "actor_user_id",
+    "action",
+    "resource_type",
+    "outcome",
+}
+
 
 def _http_json(method: str, url: str, payload: dict | None = None) -> dict | list:
     body = None
@@ -76,10 +85,12 @@ def collect(device_base: str, exec_base: str, include_synthetic: bool) -> dict:
     devices_resp = _http_json("GET", f"{device_base}/api/v2/devices?page=1&page_size=200")
     pending_resp = _http_json("GET", f"{device_base}/api/v2/devices/pending")
     exec_resp = _http_json("GET", f"{exec_base}/api/v2/executions?page=1&page_size=200")
+    audit_resp = _http_json("GET", f"{device_base}/api/v2/audit/events?page=1&page_size=200")
 
     devices = devices_resp.get("items", [])
     pending = pending_resp if isinstance(pending_resp, list) else []
     executions = exec_resp.get("items", [])
+    audit_events = audit_resp.get("items", []) if isinstance(audit_resp, dict) else []
 
     online = sum(1 for d in devices if d.get("status") == "online")
     offline = sum(1 for d in devices if d.get("status") == "offline")
@@ -106,6 +117,18 @@ def collect(device_base: str, exec_base: str, include_synthetic: bool) -> dict:
             ts = ts.replace(tzinfo=timezone.utc)
         pending_age_sec.append(max(0.0, (now - ts).total_seconds()))
 
+    complete_audit_events = sum(
+        1
+        for event in audit_events
+        if all(event.get(field) not in {None, ""} for field in AUDIT_REQUIRED_FIELDS)
+        and (event.get("tenant_id") not in {None, ""} or event.get("actor_tenant_id") not in {None, ""})
+    )
+    audit_completeness = (
+        complete_audit_events / len(audit_events) * 100.0
+        if audit_events
+        else 0.0
+    )
+
     out = {
         "timestamp_utc": now.isoformat(),
         "kpis": {
@@ -120,6 +143,8 @@ def collect(device_base: str, exec_base: str, include_synthetic: bool) -> dict:
             "dispatch_latency_p95_ms": round(_quantile(dispatch_ms, 0.95), 2),
             "dispatch_latency_p50_ms": round(_quantile(dispatch_ms, 0.50), 2),
             "pending_age_p50_seconds": round(_quantile(pending_age_sec, 0.50), 2),
+            "audit_events_sampled": len(audit_events),
+            "audit_event_completeness_percent": round(audit_completeness, 2),
         },
     }
 
@@ -148,6 +173,8 @@ def print_summary(report: dict) -> None:
     print(f"dispatch_latency_p50_ms:     {k['dispatch_latency_p50_ms']}")
     print(f"dispatch_latency_p95_ms:     {k['dispatch_latency_p95_ms']}")
     print(f"pending_age_p50_seconds:     {k['pending_age_p50_seconds']}")
+    print(f"audit_events_sampled:        {k['audit_events_sampled']}")
+    print(f"audit_completeness_%:        {k['audit_event_completeness_percent']}")
     if "synthetic_onboarding" in report:
         s = report["synthetic_onboarding"]
         print(f"synthetic_onboarding_status: {s.get('status')}")

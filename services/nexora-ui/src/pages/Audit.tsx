@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { RefreshCw, Search } from 'lucide-react'
-import { api } from '../api/client'
+import { Download, RefreshCw, Search } from 'lucide-react'
+import { api, type AuditExportFormat } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import { SkeletonRows } from '../components/Skeleton'
 
@@ -8,6 +8,8 @@ export default function Audit() {
   const [action, setAction] = useState('')
   const [resourceType, setResourceType] = useState('')
   const [actor, setActor] = useState('')
+  const [exporting, setExporting] = useState<AuditExportFormat | null>(null)
+  const [exportError, setExportError] = useState('')
   const { data, loading, error, reload } = useApi(
     () => api.listAuditEvents({
       action: action || undefined,
@@ -20,6 +22,32 @@ export default function Audit() {
 
   const events = data?.items ?? []
 
+  async function downloadEvidence(format: AuditExportFormat) {
+    setExporting(format)
+    setExportError('')
+    try {
+      const blob = await api.exportAuditEvents({
+        action: action || undefined,
+        resource_type: resourceType || undefined,
+        actor_user_id: actor || undefined,
+        limit: 1000,
+      }, format)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const today = new Date().toISOString().slice(0, 10)
+      link.href = url
+      link.download = `nexora-audit-evidence-${today}.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setExporting(null)
+    }
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-5">
@@ -29,13 +57,27 @@ export default function Audit() {
             {data ? `${data.total} events` : loading ? '...' : '-'}
           </p>
         </div>
-        <button
-          onClick={reload}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {(['json', 'csv', 'html'] as AuditExportFormat[]).map(format => (
+            <button
+              key={format}
+              onClick={() => downloadEvidence(format)}
+              disabled={!!exporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              title={`Export ${format.toUpperCase()} evidence`}
+            >
+              <Download size={13} className={exporting === format ? 'animate-pulse' : ''} />
+              {format.toUpperCase()}
+            </button>
+          ))}
+          <button
+            onClick={reload}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -65,6 +107,12 @@ export default function Audit() {
       {error && (
         <div className="rounded border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-2.5 mb-4">
           {error}
+        </div>
+      )}
+
+      {exportError && (
+        <div className="rounded border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-2.5 mb-4">
+          {exportError}
         </div>
       )}
 

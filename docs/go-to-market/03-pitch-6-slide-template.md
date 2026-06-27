@@ -1,36 +1,48 @@
-# Nexora Pitch - 6 Slide Template
+# Nexora Pre-Seed Pitch - 8 Slide Template
 
-## Slide 1 - Problem and Why Now
-- Enterprises struggle to operate distributed edge devices reliably.
-- Existing operations are fragmented across tools and manual runbooks.
-- Downtime and delayed remediation directly impact service quality and cost.
+## Slide 1 - Problem
+- Industrial and public-infrastructure teams run distributed edge fleets with fragmented tooling.
+- Remote actions are often manual, hard to audit, and risky to roll out safely.
+- Operators need proof that each device action was authorized, delivered, observed, and recorded.
 
-## Slide 2 - Solution
-- Nexora provides a unified control plane for onboarding, orchestration, and observability.
-- Key workflows: device pairing, secure execution dispatch, telemetry insight, and audit visibility.
-- Designed for platform operators needing reliability and governance.
+## Slide 2 - Why Now
+- Edge workloads are moving from pilots to production fleets.
+- Procurement now asks for governance: SSO, audit trails, SLO evidence, and rollout control.
+- AI-assisted operations are useful only when paired with guardrails and accountability.
 
-## Slide 3 - Product Demo Flow (10 min)
-- Step 1: Device requests pairing.
-- Step 2: Operator approves in dashboard.
-- Step 3: Run execution command and observe status lifecycle.
-- Step 4: Validate telemetry and audit evidence.
+## Slide 3 - Solution
+- Nexora is a control plane for regulated edge/IoT operations.
+- Pitch promise: onboard, govern, and execute actions on distributed edge fleets with audit, guardrails, and rollout control.
+- Core workflows: pairing, remote execution, fleet health, policy guardrails, audit evidence, and AI/SLO insight.
 
-## Slide 4 - Business Value
-- Faster onboarding and incident response.
-- Better operational reliability with measurable SLOs.
-- Governance through central audit and tenant-aware controls.
+## Slide 4 - Product Demo
+- Login with Keycloak and tenant-aware roles.
+- Approve a pending device and show time-to-first-value.
+- Dispatch a safe execution and show lifecycle state.
+- Show one policy-blocked action and the audit trail.
+- Export an evidence bundle for procurement or compliance.
 
-## Slide 5 - Proof and Metrics
-- Onboarding median time: target <= 15 minutes.
-- End-to-end success rate: target >= 95%.
-- P95 dispatch latency: target <= 2 seconds.
-- Include 1 to 2 pilot case snapshots with before and after metrics.
+## Slide 5 - Market and ICP
+- Initial ICP: industrial operations and public infrastructure teams with 10-100 edge devices.
+- Buyer: Head of Operations, CTO, infrastructure lead.
+- Champion: IoT lead, platform engineer, SRE/operations owner.
+- Beachhead use case: audited remote execution and controlled rollout.
 
-## Slide 6 - Commercial Offer and Next Steps
-- Pilot offer scope: 30 to 60 days, defined success criteria, weekly reporting.
-- Support model: dedicated Slack or Teams channel, response SLA, runbook-backed support.
-- Ask: commit to design-partner pilot kickoff date.
+## Slide 6 - Traction and Evidence
+- Demo stack: Docker Compose, Keycloak, UI, core services, edge emulator, audit.
+- Baseline metrics: onboarding elapsed, execution success rate, dispatch p95, audit completeness, container health.
+- Current proof pack: architecture one-pager, security/RBAC one-pager, KPI baseline, runbook, pilot SOW.
+
+## Slide 7 - Business Model
+- Paid pilot: 30 days, guided setup, max 25 devices, one audited execution/rollout use case, weekly report.
+- Starter: single-site edge operations.
+- Pro: multi-site rollout, evidence export, SLO/AI assistance.
+- Enterprise: advanced RBAC, private networking, compliance support.
+
+## Slide 8 - Ask
+- Pre-seed objective: convert technical validation into paid pilot evidence.
+- Near-term ask: introductions to 3-5 industrial/public-infrastructure design partners.
+- Capital use: pilot delivery, security hardening, productized onboarding, GTM experiments.
 
 ## Appendix - Objection Handling Notes
 - Security: present tenant isolation tests and audit design.

@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: Webservice Service API
+  version: 1.0.0
+  description: Webservice exposure APIs for governed access to edge-hosted services.
+servers:
+  - url: http://localhost:8006
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+  /ready:
+    get:
+      summary: Readiness check
+      responses:
+        "200":
+          description: Service dependencies are ready
+  /api/v2/webservices:
+    get:
+      summary: List webservices
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Webservice list
+    post:
+      summary: Create webservice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebserviceCreate"
+      responses:
+        "201":
+          description: Webservice created
+  /api/v2/webservices/{webservice_id}:
+    get:
+      summary: Get webservice
+      parameters:
+        - $ref: "#/components/parameters/WebserviceId"
+      responses:
+        "200":
+          description: Webservice
+    patch:
+      summary: Update webservice
+      parameters:
+        - $ref: "#/components/parameters/WebserviceId"
+      responses:
+        "200":
+          description: Webservice updated
+    delete:
+      summary: Delete webservice
+      parameters:
+        - $ref: "#/components/parameters/WebserviceId"
+      responses:
+        "204":
+          description: Webservice deleted
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 100
+    WebserviceId:
+      name: webservice_id
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    WebserviceCreate:
+      type: object
+      required: [device_id, port, hostname]
+      properties:
+        device_id:
+          type: string
+        port:
+          type: integer
+        hostname:
+          type: string
+        tls_enabled:
+          type: boolean
+        status:
+          type: string

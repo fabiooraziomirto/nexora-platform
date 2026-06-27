@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: Device Service API
+  version: 1.0.0
+  description: Device onboarding, fleet-visible inventory, telemetry, SLO and audit evidence APIs.
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+  /ready:
+    get:
+      summary: Readiness check
+      responses:
+        "200":
+          description: Service dependencies are ready
+        "503":
+          description: Service dependency is unavailable
+  /api/v2/devices:
+    get:
+      summary: List devices
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Device list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceList"
+    post:
+      summary: Create device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceCreate"
+      responses:
+        "201":
+          description: Device created
+  /api/v2/devices/{device_id}:
+    get:
+      summary: Get device
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: Device
+    patch:
+      summary: Update device
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: Device updated
+    delete:
+      summary: Delete device
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "204":
+          description: Device deleted
+  /api/v2/devices/announce:
+    post:
+      summary: Announce pending device pairing
+      responses:
+        "200":
+          description: Pairing code issued
+  /api/v2/devices/pending:
+    get:
+      summary: List pending device pairings
+      responses:
+        "200":
+          description: Pending pairings
+  /api/v2/devices/{discovery_id}/claim:
+    post:
+      summary: Claim pending device pairing
+      parameters:
+        - name: discovery_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pairing claimed
+  /api/v2/audit/events:
+    get:
+      summary: List audit events
+      parameters:
+        - name: tenant_id
+          in: query
+          schema:
+            type: string
+        - name: actor_user_id
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Audit event page
+  /api/v2/audit/events/export:
+    get:
+      summary: Export audit evidence
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv, html]
+            default: json
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 1000
+            maximum: 5000
+      responses:
+        "200":
+          description: Audit evidence export
+          content:
+            application/json: {}
+            text/csv: {}
+            text/html: {}
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 100
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    Device:
+      type: object
+      required: [id, name, device_type, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        device_type:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, unknown]
+        description:
+          type: string
+    DeviceCreate:
+      type: object
+      required: [name, device_type]
+      properties:
+        name:
+          type: string
+        device_type:
+          type: string
+        description:
+          type: string
+    DeviceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Device"
+        total:
+          type: integer

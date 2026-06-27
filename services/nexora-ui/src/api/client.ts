@@ -40,6 +40,12 @@ async function get<T>(url: string): Promise<T> {
   return r.json() as Promise<T>
 }
 
+async function getBlob(url: string): Promise<Blob> {
+  const r = await fetch(url, { headers: requestHeaders() })
+  if (!r.ok) throw await buildError(r, url)
+  return r.blob()
+}
+
 async function post<T>(url: string, body: unknown): Promise<T> {
   const r = await fetch(url, {
     method: 'POST',
@@ -395,6 +401,8 @@ export interface AuditEventListResponse {
   page_size: number
 }
 
+export type AuditExportFormat = 'json' | 'csv' | 'html'
+
 // ── API calls ────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -608,5 +616,25 @@ export const api = {
       if (value) q.set(key, String(value))
     }
     return get<AuditEventListResponse>(`${DEVICE_BASE}/api/v2/audit/events?${q}`)
+  },
+
+  exportAuditEvents: (filters: {
+    tenant_id?: string
+    actor_user_id?: string
+    action?: string
+    resource_type?: string
+    resource_id?: string
+    from?: string
+    to?: string
+    limit?: number
+  } = {}, format: AuditExportFormat = 'json') => {
+    const q = new URLSearchParams({
+      format,
+      limit: String(filters.limit ?? 1000),
+    })
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) q.set(key, String(value))
+    }
+    return getBlob(`${DEVICE_BASE}/api/v2/audit/events/export?${q}`)
   },
 }

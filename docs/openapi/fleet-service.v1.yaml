@@ -1,0 +1,115 @@
+openapi: 3.0.3
+info:
+  title: Fleet Service API
+  version: 1.0.0
+  description: Fleet grouping, membership and health rollup APIs for edge operations teams.
+servers:
+  - url: http://localhost:8001
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+  /ready:
+    get:
+      summary: Readiness check
+      responses:
+        "200":
+          description: Service dependencies are ready
+  /api/v2/fleets:
+    get:
+      summary: List fleets
+      responses:
+        "200":
+          description: Fleet list
+    post:
+      summary: Create fleet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FleetCreate"
+      responses:
+        "201":
+          description: Fleet created
+  /api/v2/fleets/{fleet_id}:
+    get:
+      summary: Get fleet
+      parameters:
+        - $ref: "#/components/parameters/FleetId"
+      responses:
+        "200":
+          description: Fleet
+    delete:
+      summary: Delete fleet
+      parameters:
+        - $ref: "#/components/parameters/FleetId"
+      responses:
+        "204":
+          description: Fleet deleted
+  /api/v2/fleets/{fleet_id}/members:
+    get:
+      summary: List fleet members
+      parameters:
+        - $ref: "#/components/parameters/FleetId"
+      responses:
+        "200":
+          description: Fleet members
+    post:
+      summary: Add fleet member
+      parameters:
+        - $ref: "#/components/parameters/FleetId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id]
+              properties:
+                device_id:
+                  type: string
+      responses:
+        "200":
+          description: Member added
+  /api/v2/fleets/{fleet_id}/members/{device_id}:
+    delete:
+      summary: Remove fleet member
+      parameters:
+        - $ref: "#/components/parameters/FleetId"
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Member removed
+  /api/v2/fleets/{fleet_id}/health:
+    get:
+      summary: Get fleet health rollup
+      parameters:
+        - $ref: "#/components/parameters/FleetId"
+      responses:
+        "200":
+          description: Fleet health
+components:
+  parameters:
+    FleetId:
+      name: fleet_id
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    FleetCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string

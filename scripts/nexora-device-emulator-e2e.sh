@@ -229,6 +229,25 @@ if [ -z "$PLUGIN_ID" ]; then
 fi
 ok "Plugin created: $PLUGIN_ID (status=$PLUGIN_STATUS)"
 
+info "Recording passing plugin security scan..."
+SCAN_RESP=$(_post "$PLUGIN_URL/api/v2/plugins/$PLUGIN_ID/security/scan" "{
+  \"scan_tool\": \"e2e-synthetic\",
+  \"sbom_uri\": \"file:///tmp/nxr-e2e-test.sbom.json\",
+  \"vulnerability_counts\": {
+    \"critical\": 0,
+    \"high\": 0,
+    \"medium\": 0,
+    \"low\": 0,
+    \"unknown\": 0
+  }
+}")
+SCAN_STATUS=$(echo "$SCAN_RESP" | jq_get security_scan_status)
+if [ "$SCAN_STATUS" != "passed" ]; then
+    fail "Plugin security scan did not pass (status=$SCAN_STATUS)"
+    exit 1
+fi
+ok "Plugin security scan passed"
+
 info "Activating plugin..."
 ACTIVATE_RESP=$(_patch "$PLUGIN_URL/api/v2/plugins/$PLUGIN_ID/activate" '{}')
 PLUGIN_STATUS=$(echo "$ACTIVATE_RESP" | jq_get status)
