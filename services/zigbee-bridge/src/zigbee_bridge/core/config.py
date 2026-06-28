@@ -32,3 +32,5 @@ PORT: int = int(os.getenv("PORT", "8010"))
 #  PUBLISH (commands):
 #   {Z2M_BASE_TOPIC}/{friendly_name}/set     → set device state (OnOff, brightness, …)
 #   {Z2M_BASE_TOPIC}/bridge/request/permit_join → allow pairing
+
+INTERNAL_SERVICE_KEY: str = os.getenv("INTERNAL_SERVICE_KEY", "")

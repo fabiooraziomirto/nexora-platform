@@ -20,3 +20,5 @@ KAFKA_ENABLED: bool = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
 
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 PORT: int = int(os.getenv("PORT", "8008"))
+
+INTERNAL_SERVICE_KEY: str = os.getenv("INTERNAL_SERVICE_KEY", "")

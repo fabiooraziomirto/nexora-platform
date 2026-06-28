@@ -25,6 +25,19 @@ from nexora_agent import config, credentials, executor, offline_queue, telemetry
 logger = logging.getLogger("nexora-agent.tunnel")
 
 
+def _auth_headers(creds: dict) -> dict[str, str]:
+    """Return authentication headers for all internal calls from this device.
+
+    Uses the bootstrap token stored at pairing time as a persistent device
+    credential (X-Bootstrap-Token). The receiving services validate it against
+    AGENT_BOOTSTRAP_TOKENS.
+    """
+    token = creds.get("bootstrap_token", "")
+    if token:
+        return {"X-Bootstrap-Token": token}
+    return {}
+
+
 async def run(creds: dict) -> None:
     """Main tunnel loop. Runs forever, reconnecting on failure."""
     device_id: str = creds["device_id"]
@@ -32,13 +45,15 @@ async def run(creds: dict) -> None:
     gateway_url: str = creds["gateway_url"]
     ws_url = _ws_url(gateway_url) + f"/api/v2/agents/ws/{device_id}"
 
+    auth = _auth_headers(creds)
+
     # Start background tasks
     asyncio.create_task(
         telemetry.flush_loop(device_id, server_url),
         name="telemetry-flush",
     )
     asyncio.create_task(
-        _heartbeat_loop(device_id, server_url),
+        _heartbeat_loop(device_id, server_url, auth),
         name="heartbeat",
     )
 
@@ -60,12 +75,12 @@ async def run(creds: dict) -> None:
                 backoff = config.RECONNECT_BACKOFF_BASE  # reset on success
 
                 # Register session with gateway
-                await _register_session(device_id, server_url, gateway_url)
+                await _register_session(device_id, server_url, gateway_url, auth)
 
                 # Drain anything queued while offline
                 await offline_queue.drain(
-                    send_telemetry_fn=lambda p: _send_telemetry(p, device_id, server_url),
-                    send_callback_fn=lambda p: _send_callback(p, server_url),
+                    send_telemetry_fn=lambda p: _send_telemetry(p, device_id, server_url, auth),
+                    send_callback_fn=lambda p: _send_callback(p, server_url, auth),
                 )
 
                 # Main receive loop
@@ -79,7 +94,7 @@ async def run(creds: dict) -> None:
                     msg_type = msg.get("type")
                     if msg_type == "control":
                         asyncio.create_task(
-                            _handle_control(ws, msg, device_id, server_url),
+                            _handle_control(ws, msg, device_id, server_url, auth),
                             name=f"exec-{msg.get('execution_id', 'unknown')}",
                         )
                     elif msg_type == "ping":
@@ -102,7 +117,7 @@ async def run(creds: dict) -> None:
         backoff = min(backoff * 2, config.RECONNECT_BACKOFF_MAX)
 
 
-async def _handle_control(ws, msg: dict, device_id: str, server_url: str) -> None:
+async def _handle_control(ws, msg: dict, device_id: str, server_url: str, auth: dict) -> None:
     execution_id: str = msg.get("execution_id", "")
     logger.info("Control message received eid=%s", execution_id)
 
@@ -130,6 +145,7 @@ async def _handle_control(ws, msg: dict, device_id: str, server_url: str) -> Non
         stdout=result.get("stdout"),
         stderr=result.get("stderr"),
         exit_code=result.get("exit_code"),
+        auth=auth,
     )
     if not ok:
         offline_queue.enqueue("callback", {
@@ -148,6 +164,7 @@ async def _send_callback_direct(
     stdout: str | None,
     stderr: str | None,
     exit_code: int | None = None,
+    auth: dict | None = None,
 ) -> bool:
     body: dict = {"status": status}
     if stdout:
@@ -159,7 +176,7 @@ async def _send_callback_direct(
     try:
         async with httpx.AsyncClient(base_url=server_url, timeout=10.0) as client:
             resp = await client.post(
-                f"/api/v2/executions/{execution_id}/callback", json=body
+                f"/api/v2/executions/{execution_id}/callback", json=body, headers=auth or {}
             )
             return resp.status_code in (200, 202, 204)
     except Exception as exc:
@@ -167,7 +184,7 @@ async def _send_callback_direct(
         return False
 
 
-async def _send_callback(payload: dict, server_url: str) -> bool:
+async def _send_callback(payload: dict, server_url: str, auth: dict | None = None) -> bool:
     execution_id = payload.get("execution_id", "")
     return await _send_callback_direct(
         execution_id,
@@ -176,38 +193,43 @@ async def _send_callback(payload: dict, server_url: str) -> bool:
         payload.get("stdout"),
         payload.get("stderr"),
         payload.get("exit_code"),
+        auth=auth,
     )
 
 
-async def _send_telemetry(payload: dict, device_id: str, server_url: str) -> bool:
+async def _send_telemetry(payload: dict, device_id: str, server_url: str, auth: dict | None = None) -> bool:
     try:
         async with httpx.AsyncClient(base_url=server_url, timeout=10.0) as client:
             resp = await client.post(
                 f"/api/v2/devices/{device_id}/telemetry",
                 json={"samples": payload.get("samples", [])},
+                headers=auth or {},
             )
             return resp.status_code in (200, 202)
     except Exception:
         return False
 
 
-async def _register_session(device_id: str, server_url: str, gateway_url: str) -> None:
+async def _register_session(device_id: str, server_url: str, gateway_url: str, auth: dict | None = None) -> None:
     try:
         async with httpx.AsyncClient(base_url=gateway_url, timeout=10.0) as client:
             await client.post("/api/v2/agents/sessions/register", json={
                 "device_id": device_id,
                 "capabilities": _capabilities(),
-            })
+            }, headers=auth or {})
     except Exception as exc:
         logger.warning("Session register failed: %s", exc)
 
 
-async def _heartbeat_loop(device_id: str, server_url: str) -> None:
+async def _heartbeat_loop(device_id: str, server_url: str, auth: dict | None = None) -> None:
     while True:
         await asyncio.sleep(config.HEARTBEAT_INTERVAL)
         try:
             async with httpx.AsyncClient(base_url=server_url, timeout=10.0) as client:
-                await client.post(f"/api/v2/agents/sessions/{device_id}/heartbeat")
+                await client.post(
+                    f"/api/v2/agents/sessions/{device_id}/heartbeat",
+                    headers=auth or {},
+                )
         except Exception as exc:
             logger.debug("Heartbeat failed: %s", exc)
 

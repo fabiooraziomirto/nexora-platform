@@ -16,6 +16,7 @@ from uuid import uuid4
 import aiokafka
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
+from common.internal_auth import _is_valid_internal_key
 from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import exc as sa_exc, func, select
@@ -291,7 +292,9 @@ async def add_fleet_member(fleet_id: str, payload: dict[str, Any], request: Requ
 async def list_fleet_members(fleet_id: str, request: Request) -> dict[str, Any]:
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
-        _ensure_fleet_visible(fleet, request)
+        # Internal services (execution-service) call this with X-Internal-Key.
+        if not _is_valid_internal_key(request.headers.get("x-internal-key")):
+            _ensure_fleet_visible(fleet, request)
         members = db.execute(
             select(FleetMember).where(FleetMember.fleet_id == fleet_id)
         ).scalars().all()

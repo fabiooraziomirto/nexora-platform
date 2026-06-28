@@ -110,11 +110,13 @@ async def _callback(execution_id: str, status: str, stdout: str | None = None, s
         body["stdout"] = stdout
     if stderr:
         body["stderr"] = stderr
+    _hdrs = {"X-Internal-Key": config.INTERNAL_SERVICE_KEY} if config.INTERNAL_SERVICE_KEY else {}
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.post(
                 f"{config.EXECUTION_SERVICE_URL}/api/v2/executions/{execution_id}/callback",
                 json=body,
+                headers=_hdrs,
             )
     except Exception as exc:
         logger.warning("Callback failed eid=%s: %s", execution_id, exc)

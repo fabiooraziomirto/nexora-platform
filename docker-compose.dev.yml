@@ -137,6 +137,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
       # bridge bootstrap tokens (matter-bridge, mqtt-bridge, zigbee-bridge)
       AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800,bridge:bridge-secret:4102444800"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
       MATTER_BRIDGE_URL: http://matter-bridge:8008
     ports:
       - "8000:8000"
@@ -162,6 +163,7 @@ services:
     environment:
       DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
     ports:
       - "8001:8000"
     healthcheck:
@@ -190,6 +192,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
+      AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800,bridge:bridge-secret:4102444800"
     ports:
       - "8002:8000"
     healthcheck:
@@ -468,6 +472,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC_PREFIX: nxr
       AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
       ENVIRONMENT: development
     ports:
       - "8009:8009"
@@ -516,6 +521,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC_PREFIX: nxr
       AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
       ZIGBEE_MOCK: "true"
       ENVIRONMENT: development
     ports:
@@ -556,6 +562,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC_PREFIX: nxr
       AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
       ENVIRONMENT: development
     ports:
       - "8008:8008"

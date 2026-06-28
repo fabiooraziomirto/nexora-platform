@@ -21,7 +21,8 @@ from jwt import PyJWKClient as _PyJWKClient
 from uuid import uuid4
 
 import aiokafka
-from fastapi import FastAPI, HTTPException, Request, Header
+from fastapi import FastAPI, HTTPException, Request, Header, Depends
+from execution_service.core.internal_auth import require_internal_or_bootstrap, internal_headers
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import generate_latest
 from sqlalchemy import func, select, and_
@@ -600,10 +601,12 @@ async def dispatch_execution(execution_id: str, request: Request) -> dict[str, A
     exec_type = execution.execution_type or "command"
     if exec_type in {"function.install", "function.invoke"}:
         import httpx as _httpx
+        _internal_hdrs = internal_headers()
         try:
             plugin_resp = _httpx.get(
                 f"{PLUGIN_SERVICE_URL}/api/v2/plugins/{execution.plugin_id}",
                 timeout=REQUEST_TIMEOUT_SECONDS,
+                headers=_internal_hdrs,
             )
             if plugin_resp.status_code != 200:
                 raise HTTPException(status_code=502, detail="plugin not found in registry")
@@ -631,6 +634,7 @@ async def dispatch_execution(execution_id: str, request: Request) -> dict[str, A
                 device_resp = _httpx.get(
                     f"{DEVICE_SERVICE_URL}/api/v2/devices/{execution.device_id}",
                     timeout=REQUEST_TIMEOUT_SECONDS,
+                    headers=_internal_hdrs,
                 )
                 if device_resp.status_code == 200:
                     caps = device_resp.json().get("capabilities") or {}
@@ -664,7 +668,11 @@ async def dispatch_execution(execution_id: str, request: Request) -> dict[str, A
 
 
 @app.post("/api/v2/executions/{execution_id}/callback")
-async def callback_execution(execution_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def callback_execution(
+    execution_id: str,
+    payload: dict[str, Any],
+    _: None = Depends(require_internal_or_bootstrap),
+) -> dict[str, Any]:
     error = validate_callback_payload(payload)
     if error:
         raise HTTPException(status_code=422, detail=error)
@@ -1141,6 +1149,7 @@ async def _get_fleet_members(fleet_id: str) -> list[str]:
         resp = _httpx.get(
             f"{FLEET_SERVICE_URL}/api/v2/fleets/{fleet_id}/members",
             timeout=REQUEST_TIMEOUT_SECONDS,
+            headers=internal_headers(),
         )
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="fleet not found")

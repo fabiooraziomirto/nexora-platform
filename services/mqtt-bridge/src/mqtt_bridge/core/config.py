@@ -43,3 +43,5 @@ PORT: int = int(os.getenv("PORT", "8009"))
 # Auto-register unknown devices that publish without a prior /register message.
 # The device_id is taken from the topic segment; name defaults to the device_id.
 AUTO_REGISTER: bool = os.getenv("MQTT_AUTO_REGISTER", "true").lower() == "true"
+
+INTERNAL_SERVICE_KEY: str = os.getenv("INTERNAL_SERVICE_KEY", "")
