@@ -9,6 +9,7 @@ spec:
   resources:
     requests:
       storage: 5Gi
+  # storageClassName: local-path  # override via --storage-class in install.sh
 ---
 apiVersion: v1
 kind: ConfigMap

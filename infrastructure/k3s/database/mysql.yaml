@@ -11,6 +11,7 @@ spec:
   resources:
     requests:
       storage: 20Gi
+  # storageClassName: local-path  # override via --storage-class in install.sh
 ---
 apiVersion: apps/v1
 kind: StatefulSet

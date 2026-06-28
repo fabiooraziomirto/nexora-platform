@@ -95,6 +95,90 @@ spec:
         - protocol: TCP
           port: 8010
 ---
+# Default deny all egress from nxr namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: nxr
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+---
+# Allow egress within nxr namespace (intra-service communication)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-intra-namespace
+  namespace: nxr
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nxr
+---
+# Allow egress to Keycloak for token validation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-keycloak
+  namespace: nxr
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Allow egress to kube-dns for service discovery
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-dns
+  namespace: nxr
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Allow matter-bridge egress to internet on HTTPS for Matter device commissioning
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-matter-internet
+  namespace: nxr
+spec:
+  podSelector:
+    matchLabels:
+      app: matter-bridge
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+---
 # Allow keycloak namespace to be reached from nxr services (token validation)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

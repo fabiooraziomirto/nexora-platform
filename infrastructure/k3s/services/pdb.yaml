@@ -1,0 +1,32 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: device-service-pdb
+  namespace: nxr
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: device-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: execution-service-pdb
+  namespace: nxr
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: execution-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: plugin-service-pdb
+  namespace: nxr
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: plugin-service

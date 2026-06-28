@@ -11,6 +11,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
+  # storageClassName: local-path  # override via --storage-class in install.sh
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -23,6 +24,7 @@ spec:
   resources:
     requests:
       storage: 2Gi
+  # storageClassName: local-path  # override via --storage-class in install.sh
 ---
 apiVersion: apps/v1
 kind: StatefulSet

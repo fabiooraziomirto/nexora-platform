@@ -18,6 +18,7 @@ INSTALL_SECURITY="${INSTALL_SECURITY:-true}"
 INSTALL_VAULT="${INSTALL_VAULT:-false}"
 TLS_MODE="${TLS_MODE:-self-signed}"   # self-signed | letsencrypt | none
 ACME_EMAIL="${ACME_EMAIL:-}"
+STORAGE_CLASS="${STORAGE_CLASS:-local-path}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(cd "$SCRIPT_DIR/../../infrastructure/k3s" && pwd)"
 K3S_NAMESPACE="nxr"
@@ -31,8 +32,9 @@ while [[ $# -gt 0 ]]; do
     --email)        ACME_EMAIL="$2"; shift 2 ;;
     --monitoring)   INSTALL_MONITORING="true"; shift ;;
     --vault)        INSTALL_VAULT="true"; shift ;;
-    --no-security)  INSTALL_SECURITY="false"; shift ;;
-    --version)      NEXORA_VERSION="$2"; shift 2 ;;
+    --no-security)    INSTALL_SECURITY="false"; shift ;;
+    --version)        NEXORA_VERSION="$2"; shift 2 ;;
+    --storage-class)  STORAGE_CLASS="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -149,10 +151,15 @@ apply_configmap() {
 }
 
 # ── database & kafka ──────────────────────────────────────────────────────────
+_apply_with_storage() {
+  # Uncomment and set storageClassName in PVC manifests before applying
+  sed "s/# storageClassName: local-path.*/storageClassName: $STORAGE_CLASS/" "$1" | kubectl apply -f -
+}
+
 deploy_infrastructure() {
-  log "Deploying MySQL and Kafka..."
-  kubectl apply -f "$INFRA_DIR/database/mysql.yaml"
-  kubectl apply -f "$INFRA_DIR/database/kafka.yaml"
+  log "Deploying MySQL and Kafka (storageClass=$STORAGE_CLASS)..."
+  _apply_with_storage "$INFRA_DIR/database/mysql.yaml"
+  _apply_with_storage "$INFRA_DIR/database/kafka.yaml"
 
   log "Waiting for MySQL to be ready (up to 3 min)..."
   kubectl wait --for=condition=Ready pod -l app=mysql -n "$K3S_NAMESPACE" --timeout=180s || \
@@ -262,20 +269,22 @@ deploy_backup() {
 
 # ── redis ─────────────────────────────────────────────────────────────────────
 deploy_redis() {
-  log "Deploying Redis..."
-  kubectl apply -f "$INFRA_DIR/database/redis.yaml"
+  log "Deploying Redis (storageClass=$STORAGE_CLASS)..."
+  _apply_with_storage "$INFRA_DIR/database/redis.yaml"
   ok "Redis deployed"
 }
 
 # ── nexora services ───────────────────────────────────────────────────────────
 deploy_services() {
   log "Deploying Nexora services..."
-  kubectl apply -f "$INFRA_DIR/services/mosquitto.yaml"
+  _apply_with_storage "$INFRA_DIR/services/mosquitto.yaml"
   kubectl apply -f "$INFRA_DIR/services/device-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/execution-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/remaining-services.yaml"
   kubectl apply -f "$INFRA_DIR/services/network-dns-webservice.yaml"
   kubectl apply -f "$INFRA_DIR/services/bridges.yaml"
+  kubectl apply -f "$INFRA_DIR/services/hpa.yaml"
+  kubectl apply -f "$INFRA_DIR/services/pdb.yaml"
 
   log "Waiting for core services to be ready (up to 5 min)..."
   kubectl wait --for=condition=Available deployment/device-service \

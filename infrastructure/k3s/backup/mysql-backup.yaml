@@ -9,6 +9,7 @@ spec:
   resources:
     requests:
       storage: 50Gi
+  # storageClassName: local-path  # override via --storage-class in install.sh
 ---
 apiVersion: batch/v1
 kind: CronJob
