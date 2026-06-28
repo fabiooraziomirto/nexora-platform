@@ -1,0 +1,81 @@
+# Job that creates all required Kafka topics after Kafka is ready.
+# Runs once at deploy time; safe to re-run (--if-not-exists).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics-init
+  namespace: nxr
+  annotations:
+    # Re-run when config changes via: kubectl delete job kafka-topics-init -n nxr
+    helm.sh/hook: post-install,post-upgrade
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-topics-init
+          image: confluentinc/cp-kafka:7.5.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              KAFKA="kafka:9092"
+
+              echo "Waiting for Kafka to be ready..."
+              until kafka-topics --bootstrap-server "$KAFKA" --list &>/dev/null; do
+                sleep 3
+              done
+              echo "Kafka ready."
+
+              create_topic() {
+                local name="$1" partitions="${2:-3}" retention="${3:-604800000}"
+                kafka-topics --bootstrap-server "$KAFKA" \
+                  --create --if-not-exists \
+                  --topic "$name" \
+                  --partitions "$partitions" \
+                  --replication-factor 1 \
+                  --config "retention.ms=$retention" \
+                  --config "cleanup.policy=delete"
+                echo "  topic: $name"
+              }
+
+              echo "Creating device topics..."
+              create_topic nxr.device.created
+              create_topic nxr.device.updated
+              create_topic nxr.device.deleted     1 2592000000
+              create_topic nxr.device.status-changed
+              create_topic nxr.device.telemetry.ingested 6 259200000
+
+              echo "Creating plugin topics..."
+              create_topic nxr.plugin.created
+              create_topic nxr.plugin.updated
+              create_topic nxr.plugin.deleted     1 2592000000
+
+              echo "Creating execution topics..."
+              create_topic nxr.execution.requested  6
+              create_topic nxr.execution.dispatched 6
+              create_topic nxr.execution.completed  6
+
+              echo "Creating fleet topics..."
+              create_topic nxr.fleet.created
+              create_topic nxr.fleet.updated
+              create_topic nxr.fleet.deleted      1 2592000000
+              create_topic nxr.fleet.member-added
+              create_topic nxr.fleet.member-removed
+
+              echo "Creating network topics..."
+              create_topic nxr.network.port.created
+              create_topic nxr.network.port.deleted
+              create_topic nxr.dns.record.created
+              create_topic nxr.dns.record.deleted
+              create_topic nxr.webservice.created
+              create_topic nxr.webservice.deleted
+
+              echo "Creating system topics..."
+              create_topic nxr.system.audit       1 7776000000
+              create_topic nxr.dlq               1 7776000000
+
+              echo "All topics created."
+              kafka-topics --bootstrap-server "$KAFKA" --list

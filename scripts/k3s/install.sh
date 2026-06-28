@@ -14,6 +14,8 @@ set -euo pipefail
 NEXORA_DOMAIN="${NEXORA_DOMAIN:-nexora.local}"
 NEXORA_VERSION="${NEXORA_VERSION:-latest}"
 INSTALL_MONITORING="${INSTALL_MONITORING:-false}"
+INSTALL_SECURITY="${INSTALL_SECURITY:-true}"
+INSTALL_VAULT="${INSTALL_VAULT:-false}"
 TLS_MODE="${TLS_MODE:-self-signed}"   # self-signed | letsencrypt | none
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(cd "$SCRIPT_DIR/../../infrastructure/k3s" && pwd)"
@@ -26,6 +28,8 @@ while [[ $# -gt 0 ]]; do
     --no-tls)       TLS_MODE="none"; shift ;;
     --letsencrypt)  TLS_MODE="letsencrypt"; shift ;;
     --monitoring)   INSTALL_MONITORING="true"; shift ;;
+    --vault)        INSTALL_VAULT="true"; shift ;;
+    --no-security)  INSTALL_SECURITY="false"; shift ;;
     --version)      NEXORA_VERSION="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
@@ -195,12 +199,75 @@ EOF
   ok "Ingress configured (mode=$TLS_MODE)"
 }
 
+# ── auth (keycloak) ──────────────────────────────────────────────────────────
+deploy_auth() {
+  log "Deploying Keycloak..."
+  kubectl apply -f "$INFRA_DIR/auth/keycloak.yaml"
+  log "Waiting for Keycloak (up to 3 min)..."
+  kubectl wait --for=condition=Ready pod -l app=keycloak -n keycloak --timeout=180s || \
+    log "WARNING: Keycloak not ready yet"
+  ok "Keycloak deployed"
+}
+
+# ── vault (optional) ─────────────────────────────────────────────────────────
+deploy_vault() {
+  if [[ "$INSTALL_VAULT" != "true" ]]; then
+    return
+  fi
+  log "Deploying Vault..."
+  kubectl apply -f "$INFRA_DIR/auth/vault.yaml"
+  log "Vault deployed. IMPORTANT: run 'kubectl exec -n nxr deploy/vault -- vault operator init' to initialize."
+  ok "Vault deployed (requires manual init)"
+}
+
+# ── security policies ─────────────────────────────────────────────────────────
+deploy_security() {
+  if [[ "$INSTALL_SECURITY" != "true" ]]; then
+    return
+  fi
+
+  log "Applying network policies..."
+  kubectl apply -f "$INFRA_DIR/security/network-policies.yaml"
+
+  log "Checking for Kyverno..."
+  if kubectl get crd clusterpolicies.kyverno.io &>/dev/null; then
+    kubectl apply -f "$INFRA_DIR/security/kyverno-policies.yaml"
+    ok "Kyverno policies applied"
+  else
+    log "Kyverno not installed — skipping pod security policies"
+    log "  Install with: kubectl apply -f https://github.com/kyverno/kyverno/releases/download/v1.11.1/install.yaml"
+  fi
+  ok "Security configured"
+}
+
+# ── kafka topics ──────────────────────────────────────────────────────────────
+init_kafka_topics() {
+  log "Initializing Kafka topics..."
+  kubectl apply -f "$INFRA_DIR/database/kafka-topics-init.yaml"
+  ok "Kafka topic init job submitted"
+}
+
+# ── backup ────────────────────────────────────────────────────────────────────
+deploy_backup() {
+  log "Configuring automated MySQL backups..."
+  kubectl apply -f "$INFRA_DIR/backup/mysql-backup.yaml"
+  ok "Backup CronJobs scheduled (daily 02:00, verify 03:00)"
+}
+
+# ── redis ─────────────────────────────────────────────────────────────────────
+deploy_redis() {
+  log "Deploying Redis..."
+  kubectl apply -f "$INFRA_DIR/database/redis.yaml"
+  ok "Redis deployed"
+}
+
 # ── nexora services ───────────────────────────────────────────────────────────
 deploy_services() {
   log "Deploying Nexora services..."
   kubectl apply -f "$INFRA_DIR/services/device-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/execution-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/remaining-services.yaml"
+  kubectl apply -f "$INFRA_DIR/services/network-dns-webservice.yaml"
   kubectl apply -f "$INFRA_DIR/services/bridges.yaml"
 
   log "Waiting for core services to be ready (up to 5 min)..."
@@ -217,9 +284,12 @@ deploy_monitoring() {
   if [[ "$INSTALL_MONITORING" != "true" ]]; then
     return
   fi
-  log "Deploying lightweight monitoring stack..."
+  log "Deploying monitoring stack (Prometheus + Grafana + AlertManager)..."
+  kubectl apply -f "$INFRA_DIR/monitoring/prometheus-rules.yaml"
   kubectl apply -f "$INFRA_DIR/monitoring/prometheus-lightweight.yaml"
-  ok "Monitoring deployed (Prometheus :9090, Grafana :3000)"
+  kubectl apply -f "$INFRA_DIR/monitoring/alertmanager.yaml"
+  kubectl apply -f "$INFRA_DIR/monitoring/grafana-dashboards.yaml"
+  ok "Monitoring deployed — Prometheus :9090 / Grafana :3000 (admin/admin) / AlertManager :9093"
 }
 
 # ── summary ───────────────────────────────────────────────────────────────────
@@ -238,7 +308,9 @@ print_summary() {
   echo "║  API:      https://$NEXORA_DOMAIN/api/v2/"
   echo "║  Auth:     https://auth.$NEXORA_DOMAIN"
   if [[ "$INSTALL_MONITORING" == "true" ]]; then
-  echo "║  Grafana:  http://$node_ip:3000  (admin/admin)"
+  echo "║  Grafana:      http://$node_ip:3000    (admin/admin)"
+  echo "║  Prometheus:   http://$node_ip:9090"
+  echo "║  AlertManager: http://$node_ip:9093"
   fi
   echo "╠══════════════════════════════════════════════════════════════╣"
   echo "║  Check status:  kubectl get pods -n nxr"
@@ -257,8 +329,14 @@ main() {
   generate_secrets
   apply_configmap
   deploy_infrastructure
+  deploy_redis
+  init_kafka_topics
+  deploy_auth
+  deploy_vault
+  deploy_security
   configure_ingress
   deploy_services
+  deploy_backup
   deploy_monitoring
   print_summary
 }

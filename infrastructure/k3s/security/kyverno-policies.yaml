@@ -1,0 +1,124 @@
+# Kyverno security policies for k3s self-hosted deployment.
+# Install Kyverno first: kubectl apply -f https://github.com/kyverno/kyverno/releases/download/v1.11.1/install.yaml
+---
+# Enforce non-root containers in the nxr namespace
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: check-runAsNonRoot
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [nxr, keycloak]
+      validate:
+        message: "Containers must run as non-root (runAsNonRoot: true)"
+        pattern:
+          spec:
+            =(securityContext):
+              =(runAsNonRoot): true
+            containers:
+              - =(securityContext):
+                  =(runAsNonRoot): true
+---
+# Require resource limits on all containers
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+spec:
+  validationFailureAction: audit  # warn only — audit mode avoids blocking existing workloads
+  background: true
+  rules:
+    - name: check-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [nxr]
+      validate:
+        message: "CPU and memory limits are required"
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+---
+# Disallow privilege escalation
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privilege-escalation
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: check-allowPrivilegeEscalation
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [nxr, keycloak]
+      validate:
+        message: "Privilege escalation is not allowed"
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(allowPrivilegeEscalation): false
+---
+# Disallow latest image tag (force explicit versioning)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+spec:
+  validationFailureAction: audit
+  background: true
+  rules:
+    - name: check-image-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [nxr]
+      validate:
+        message: "Image tag 'latest' is not allowed in production — use an explicit version"
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
+---
+# Restrict host network (only matter-bridge is allowed)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-host-network
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: check-hostNetwork
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [nxr]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  app: matter-bridge
+      validate:
+        message: "hostNetwork is only allowed for matter-bridge (requires mDNS)"
+        pattern:
+          spec:
+            =(hostNetwork): false

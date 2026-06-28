@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-backup-storage
+  namespace: nxr
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup
+  namespace: nxr
+spec:
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: mysql-backup
+              image: mysql:8.0
+              env:
+                - name: MYSQL_HOST
+                  value: mysql
+                - name: MYSQL_PORT
+                  value: "3306"
+                - name: MYSQL_USER
+                  value: nexora
+                - name: MYSQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: nexora-db
+                      key: MYSQL_PASSWORD
+                - name: RETENTION_DAYS
+                  value: "7"
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  BACKUP_FILE="/backup/nexora-$(date +%Y-%m-%d-%H%M%S).sql.gz"
+                  echo "Backup starting → $BACKUP_FILE"
+
+                  mysqldump \
+                    -h "$MYSQL_HOST" -P "$MYSQL_PORT" \
+                    -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" \
+                    --single-transaction --routines --triggers --events \
+                    nexora | gzip > "$BACKUP_FILE"
+
+                  # Prune old backups
+                  find /backup -name "nexora-*.sql.gz" -mtime +"$RETENTION_DAYS" -delete
+
+                  echo "Backup done: $(du -sh "$BACKUP_FILE")"
+                  echo "Stored backups:"
+                  ls -lh /backup/nexora-*.sql.gz
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backup
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: mysql-backup-storage
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup-verify
+  namespace: nxr
+spec:
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: verify
+              image: mysql:8.0
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  LATEST=$(ls -t /backup/nexora-*.sql.gz 2>/dev/null | head -1)
+                  [[ -z "$LATEST" ]] && { echo "ERROR: no backup found"; exit 1; }
+                  echo "Verifying: $LATEST"
+                  gunzip -t "$LATEST" && echo "OK: $LATEST is valid" || { echo "ERROR: corrupted"; exit 1; }
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backup
+              resources:
+                requests:
+                  memory: "32Mi"
+                  cpu: "50m"
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: mysql-backup-storage
