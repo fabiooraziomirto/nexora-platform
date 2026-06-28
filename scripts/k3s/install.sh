@@ -19,6 +19,7 @@ INSTALL_VAULT="${INSTALL_VAULT:-false}"
 TLS_MODE="${TLS_MODE:-self-signed}"   # self-signed | letsencrypt | none
 ACME_EMAIL="${ACME_EMAIL:-}"
 STORAGE_CLASS="${STORAGE_CLASS:-local-path}"
+KUSTOMIZE_OVERLAY="${KUSTOMIZE_OVERLAY:-}"  # dev | prod — use overlay instead of raw manifests
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(cd "$SCRIPT_DIR/../../infrastructure/k3s" && pwd)"
 K3S_NAMESPACE="nxr"
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --no-security)    INSTALL_SECURITY="false"; shift ;;
     --version)        NEXORA_VERSION="$2"; shift 2 ;;
     --storage-class)  STORAGE_CLASS="$2"; shift 2 ;;
+    --overlay)        KUSTOMIZE_OVERLAY="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -277,6 +279,14 @@ deploy_redis() {
 # ── nexora services ───────────────────────────────────────────────────────────
 deploy_services() {
   log "Deploying Nexora services..."
+
+  if [[ -n "$KUSTOMIZE_OVERLAY" ]]; then
+    log "Using Kustomize overlay: $KUSTOMIZE_OVERLAY"
+    kubectl apply -k "$INFRA_DIR/overlays/$KUSTOMIZE_OVERLAY"
+    ok "Services deployed via Kustomize overlay ($KUSTOMIZE_OVERLAY)"
+    return
+  fi
+
   _apply_with_storage "$INFRA_DIR/services/mosquitto.yaml"
   kubectl apply -f "$INFRA_DIR/services/device-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/execution-service.yaml"

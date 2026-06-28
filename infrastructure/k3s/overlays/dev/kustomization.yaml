@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Dev overlay: single replica, no HPA/PDB, no monitoring, local-path storage
+resources:
+  - ../../base/namespaces.yaml
+  - ../../base/rbac.yaml
+  - ../../base/configmap.yaml
+  - ../../database/mysql.yaml
+  - ../../database/kafka.yaml
+  - ../../database/redis.yaml
+  - ../../database/kafka-topics-init.yaml
+  - ../../auth/keycloak.yaml
+  - ../../services/mosquitto.yaml
+  - ../../services/device-service.yaml
+  - ../../services/execution-service.yaml
+  - ../../services/remaining-services.yaml
+  - ../../services/network-dns-webservice.yaml
+  - ../../services/bridges.yaml
+  - ../../mesh/traefik-ingress.yaml
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      labelSelector: "app in (device-service,execution-service,plugin-service)"

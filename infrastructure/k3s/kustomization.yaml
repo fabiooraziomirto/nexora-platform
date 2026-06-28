@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - base/namespaces.yaml
+  - base/rbac.yaml
+  - base/configmap.yaml
+  - database/mysql.yaml
+  - database/kafka.yaml
+  - database/redis.yaml
+  - database/kafka-topics-init.yaml
+  - auth/keycloak.yaml
+  - auth/vault.yaml
+  - services/mosquitto.yaml
+  - services/device-service.yaml
+  - services/execution-service.yaml
+  - services/remaining-services.yaml
+  - services/network-dns-webservice.yaml
+  - services/bridges.yaml
+  - services/hpa.yaml
+  - services/pdb.yaml
+  - security/network-policies.yaml
+  - security/kyverno-policies.yaml
+  - backup/mysql-backup.yaml
+  - mesh/traefik-ingress.yaml
+  - monitoring/prometheus-lightweight.yaml
+  - monitoring/prometheus-rules.yaml
+  - monitoring/alertmanager.yaml
+  - monitoring/grafana-dashboards.yaml
