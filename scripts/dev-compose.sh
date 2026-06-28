@@ -12,6 +12,7 @@ Usage: bash scripts/dev-compose.sh <command> [extra compose args]
 
 Commands:
   up       Start dev stack with build (default)
+  smoke    Run local smoke checks against the active stack
   down     Stop stack
   clean    Stop stack and remove volumes
   ps       List compose services
@@ -23,6 +24,7 @@ Examples:
   bash scripts/dev-compose.sh down
   bash scripts/dev-compose.sh clean
   COMPOSE_PROFILE=smoke bash scripts/dev-compose.sh up
+  bash scripts/dev-compose.sh smoke
   bash scripts/dev-compose.sh logs device-service
 EOF
 }
@@ -52,6 +54,9 @@ case "$COMMAND" in
     ;;
   logs)
     docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" logs -f --tail=200 "$@"
+    ;;
+  smoke)
+    PROFILE="$PROFILE" bash "$ROOT_DIR/scripts/local-smoke.sh" "$@"
     ;;
   config)
     docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" config "$@"

@@ -442,9 +442,17 @@ services:
     volumes:
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
-    command: >
-      sh -c "echo 'listener 1883\nallow_anonymous true\npersistence true\npersistence_location /mosquitto/data/' > /mosquitto/config/mosquitto.conf
-             && mosquitto -c /mosquitto/config/mosquitto.conf"
+    command:
+      - sh
+      - -c
+      - |
+        printf '%s\n' \
+          'listener 1883' \
+          'allow_anonymous true' \
+          'persistence true' \
+          'persistence_location /mosquitto/data/' \
+          > /mosquitto/config/mosquitto.conf
+        exec mosquitto -c /mosquitto/config/mosquitto.conf
     healthcheck:
       test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
       interval: 10s
@@ -469,7 +477,7 @@ services:
       MQTT_PORT: "1883"
       DEVICE_SERVICE_URL: http://device-service:8000
       EXECUTION_SERVICE_URL: http://execution-service:8002
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC_PREFIX: nxr
       AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
       INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
@@ -518,7 +526,7 @@ services:
       Z2M_BASE_TOPIC: zigbee2mqtt
       DEVICE_SERVICE_URL: http://device-service:8000
       EXECUTION_SERVICE_URL: http://execution-service:8002
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC_PREFIX: nxr
       AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
       INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
@@ -559,13 +567,13 @@ services:
       MATTER_SERVER_URL: ws://host.docker.internal:5580/ws
       DEVICE_SERVICE_URL: http://device-service:8000
       EXECUTION_SERVICE_URL: http://execution-service:8002
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC_PREFIX: nxr
       AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
       INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
       ENVIRONMENT: development
     ports:
-      - "8008:8008"
+      - "8011:8008"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
       interval: 15s

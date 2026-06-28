@@ -73,7 +73,7 @@ async def _connect_matter_server() -> Any:
         session = aiohttp.ClientSession()
         client = MatterClient(config.MATTER_SERVER_URL, session)
         await client.connect()
-        logger.info("Connected to matter-server", url=config.MATTER_SERVER_URL)
+        logger.info("Connected to matter-server url=%s", config.MATTER_SERVER_URL)
         return client
     except ImportError:
         logger.warning(
@@ -83,9 +83,9 @@ async def _connect_matter_server() -> Any:
         return None
     except Exception as exc:
         logger.warning(
-            "matter-server unreachable — running in mock mode",
-            url=config.MATTER_SERVER_URL,
-            error=str(exc),
+            "matter-server unreachable — running in mock mode url=%s error=%s",
+            config.MATTER_SERVER_URL,
+            exc,
         )
         return None
 
@@ -111,10 +111,10 @@ async def _connect_kafka():
         )
         await consumer.start()
 
-        logger.info("Kafka connected", topic=topic)
+        logger.info("Kafka connected topic=%s", topic)
         return producer, consumer
     except Exception as exc:
-        logger.warning("Kafka unavailable — telemetry publishing disabled", error=str(exc))
+        logger.warning("Kafka unavailable — telemetry publishing disabled error=%s", exc)
         return None, None
 
 
@@ -132,9 +132,9 @@ async def lifespan(app: FastAPI):
         await start_consumer(matter_client, kafka_consumer)
 
     logger.info(
-        "matter-bridge ready",
-        matter_mode="real" if matter_client else "mock",
-        kafka="enabled" if kafka_producer else "disabled",
+        "matter-bridge ready matter_mode=%s kafka=%s",
+        "real" if matter_client else "mock",
+        "enabled" if kafka_producer else "disabled",
     )
 
     yield

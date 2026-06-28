@@ -175,18 +175,35 @@ flowchart TB
 ### Runtime Topology (Local)
 
 - `device-service` -> `http://localhost:8000` (CRUD + agent register/heartbeat)
-- `module-service` (plugin-compatible API) -> `http://localhost:8001`
+- `plugin-service` -> `http://localhost:8001` (plugin/function catalog)
 - `execution-service` -> `http://localhost:8002` (command pipeline: queued→dispatched→running→succeeded/failed/timeout)
 - `network-service` -> `http://localhost:8003`
 - `dns-service` -> `http://localhost:8004`
 - `webservice-service` -> `http://localhost:8005`
 - `fleet-service` -> `http://localhost:8006`
-- `edge-gateway` -> `http://localhost:8007` (Kafka consumer, agent sessions, delivery)
-- `nexora-module-runtime` -> `http://localhost:8010` (WASM/WASI execution daemon on board path)
+- `nexora-edge` -> `http://localhost:8007` (Kafka consumer, agent sessions, delivery)
+- `ai-pipeline-service` -> `http://localhost:8008`
+- `mqtt-bridge` -> `http://localhost:8009`
+- `zigbee-bridge` -> `http://localhost:8010`
+- `matter-bridge` -> `http://localhost:8011` (host mapping to container port `8008`)
+- `nexora-ui` -> `http://localhost:8080`
+- `nexora-function-runtime` -> `http://localhost:9000` (WASM/WASI function runtime)
+- `keycloak` -> `http://localhost:18080`
 - `mysql` -> `localhost:3306`
 - `redis` -> `localhost:6379`
-- `kafka` -> `localhost:9092`
+- `kafka` -> `localhost:29092` from the host; services use `kafka:9092`
 - `zookeeper` -> `localhost:2181`
+
+Local workflow shortcuts:
+
+```bash
+make dev
+make local-smoke
+make ps
+make down
+```
+
+See [Local Development](docs/deployment/local-development.md) for Compose profiles, ports, and smoke checks.
 
 ### Request-to-Event Flow
 
@@ -212,7 +229,7 @@ sequenceDiagram
 ### Core Services
 
 - `device-service`: device inventory and lifecycle primitives.
-- `module-service` (`plugin-service` compatibility name): module metadata lifecycle.
+- `plugin-service`: plugin/function metadata lifecycle.
 - `execution-service`: command/execution orchestration primitives.
 - `network-service`: network port abstractions.
 - `dns-service`: DNS record lifecycle.
@@ -239,7 +256,7 @@ All core services expose:
 
 CRUD baseline endpoints:
 
-- `module-service`: `POST/GET/DELETE /api/v2/modules` (legacy `/api/v2/plugins` still supported)
+- `plugin-service`: `POST/GET/DELETE /api/v2/plugins`
 ## 5.1) Direct Board Access and Module Runtime
 
 - Direct board access intents are exposed by dashboard backend:
@@ -477,4 +494,3 @@ This classification prevents “false done” and helps prioritize what still ne
 ## 17) License
 
 Apache License 2.0
-

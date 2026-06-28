@@ -4,6 +4,7 @@
 
 - [IoTronic / Lightning Rod Parity Matrix](nexora-parity-matrix.md) — concept mapping from legacy to v2.0
 - [Execution Pipeline Runbook](execution-pipeline-runbook.md) — operator troubleshooting guide
+- [Local Development](local-development.md) — Docker Compose profiles, ports, and local smoke checks
 - [Production Kubernetes Foundation](production-kubernetes-foundation.md) — baseline production env, secrets, and readiness requirements
 - [Release Checklist (MVP)](release-checklist-mvp.md) — pre-release verification steps
 - [Keycloak Authentication](auth-keycloak-nxr.md) — auth model and rollout for Nxr services
@@ -15,13 +16,14 @@
 ## Quick Start
 
 ```bash
-docker compose -f docker-compose.dev.yml --profile dev up -d --build
+make dev
+make local-smoke
 ```
 
-### Optional auth profile (Keycloak)
+### Optional direct Compose usage
 
 ```bash
-docker compose -f docker-compose.dev.yml --profile auth up -d keycloak
+docker compose -f docker-compose.dev.yml --profile dev up -d --build
 ```
 
 ### Optional legacy dashboard profile (Horizon + IoTronic plugin)

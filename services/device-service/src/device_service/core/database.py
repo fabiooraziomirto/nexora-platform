@@ -52,4 +52,39 @@ async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_device_schema)
 
+
+def _ensure_device_schema(sync_conn) -> None:
+    """Add columns introduced after initial create_all for dev databases."""
+    from sqlalchemy import inspect as sa_inspect, text
+
+    inspector = sa_inspect(sync_conn)
+    table_names = set(inspector.get_table_names())
+
+    if "devices" in table_names:
+        existing = {col["name"] for col in inspector.get_columns("devices")}
+        device_columns = [
+            ("owner_id", "CHAR(36)"),
+            ("tenant_id", "VARCHAR(255)"),
+            ("privacy_level", "INTEGER NOT NULL DEFAULT 0"),
+            ("capabilities", "TEXT"),
+            ("runtime_env", "TEXT"),
+            ("connection_protocol", "VARCHAR(50) NOT NULL DEFAULT 'nexora-agent'"),
+            ("protocol_meta", "JSON"),
+        ]
+        for column_name, column_type in device_columns:
+            if column_name not in existing:
+                sync_conn.execute(
+                    text(f"ALTER TABLE devices ADD COLUMN {column_name} {column_type}")
+                )
+        indexes = {idx["name"] for idx in inspector.get_indexes("devices")}
+        if "idx_device_protocol" not in indexes:
+            sync_conn.execute(
+                text("CREATE INDEX idx_device_protocol ON devices (connection_protocol)")
+            )
+
+    if "device_telemetry" in table_names:
+        existing = {col["name"] for col in inspector.get_columns("device_telemetry")}
+        if "unit" not in existing:
+            sync_conn.execute(text("ALTER TABLE device_telemetry ADD COLUMN unit VARCHAR(32)"))

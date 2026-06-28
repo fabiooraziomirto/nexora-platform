@@ -31,9 +31,8 @@ Usage — sending side:
 import os
 import secrets
 import time
-from typing import Annotated
 
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -100,7 +99,7 @@ def _is_valid_bootstrap_token(token: str | None) -> bool:
 # ---------------------------------------------------------------------------
 
 async def require_internal(
-    x_internal_key: Annotated[str | None, Header()] = None,
+    x_internal_key: str | None = Header(default=None),
 ) -> None:
     """Dependency: accept only requests carrying a valid X-Internal-Key header."""
     if not _is_valid_internal_key(x_internal_key):
@@ -108,8 +107,8 @@ async def require_internal(
 
 
 async def require_internal_or_bootstrap(
-    x_internal_key: Annotated[str | None, Header()] = None,
-    x_bootstrap_token: Annotated[str | None, Header()] = None,
+    x_internal_key: str | None = Header(default=None),
+    x_bootstrap_token: str | None = Header(default=None),
 ) -> None:
     """Dependency: accept X-Internal-Key (service) OR X-Bootstrap-Token (device/bridge)."""
     if _is_valid_internal_key(x_internal_key):

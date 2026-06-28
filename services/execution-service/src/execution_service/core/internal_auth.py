@@ -5,7 +5,6 @@ execution-service is a flat-pattern service with its own dependency graph.
 """
 import secrets
 import time
-from typing import Annotated
 
 from fastapi import Header, HTTPException
 
@@ -44,8 +43,8 @@ def _valid_bootstrap_token(token: str | None) -> bool:
 
 
 async def require_internal_or_bootstrap(
-    x_internal_key: Annotated[str | None, Header()] = None,
-    x_bootstrap_token: Annotated[str | None, Header()] = None,
+    x_internal_key: str | None = Header(default=None),
+    x_bootstrap_token: str | None = Header(default=None),
 ) -> None:
     """FastAPI dependency: accept X-Internal-Key (service) OR X-Bootstrap-Token (device/bridge)."""
     if _valid_internal_key(x_internal_key):
