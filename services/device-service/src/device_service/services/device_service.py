@@ -275,6 +275,8 @@ class DeviceService:
                 capabilities=capabilities_json,
                 connection_protocol=data.connection_protocol,
                 protocol_meta=data.protocol_meta,
+                owner_id=data.owner_id,
+                tenant_id=data.tenant_id,
                 status="online",
                 last_seen=now,
             )

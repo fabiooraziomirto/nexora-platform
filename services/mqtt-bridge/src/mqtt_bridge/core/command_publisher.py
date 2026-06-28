@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from mqtt_bridge.core import config
+from mqtt_bridge.core.device_registry import is_known
 
 logger = logging.getLogger("mqtt-bridge.commands")
 
@@ -40,7 +41,10 @@ async def _consume_loop(kafka_consumer: Any, mqtt_publish_fn: Any) -> None:
                 device_id: str = payload.get("device_id", "")
                 execution_id: str = payload.get("execution_id", "")
 
-                # Only handle MQTT-protocol devices (checked by caller or filtered here)
+                if not is_known(device_id):
+                    logger.debug("Ignoring execution %s for non-MQTT device %s", execution_id, device_id)
+                    continue
+
                 asyncio.create_task(
                     _dispatch(mqtt_publish_fn, device_id, execution_id, payload),
                     name=f"mqtt-dispatch-{execution_id}",

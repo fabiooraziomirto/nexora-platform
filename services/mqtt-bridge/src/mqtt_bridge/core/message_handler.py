@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from mqtt_bridge.core import config
-from mqtt_bridge.core.device_registry import ensure_registered, mark_known
+from mqtt_bridge.core.device_registry import ensure_registered, is_known, mark_known
 
 logger = logging.getLogger("mqtt-bridge.handler")
 
@@ -90,7 +90,8 @@ async def _handle_register(device_id: str, data: dict) -> None:
 async def _handle_telemetry(device_id: str, data: Any) -> None:
     """Ingest telemetry samples into device-service."""
     if not config.AUTO_REGISTER:
-        if not await ensure_registered(device_id):
+        if not is_known(device_id):
+            logger.debug("AUTO_REGISTER disabled — ignoring unknown device %s", device_id)
             return
     else:
         await ensure_registered(device_id)

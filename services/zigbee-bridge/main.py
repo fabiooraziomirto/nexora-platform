@@ -23,10 +23,19 @@ logger = logging.getLogger("zigbee-bridge")
 _start_time = time.time()
 _mqtt_connected = False
 _kafka_consumer: Any = None
+_mqtt_client: Any = None  # shared aiomqtt.Client reference for outbound publish
+
+
+async def _mqtt_publish(topic: str, payload: str) -> None:
+    """Publish to MQTT via the shared client held by _mqtt_loop."""
+    if _mqtt_client is None:
+        logger.warning("MQTT not connected — dropping publish topic=%s", topic)
+        return
+    await _mqtt_client.publish(topic, payload)
 
 
 async def _mqtt_loop() -> None:
-    global _mqtt_connected
+    global _mqtt_connected, _mqtt_client
     z2m_topic = f"{config.Z2M_BASE_TOPIC}/#"
     while True:
         try:
@@ -41,6 +50,7 @@ async def _mqtt_loop() -> None:
                 kwargs["password"] = config.MQTT_PASSWORD
 
             async with aiomqtt.Client(**kwargs) as client:
+                _mqtt_client = client
                 _mqtt_connected = True
                 logger.info("Connected to MQTT broker %s:%s", config.MQTT_HOST, config.MQTT_PORT)
                 await client.subscribe(z2m_topic)
@@ -54,10 +64,12 @@ async def _mqtt_loop() -> None:
                         logger.error("Error handling message topic=%s: %s", topic, exc)
         except aiomqtt.MqttError as exc:
             _mqtt_connected = False
+            _mqtt_client = None
             logger.warning("MQTT disconnected: %s — reconnecting in 5s", exc)
             await asyncio.sleep(5)
         except Exception as exc:
             _mqtt_connected = False
+            _mqtt_client = None
             logger.error("MQTT loop error: %s — reconnecting in 10s", exc)
             await asyncio.sleep(10)
 
@@ -162,11 +174,10 @@ async def lifespan(app: FastAPI):
     _kafka_consumer = await _build_kafka_consumer()
 
     async def _dummy_publish(topic: str, payload: str) -> None:
-        logger.info("MQTT publish [no client] topic=%s payload=%s", topic, payload)
+        logger.info("MQTT publish [mock] topic=%s payload=%s", topic, payload)
 
     if not mock_mode:
-        # Real publish: re-use connection via a shared client reference stored in app state
-        app.state.mqtt_publish = _dummy_publish
+        app.state.mqtt_publish = _mqtt_publish
     else:
         app.state.mqtt_publish = _dummy_publish
 

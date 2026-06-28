@@ -22,10 +22,11 @@ _SRC = os.path.join(os.path.dirname(__file__), "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
+import secrets
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest, Counter, Gauge
 
@@ -187,7 +188,12 @@ async def metrics():
 
 
 @app.get("/devices")
-async def list_known_devices():
+async def list_known_devices(request: Request):
     """List device_ids known to this bridge instance (in-memory, resets on restart)."""
+    key = config.INTERNAL_SERVICE_KEY
+    if key:
+        header = request.headers.get("x-internal-key", "")
+        if not header or not secrets.compare_digest(header, key):
+            raise HTTPException(status_code=403, detail="Missing or invalid internal authentication")
     from mqtt_bridge.core.device_registry import _known
     return {"known_devices": sorted(_known)}

@@ -74,8 +74,8 @@ async def _dispatch(
 ) -> None:
     friendly_name = _device_id_to_friendly_name(device_id)
     if friendly_name is None:
-        logger.warning("No friendly_name for device_id=%s — cannot dispatch", device_id)
-        await _callback(execution_id, "failed", stderr=f"Unknown Zigbee device {device_id}")
+        # Not a Zigbee device — another bridge will handle it; skip silently.
+        logger.debug("Ignoring execution %s for non-Zigbee device %s", execution_id, device_id)
         return
 
     command: str = payload.get("command", "")

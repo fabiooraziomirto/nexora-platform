@@ -71,6 +71,9 @@ class AgentRegisterRequest(BaseModel):
     # Bridge services (matter-bridge, mqtt-bridge) set this on behalf of the device
     connection_protocol: str = Field(default="nexora-agent")
     protocol_meta: Optional[dict] = None
+    # Bridge services supply tenant/owner context so devices are visible to tenant users
+    owner_id: Optional[str] = None
+    tenant_id: Optional[str] = None
 
 
 class AgentHeartbeatRequest(BaseModel):

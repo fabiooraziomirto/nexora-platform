@@ -20,7 +20,9 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+import secrets
+
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from prometheus_client import generate_latest, Counter, Gauge
@@ -47,6 +49,19 @@ COMMISSIONING_TOTAL = Counter(
     ["status"],
 )
 ACTIVE_NODES = Gauge("matter_bridge_active_nodes", "Matter nodes currently commissioned")
+
+# Tracks commissioning IDs whose terminal metric has already been recorded
+_reported_sessions: set[str] = set()
+
+
+def _require_internal(request: Request) -> None:
+    """Reject requests that lack a valid X-Internal-Key header."""
+    key = config.INTERNAL_SERVICE_KEY
+    if not key:
+        return  # dev mode: no key configured, allow all
+    header = request.headers.get("x-internal-key", "")
+    if not header or not secrets.compare_digest(header, key):
+        raise HTTPException(status_code=403, detail="Missing or invalid internal authentication")
 
 
 async def _connect_matter_server() -> Any:
@@ -184,12 +199,13 @@ async def metrics():
 
 
 @app.post("/commission", response_model=CommissionResponse, status_code=202)
-async def commission(body: CommissionRequest):
+async def commission(body: CommissionRequest, request: Request):
     """Start Matter commissioning for a device.
 
     Called by device-service when an owner initiates commissioning.
     Returns immediately; actual CHIP pairing runs in the background.
     """
+    _require_internal(request)
     session = await start_commissioning(
         commissioning_id=body.commissioning_id,
         setup_code=body.setup_code,
@@ -209,18 +225,21 @@ async def commission(body: CommissionRequest):
 
 
 @app.get("/commission/{commissioning_id}", response_model=CommissionResponse)
-async def commission_status(commissioning_id: str):
+async def commission_status(commissioning_id: str, request: Request):
     """Poll the status of a commissioning session."""
+    _require_internal(request)
     session = get_session(commissioning_id)
     if session is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Commissioning session not found")
 
-    if session["status"] == "commissioned":
-        COMMISSIONING_TOTAL.labels(status="succeeded").inc()
-        ACTIVE_NODES.inc()
-    elif session["status"] == "failed":
-        COMMISSIONING_TOTAL.labels(status="failed").inc()
+    if commissioning_id not in _reported_sessions:
+        if session["status"] == "commissioned":
+            COMMISSIONING_TOTAL.labels(status="succeeded").inc()
+            ACTIVE_NODES.inc()
+            _reported_sessions.add(commissioning_id)
+        elif session["status"] == "failed":
+            COMMISSIONING_TOTAL.labels(status="failed").inc()
+            _reported_sessions.add(commissioning_id)
 
     return CommissionResponse(
         commissioning_id=commissioning_id,

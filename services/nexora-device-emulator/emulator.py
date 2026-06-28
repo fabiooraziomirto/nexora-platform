@@ -440,6 +440,7 @@ def _handle_execution(
         "POST",
         f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
         {"status": "running"},
+        headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
     )
 
     if delay_ms > 0:
@@ -471,6 +472,7 @@ def _handle_execution(
         "POST",
         f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
         callback_payload,
+        headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
     )
 
     latency_ms = round((time.time() - t_start) * 1000, 2)
@@ -526,6 +528,7 @@ def _handle_execution_ws(
             "POST",
             f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
             {"status": "running"},
+            headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
         )
     except Exception as exc:
         _log(board_name, "callback_running_error", execution_id=execution_id, error=str(exc))
@@ -567,6 +570,7 @@ def _handle_execution_ws(
             "POST",
             f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
             callback_payload,
+            headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
         )
     except Exception as exc:
         _log(board_name, "callback_final_error", execution_id=execution_id, error=str(exc))

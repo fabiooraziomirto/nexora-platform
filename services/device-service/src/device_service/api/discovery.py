@@ -388,7 +388,7 @@ async def matter_commission(
                     detail=f"matter-bridge returned {resp.status_code}: {resp.text[:200]}",
                 )
             bridge_data = resp.json()
-    except httpx.ConnectError:
+    except (httpx.ConnectError, httpx.TimeoutException):
         raise HTTPException(
             status_code=503,
             detail="matter-bridge is unavailable. Ensure the matter-bridge service is running.",
@@ -423,7 +423,7 @@ async def matter_commission_status(
             if resp.status_code != 200:
                 raise HTTPException(status_code=502, detail="matter-bridge error")
             data = resp.json()
-    except httpx.ConnectError:
+    except (httpx.ConnectError, httpx.TimeoutException):
         raise HTTPException(status_code=503, detail="matter-bridge is unavailable")
 
     return MatterCommissionResponse(

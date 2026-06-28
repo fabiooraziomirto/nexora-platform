@@ -57,7 +57,22 @@ async def start_watcher(matter_client: Any) -> None:
     if matter_client is None:
         logger.info("No matter-server client — attribute watcher disabled (mock mode)")
         return
-    _watcher_task = asyncio.create_task(_watch_loop(matter_client), name="attribute-watcher")
+    _watcher_task = asyncio.create_task(_supervised_watch_loop(matter_client), name="attribute-watcher")
+
+
+async def _supervised_watch_loop(matter_client: Any) -> None:
+    """Supervised loop: restarts _watch_loop on transient errors with backoff."""
+    backoff = 5
+    while True:
+        try:
+            await _watch_loop(matter_client)
+            return  # clean cancellation — do not restart
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            logger.error("Attribute watcher crashed (%s) — restarting in %ds", exc, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
 
 
 async def _watch_loop(matter_client: Any) -> None:
@@ -70,8 +85,7 @@ async def _watch_loop(matter_client: Any) -> None:
             await _handle_attribute_change(event)
     except asyncio.CancelledError:
         logger.info("Attribute watcher stopped")
-    except Exception as exc:
-        logger.error("Attribute watcher error: %s", exc)
+        raise  # propagate so supervisor knows it's a clean stop
 
 
 async def _handle_attribute_change(event: dict) -> None:

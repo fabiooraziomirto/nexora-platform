@@ -155,11 +155,13 @@ async def _register_device(session: dict[str, Any], protocol_meta: dict) -> str:
         "name": session["name"],
         "device_type": "matter",
         "metadata": {
-            "commissioned_by": session["owner_id"],
+            "commissioned_by": session.get("owner_id"),
             "commissioning_id": session["commissioning_id"],
         },
         "connection_protocol": "matter",
         "protocol_meta": protocol_meta,
+        "owner_id": session.get("owner_id"),
+        "tenant_id": session.get("tenant_id"),
     }
     headers = {"X-Bootstrap-Token": config.AGENT_BOOTSTRAP_TOKEN}
 
@@ -172,14 +174,4 @@ async def _register_device(session: dict[str, Any], protocol_meta: dict) -> str:
         resp.raise_for_status()
         data = resp.json()
 
-    device_id: str = data["device_id"]
-
-    if session.get("owner_id"):
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.patch(
-                f"{config.DEVICE_SERVICE_URL}/api/v2/devices/{device_id}",
-                json={"protocol_meta": protocol_meta},
-                headers=headers,
-            )
-
-    return device_id
+    return data["device_id"]

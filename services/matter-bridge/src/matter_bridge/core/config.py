@@ -9,9 +9,19 @@ EXECUTION_SERVICE_URL: str = os.getenv("EXECUTION_SERVICE_URL", "http://executio
 
 # Bootstrap token used when registering Matter devices on behalf of owners
 # Format: "id:secret" — must match an entry in device-service AGENT_BOOTSTRAP_TOKENS
+# IMPORTANT: override via AGENT_BOOTSTRAP_TOKEN env var in production; the default
+# is a well-known value committed to source and must NOT be used outside dev/CI.
 AGENT_BOOTSTRAP_TOKEN: str = os.getenv(
     "AGENT_BOOTSTRAP_TOKEN", "bridge:bridge-secret"
 )
+
+if AGENT_BOOTSTRAP_TOKEN == "bridge:bridge-secret" and ENVIRONMENT != "development":
+    import warnings
+    warnings.warn(
+        "AGENT_BOOTSTRAP_TOKEN is set to the insecure default. "
+        "Set the AGENT_BOOTSTRAP_TOKEN environment variable before deploying.",
+        stacklevel=1,
+    )
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")

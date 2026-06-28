@@ -292,6 +292,9 @@ async def add_fleet_member(fleet_id: str, payload: dict[str, Any], request: Requ
 async def list_fleet_members(fleet_id: str, request: Request) -> dict[str, Any]:
     with SessionLocal() as db:
         fleet = db.get(Fleet, fleet_id)
+        if fleet is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Fleet not found")
         # Internal services (execution-service) call this with X-Internal-Key.
         if not _is_valid_internal_key(request.headers.get("x-internal-key")):
             _ensure_fleet_visible(fleet, request)
