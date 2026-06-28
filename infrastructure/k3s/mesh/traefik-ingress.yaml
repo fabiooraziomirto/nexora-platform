@@ -98,7 +98,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@nexora.example.com
+    email: NEXORA_ACME_EMAIL
     privateKeySecretRef:
       name: letsencrypt-account-key
     solvers:

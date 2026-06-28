@@ -17,6 +17,7 @@ INSTALL_MONITORING="${INSTALL_MONITORING:-false}"
 INSTALL_SECURITY="${INSTALL_SECURITY:-true}"
 INSTALL_VAULT="${INSTALL_VAULT:-false}"
 TLS_MODE="${TLS_MODE:-self-signed}"   # self-signed | letsencrypt | none
+ACME_EMAIL="${ACME_EMAIL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(cd "$SCRIPT_DIR/../../infrastructure/k3s" && pwd)"
 K3S_NAMESPACE="nxr"
@@ -27,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     --domain)       NEXORA_DOMAIN="$2"; shift 2 ;;
     --no-tls)       TLS_MODE="none"; shift ;;
     --letsencrypt)  TLS_MODE="letsencrypt"; shift ;;
+    --email)        ACME_EMAIL="$2"; shift 2 ;;
     --monitoring)   INSTALL_MONITORING="true"; shift ;;
     --vault)        INSTALL_VAULT="true"; shift ;;
     --no-security)  INSTALL_SECURITY="false"; shift ;;
@@ -34,6 +36,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
+
+if [[ "$TLS_MODE" == "letsencrypt" && -z "$ACME_EMAIL" ]]; then
+  err "--letsencrypt requires --email user@example.com"
+fi
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 log()  { echo "[nexora] $*"; }
@@ -159,8 +165,8 @@ deploy_infrastructure() {
 configure_ingress() {
   case $TLS_MODE in
     letsencrypt)
-      log "Configuring Let's Encrypt TLS for $NEXORA_DOMAIN..."
-      sed "s/nexora.example.com/$NEXORA_DOMAIN/g" \
+      log "Configuring Let's Encrypt TLS for $NEXORA_DOMAIN (email=$ACME_EMAIL)..."
+      sed "s/nexora.example.com/$NEXORA_DOMAIN/g; s/NEXORA_ACME_EMAIL/$ACME_EMAIL/g" \
         "$INFRA_DIR/mesh/traefik-ingress.yaml" | kubectl apply -f -
       ;;
     self-signed)
@@ -264,6 +270,7 @@ deploy_redis() {
 # ── nexora services ───────────────────────────────────────────────────────────
 deploy_services() {
   log "Deploying Nexora services..."
+  kubectl apply -f "$INFRA_DIR/services/mosquitto.yaml"
   kubectl apply -f "$INFRA_DIR/services/device-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/execution-service.yaml"
   kubectl apply -f "$INFRA_DIR/services/remaining-services.yaml"
