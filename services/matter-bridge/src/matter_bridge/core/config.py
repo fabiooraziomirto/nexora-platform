@@ -1,5 +1,7 @@
 import os
 
+ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+
 # matter-server WebSocket URL (python-matter-server process)
 MATTER_SERVER_URL: str = os.getenv("MATTER_SERVER_URL", "ws://localhost:5580/ws")
 
@@ -28,7 +30,6 @@ KAFKA_BOOTSTRAP_SERVERS: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"
 KAFKA_TOPIC_PREFIX: str = os.getenv("KAFKA_TOPIC_PREFIX", "nxr")
 KAFKA_ENABLED: bool = os.getenv("KAFKA_ENABLED", "true").lower() == "true"
 
-ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 PORT: int = int(os.getenv("PORT", "8008"))
 
 INTERNAL_SERVICE_KEY: str = os.getenv("INTERNAL_SERVICE_KEY", "")

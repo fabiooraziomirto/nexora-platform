@@ -123,7 +123,7 @@ async def _handle_control(ws, msg: dict, device_id: str, server_url: str, auth: 
 
     # Immediately report "running"
     await _send_callback_direct(
-        execution_id, "running", server_url, stdout=None, stderr=None
+        execution_id, "running", server_url, stdout=None, stderr=None, auth=auth
     )
 
     # Execute

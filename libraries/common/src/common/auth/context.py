@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
@@ -113,6 +114,19 @@ class RequestAuthenticator:
             ],
         )
 
+    def internal_user(self) -> CurrentUser:
+        return CurrentUser(
+            user_id="internal-service",
+            tenant_id="system",
+            roles=[self.settings.platform_admin_role, self.settings.operator_role],
+        )
+
+    def authenticate_internal_key(self, x_internal_key: str | None) -> CurrentUser | None:
+        internal_key = os.getenv("INTERNAL_SERVICE_KEY", "")
+        if internal_key and x_internal_key and secrets.compare_digest(x_internal_key, internal_key):
+            return self.internal_user()
+        return None
+
     def authenticate_header(self, authorization: str | None) -> CurrentUser | JSONResponse:
         if not self.settings.auth_enabled:
             return self.dev_user()
@@ -134,7 +148,9 @@ class RequestAuthenticator:
     ) -> Response:
         if request.url.path in PUBLIC_PATHS:
             return await call_next(request)
-        result = self.authenticate_header(request.headers.get("Authorization"))
+        result = self.authenticate_internal_key(request.headers.get("x-internal-key"))
+        if result is None:
+            result = self.authenticate_header(request.headers.get("Authorization"))
         if isinstance(result, JSONResponse):
             return result
         request.state.current_user = result
