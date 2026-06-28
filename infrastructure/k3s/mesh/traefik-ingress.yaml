@@ -1,0 +1,107 @@
+# k3s ships with Traefik built-in. This configures IngressRoutes for all
+# Nexora services using Traefik's CRDs (already installed by k3s).
+# Replace "nexora.example.com" with your actual domain.
+#
+# TLS is handled automatically by cert-manager + Let's Encrypt.
+# For self-signed (no public domain), use tls: {} for k3s self-signed cert.
+---
+# Traefik middleware: strip /api prefix when routing internally
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-api-prefix
+  namespace: nxr
+spec:
+  stripPrefix:
+    prefixes:
+      - /api
+---
+# Main API gateway IngressRoute
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexora-api
+  namespace: nxr
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`nexora.example.com`) && PathPrefix(`/api/v2/devices`)
+      kind: Rule
+      services:
+        - name: device-service
+          port: 8000
+    - match: Host(`nexora.example.com`) && PathPrefix(`/api/v2/plugins`)
+      kind: Rule
+      services:
+        - name: plugin-service
+          port: 8001
+    - match: Host(`nexora.example.com`) && PathPrefix(`/api/v2/executions`)
+      kind: Rule
+      services:
+        - name: execution-service
+          port: 8002
+    - match: Host(`nexora.example.com`) && PathPrefix(`/api/v2/fleets`)
+      kind: Rule
+      services:
+        - name: fleet-service
+          port: 8006
+    - match: Host(`nexora.example.com`) && PathPrefix(`/api/v2/agents`)
+      kind: Rule
+      services:
+        - name: nexora-edge
+          port: 8007
+  tls:
+    certResolver: letsencrypt
+---
+# WebSocket route for agent tunnel (no timeout middleware)
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexora-ws
+  namespace: nxr
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`nexora.example.com`) && PathPrefix(`/api/v2/agents/ws`)
+      kind: Rule
+      services:
+        - name: nexora-edge
+          port: 8007
+  tls:
+    certResolver: letsencrypt
+---
+# Keycloak IngressRoute
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexora-keycloak
+  namespace: keycloak
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`auth.nexora.example.com`)
+      kind: Rule
+      services:
+        - name: keycloak
+          port: 8080
+  tls:
+    certResolver: letsencrypt
+---
+# Traefik cert-manager ClusterIssuer (Let's Encrypt)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@nexora.example.com
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik

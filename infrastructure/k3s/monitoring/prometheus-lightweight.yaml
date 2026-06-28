@@ -1,0 +1,153 @@
+# Lightweight monitoring stack for self-hosted k3s.
+# Uses Prometheus + Grafana without the full kube-prometheus-stack operator.
+# Memory footprint: ~300MB total vs ~2GB for full operator.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: nxr-monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: nxr-monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    scrape_configs:
+      - job_name: nexora-services
+        static_configs:
+          - targets:
+            - device-service.nxr:8000
+            - plugin-service.nxr:8001
+            - execution-service.nxr:8002
+            - fleet-service.nxr:8006
+            - nexora-edge.nxr:8007
+            - mqtt-bridge.nxr:8009
+            - zigbee-bridge.nxr:8010
+            - matter-bridge.nxr:8008
+        metrics_path: /metrics
+
+      - job_name: mysql
+        static_configs:
+          - targets: ["mysql.nxr:9104"]
+
+      - job_name: kafka
+        static_configs:
+          - targets: ["kafka.nxr:9308"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: nxr-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      securityContext:
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.48.0
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=15d"
+            - "--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: nxr-monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: nxr-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        runAsUser: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"  # change in production
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: nxr-monitoring
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000

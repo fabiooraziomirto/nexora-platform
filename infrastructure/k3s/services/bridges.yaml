@@ -1,0 +1,211 @@
+# Protocol bridges: mqtt-bridge (8009), zigbee-bridge (8010), matter-bridge (8008)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt-bridge
+  namespace: nxr
+  labels:
+    app: mqtt-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mqtt-bridge
+  template:
+    metadata:
+      labels:
+        app: mqtt-bridge
+    spec:
+      serviceAccountName: nexora-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: mqtt-bridge
+          image: nexora/mqtt-bridge:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8009
+          envFrom:
+            - configMapRef:
+                name: nexora-config
+            - secretRef:
+                name: nexora-internal
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8009
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqtt-bridge
+  namespace: nxr
+spec:
+  selector:
+    app: mqtt-bridge
+  ports:
+    - port: 8009
+      targetPort: 8009
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zigbee-bridge
+  namespace: nxr
+  labels:
+    app: zigbee-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zigbee-bridge
+  template:
+    metadata:
+      labels:
+        app: zigbee-bridge
+    spec:
+      serviceAccountName: nexora-service
+      # zigbee-bridge needs host network access for USB/serial Zigbee coordinator
+      # Set hostNetwork: true only if using a physical coordinator on the host
+      containers:
+        - name: zigbee-bridge
+          image: nexora/zigbee-bridge:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8010
+          envFrom:
+            - configMapRef:
+                name: nexora-config
+            - secretRef:
+                name: nexora-internal
+          env:
+            - name: ZIGBEE_MOCK
+              value: "false"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zigbee-bridge
+  namespace: nxr
+spec:
+  selector:
+    app: zigbee-bridge
+  ports:
+    - port: 8010
+      targetPort: 8010
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matter-bridge
+  namespace: nxr
+  labels:
+    app: matter-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: matter-bridge
+  template:
+    metadata:
+      labels:
+        app: matter-bridge
+    spec:
+      serviceAccountName: nexora-service
+      # Matter requires host network for mDNS discovery
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: matter-bridge
+          image: nexora/matter-bridge:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8008
+          envFrom:
+            - configMapRef:
+                name: nexora-config
+            - secretRef:
+                name: nexora-internal
+          env:
+            - name: MATTER_SERVER_URL
+              value: "ws://localhost:5580/ws"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+        - name: matter-server
+          image: ghcr.io/home-assistant-libs/python-matter-server:stable
+          ports:
+            - containerPort: 5580
+          volumeMounts:
+            - name: matter-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: matter-data
+          persistentVolumeClaim:
+            claimName: matter-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: matter-bridge
+  namespace: nxr
+spec:
+  selector:
+    app: matter-bridge
+  ports:
+    - port: 8008
+      targetPort: 8008
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: matter-data-pvc
+  namespace: nxr
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # k3s default StorageClass (local-path) is used automatically

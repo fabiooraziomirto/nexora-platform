@@ -1,0 +1,23 @@
+# Shared environment configuration for all Nexora services.
+# Edit NEXORA_DOMAIN and KEYCLOAK_ISSUER for your deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexora-config
+  namespace: nxr
+data:
+  NEXORA_DOMAIN: "nexora.local"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KAFKA_TOPIC_PREFIX: "nxr"
+  KAFKA_ENABLED: "true"
+  KAFKA_REQUIRED: "false"
+  AUTH_ENABLED: "true"
+  AUTH_WRITE_ROLE: "platform-admin"
+  KEYCLOAK_ISSUER: "http://keycloak:8080/realms/nxr"
+  DEVICE_SERVICE_URL: "http://device-service:8000"
+  PLUGIN_SERVICE_URL: "http://plugin-service:8001"
+  EXECUTION_SERVICE_URL: "http://execution-service:8002"
+  FLEET_SERVICE_URL: "http://fleet-service:8006"
+  GATEWAY_URL: "http://nexora-edge:8007"
+  MATTER_BRIDGE_URL: "http://matter-bridge:8008"
+  MQTT_BROKER_URL: "mqtt://mosquitto:1883"
