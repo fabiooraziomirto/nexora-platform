@@ -220,3 +220,35 @@ async def delete_shadow(device_id: UUID, db: AsyncSession = Depends(get_db)):
         await db.delete(shadow)
         await db.commit()
         logger.info("shadow.deleted", device_id=str(device_id))
+
+
+# ---------------------------------------------------------------------------
+# Matter cluster helper — reads protocol_meta without calling matter-bridge
+# ---------------------------------------------------------------------------
+
+class MatterClusterInfo(BaseModel):
+    endpoints: list[dict]
+    attributes: dict
+
+
+@router.get("/devices/{device_id}/matter/clusters", response_model=MatterClusterInfo)
+async def get_matter_clusters(device_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Return the Matter cluster/endpoint topology stored in protocol_meta.
+
+    Populated by matter-bridge at commissioning time and refreshed on attribute subscription.
+    Returns 404 if the device is not a Matter device or has not yet been commissioned.
+    """
+    result = await db.execute(select(Device).where(Device.id == str(device_id)))
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if device.connection_protocol != "matter":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Device uses protocol '{device.connection_protocol}', not 'matter'",
+        )
+    meta = device.protocol_meta or {}
+    return MatterClusterInfo(
+        endpoints=meta.get("endpoints", []),
+        attributes=meta.get("attributes", {}),
+    )

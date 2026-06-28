@@ -1,0 +1,229 @@
+# network-service (8003), dns-service (8004), webservice-service (8005)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-service
+  namespace: nxr
+  labels:
+    app: network-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: network-service
+  template:
+    metadata:
+      labels:
+        app: network-service
+    spec:
+      serviceAccountName: nexora-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        - name: wait-mysql
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z mysql 3306; do echo waiting for mysql; sleep 2; done']
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done']
+      containers:
+        - name: network-service
+          image: nexora/network-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8003
+          envFrom:
+            - configMapRef:
+                name: nexora-config
+            - secretRef:
+                name: nexora-internal
+            - secretRef:
+                name: nexora-db
+          env:
+            - name: PORT
+              value: "8003"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-service
+  namespace: nxr
+spec:
+  selector:
+    app: network-service
+  ports:
+    - port: 8003
+      targetPort: 8003
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-service
+  namespace: nxr
+  labels:
+    app: dns-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-service
+  template:
+    metadata:
+      labels:
+        app: dns-service
+    spec:
+      serviceAccountName: nexora-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        - name: wait-mysql
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z mysql 3306; do echo waiting for mysql; sleep 2; done']
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done']
+      containers:
+        - name: dns-service
+          image: nexora/dns-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: nexora-config
+            - secretRef:
+                name: nexora-internal
+            - secretRef:
+                name: nexora-db
+          env:
+            - name: PORT
+              value: "8004"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8004
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-service
+  namespace: nxr
+spec:
+  selector:
+    app: dns-service
+  ports:
+    - port: 8004
+      targetPort: 8004
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webservice-service
+  namespace: nxr
+  labels:
+    app: webservice-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webservice-service
+  template:
+    metadata:
+      labels:
+        app: webservice-service
+    spec:
+      serviceAccountName: nexora-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        - name: wait-mysql
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z mysql 3306; do echo waiting for mysql; sleep 2; done']
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done']
+      containers:
+        - name: webservice-service
+          image: nexora/webservice-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8005
+          envFrom:
+            - configMapRef:
+                name: nexora-config
+            - secretRef:
+                name: nexora-internal
+            - secretRef:
+                name: nexora-db
+          env:
+            - name: PORT
+              value: "8005"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webservice-service
+  namespace: nxr
+spec:
+  selector:
+    app: webservice-service
+  ports:
+    - port: 8005
+      targetPort: 8005

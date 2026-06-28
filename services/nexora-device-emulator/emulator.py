@@ -110,6 +110,20 @@ def _parse_args() -> argparse.Namespace:
         default=PAIRING_UI_PORT,
         help="Port for embedded pairing UI server (default: 8091)",
     )
+    p.add_argument(
+        "--matter-mock", action="store_true",
+        default=os.getenv("MATTER_MOCK", "").lower() in ("true", "1", "yes"),
+        help=(
+            "Simulate a Matter device: POST a commissioning request to matter-bridge "
+            "and then emit periodic telemetry samples (temperature, OnOff, brightness). "
+            "Requires MATTER_BRIDGE_URL and DEVICE_URL env vars."
+        ),
+    )
+    p.add_argument(
+        "--matter-bridge-url", type=str,
+        default=os.getenv("MATTER_BRIDGE_URL", "http://matter-bridge:8008"),
+        help="URL of the matter-bridge service (used with --matter-mock)",
+    )
     return p.parse_args()
 
 
@@ -426,6 +440,7 @@ def _handle_execution(
         "POST",
         f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
         {"status": "running"},
+        headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
     )
 
     if delay_ms > 0:
@@ -457,6 +472,7 @@ def _handle_execution(
         "POST",
         f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
         callback_payload,
+        headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
     )
 
     latency_ms = round((time.time() - t_start) * 1000, 2)
@@ -512,6 +528,7 @@ def _handle_execution_ws(
             "POST",
             f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
             {"status": "running"},
+            headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
         )
     except Exception as exc:
         _log(board_name, "callback_running_error", execution_id=execution_id, error=str(exc))
@@ -553,6 +570,7 @@ def _handle_execution_ws(
             "POST",
             f"{EXEC_URL}/api/v2/executions/{execution_id}/callback",
             callback_payload,
+            headers={"X-Bootstrap-Token": BOOTSTRAP_TOKEN},
         )
     except Exception as exc:
         _log(board_name, "callback_final_error", execution_id=execution_id, error=str(exc))
@@ -718,6 +736,103 @@ def _run_board(
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _run_matter_mock(board_name: str, matter_bridge_url: str, kill_after: float) -> None:
+    """Simulate a Matter device via matter-bridge mock mode.
+
+    1. POST a commissioning request to matter-bridge (setup_code = "MT:MOCK...")
+    2. Poll until commissioned and get device_id
+    3. Loop: send periodic telemetry to device-service directly
+    """
+    import uuid as _uuid
+
+    commissioning_id = str(_uuid.uuid4())
+    setup_code = "MT:Y3QT042C00KA0648G00"
+
+    _log(board_name, "matter_mock_commission_start",
+         bridge=matter_bridge_url, commissioning_id=commissioning_id)
+
+    # Step 1: start commissioning
+    try:
+        data = json.dumps({
+            "commissioning_id": commissioning_id,
+            "setup_code": setup_code,
+            "name": board_name,
+            "description": f"Mock Matter device: {board_name}",
+            "owner_id": "emulator",
+            "tenant_id": None,
+        }).encode()
+        req = urllib.request.Request(
+            f"{matter_bridge_url}/commission",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+    except Exception as exc:
+        _log(board_name, "matter_commission_failed", error=str(exc))
+        return
+
+    _log(board_name, "matter_commission_pending", node_id=result.get("node_id"))
+
+    # Step 2: poll until done
+    device_id: str | None = None
+    for _ in range(30):
+        time.sleep(1)
+        try:
+            with urllib.request.urlopen(
+                f"{matter_bridge_url}/commission/{commissioning_id}", timeout=5
+            ) as resp:
+                status_data = json.loads(resp.read())
+            status = status_data.get("status")
+            if status == "commissioned":
+                device_id = status_data.get("device_id")
+                _log(board_name, "matter_commissioned", device_id=device_id)
+                break
+            elif status == "failed":
+                _log(board_name, "matter_commission_failed", error=status_data.get("error"))
+                return
+        except Exception:
+            pass
+
+    if not device_id:
+        _log(board_name, "matter_commission_timeout")
+        return
+
+    # Step 3: emit periodic telemetry
+    start = time.monotonic()
+    tick = 0
+    while True:
+        if kill_after > 0 and (time.monotonic() - start) >= kill_after:
+            _log(board_name, "matter_mock_exit", reason="kill_after")
+            return
+
+        temperature = round(20.0 + (tick % 10) * 0.5, 2)
+        on_off = tick % 2 == 0
+
+        samples = [
+            {"metric": "temperature_celsius", "value": temperature, "unit": "celsius"},
+            {"metric": "power_state", "value": 1.0 if on_off else 0.0, "unit": "bool"},
+            {"metric": "brightness_level", "value": float(128 + (tick % 127)), "unit": "level"},
+        ]
+        try:
+            payload = json.dumps({"samples": samples}).encode()
+            req = urllib.request.Request(
+                f"{DEVICE_URL}/api/v2/devices/{device_id}/telemetry",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+            _log(board_name, "matter_telemetry_sent", tick=tick, device_id=device_id)
+        except Exception as exc:
+            _log(board_name, "matter_telemetry_error", error=str(exc))
+
+        tick += 1
+        time.sleep(10)
+
+
 def main() -> None:
     args = _parse_args()
     n = args.n_boards
@@ -729,6 +844,15 @@ def main() -> None:
     reconnect_interval = max(0.0, args.reconnect_interval)
     pairing_ui = args.pairing_ui
     pairing_ui_port = max(1, min(65535, args.pairing_ui_port))
+    matter_mock = args.matter_mock
+    matter_bridge_url = args.matter_bridge_url.rstrip("/")
+
+    if matter_mock:
+        # Matter mock mode: simulate a single Matter device via matter-bridge
+        board_name = f"{prefix}-matter-{uuid.uuid4().hex[:6]}"
+        _log("__launcher__", "matter_mock_mode", bridge=matter_bridge_url, board=board_name)
+        _run_matter_mock(board_name, matter_bridge_url, kill_after)
+        sys.exit(0)
 
     if pairing_ui:
         _start_pairing_ui_server(pairing_ui_port)

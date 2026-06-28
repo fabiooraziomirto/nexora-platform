@@ -135,6 +135,10 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+      # bridge bootstrap tokens (matter-bridge, mqtt-bridge, zigbee-bridge)
+      AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800,bridge:bridge-secret:4102444800"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
+      MATTER_BRIDGE_URL: http://matter-bridge:8008
     ports:
       - "8000:8000"
     healthcheck:
@@ -159,6 +163,7 @@ services:
     environment:
       DATABASE_URL: mysql+pymysql://nxr:nxr@mysql:3306/nxr
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
     ports:
       - "8001:8000"
     healthcheck:
@@ -187,6 +192,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
+      AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800,bridge:bridge-secret:4102444800"
     ports:
       - "8002:8000"
     healthcheck:
@@ -416,7 +423,162 @@ services:
     ports:
       - "8091:8091"
 
+  # ---------------------------------------------------------------------------
+  # Matter IoT bridge (optional — only needed when commissioning Matter devices)
+  # Requires network access to the same LAN as the Matter devices.
+  # On Raspberry Pi, run with --network=host so mDNS/Thread work correctly.
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # MQTT / Zigbee infrastructure
+  # ---------------------------------------------------------------------------
+
+  mosquitto:
+    profiles: ["dev", "mqtt", "zigbee"]
+    image: eclipse-mosquitto:2
+    container_name: nxr-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    command: >
+      sh -c "echo 'listener 1883\nallow_anonymous true\npersistence true\npersistence_location /mosquitto/data/' > /mosquitto/config/mosquitto.conf
+             && mosquitto -c /mosquitto/config/mosquitto.conf"
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mqtt-bridge:
+    profiles: ["dev", "mqtt"]
+    build:
+      context: ./services/mqtt-bridge
+      dockerfile: Dockerfile
+    container_name: nxr-mqtt-bridge
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      DEVICE_SERVICE_URL: http://device-service:8000
+      EXECUTION_SERVICE_URL: http://execution-service:8002
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC_PREFIX: nxr
+      AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
+      ENVIRONMENT: development
+    ports:
+      - "8009:8009"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8009/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  zigbee2mqtt:
+    profiles: ["zigbee"]
+    image: koenkk/zigbee2mqtt:latest
+    container_name: nxr-zigbee2mqtt
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      ZIGBEE2MQTT_CONFIG_MQTT_SERVER: mqtt://mosquitto:1883
+      ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_LEVEL: warn
+    volumes:
+      - zigbee2mqtt_data:/app/data
+    # Uncomment and set to your Zigbee USB coordinator device:
+    # devices:
+    #   - /dev/ttyACM0:/dev/ttyACM0
+    restart: unless-stopped
+
+  zigbee-bridge:
+    profiles: ["dev", "zigbee"]
+    build:
+      context: ./services/zigbee-bridge
+      dockerfile: Dockerfile
+    container_name: nxr-zigbee-bridge
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      Z2M_BASE_TOPIC: zigbee2mqtt
+      DEVICE_SERVICE_URL: http://device-service:8000
+      EXECUTION_SERVICE_URL: http://execution-service:8002
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC_PREFIX: nxr
+      AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
+      ZIGBEE_MOCK: "true"
+      ENVIRONMENT: development
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  matter-server:
+    profiles: ["dev", "matter"]
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: nxr-matter-server
+    volumes:
+      - matter_data:/data
+    # Matter uses mDNS (UDP multicast) for device discovery — host networking is required.
+    # For cloud deployments, use a dedicated IoT VLAN and bridge host.
+    network_mode: host
+    restart: unless-stopped
+
+  matter-bridge:
+    profiles: ["dev", "matter"]
+    build:
+      context: ./services/matter-bridge
+      dockerfile: Dockerfile
+    container_name: nxr-matter-bridge
+    depends_on:
+      device-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      # matter-server is on host network (port 5580)
+      MATTER_SERVER_URL: ws://host.docker.internal:5580/ws
+      DEVICE_SERVICE_URL: http://device-service:8000
+      EXECUTION_SERVICE_URL: http://execution-service:8002
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC_PREFIX: nxr
+      AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      INTERNAL_SERVICE_KEY: "nexora-internal-dev-secret"
+      ENVIRONMENT: development
+    ports:
+      - "8008:8008"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   mysql_data:
   function_artifacts:
   ollama_data:
+  matter_data:
+  mosquitto_data:
+  mosquitto_log:
+  zigbee2mqtt_data:

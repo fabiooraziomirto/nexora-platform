@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from common.audit import emit_audit_event
 from common.auth.context import auth_settings_from_env, current_user_from_request
+from common.internal_auth import require_internal
 
 from plugin_service.core.config import (
     PLUGIN_SECURITY_MAX_CRITICAL,
@@ -158,6 +159,17 @@ async def create_plugin(payload: dict[str, Any], request: Request) -> dict[str, 
 
 @router.get("/api/v2/plugins/{plugin_id}")
 async def get_plugin(plugin_id: str, request: Request) -> dict[str, Any]:
+    # Internal services (execution-service) call this with X-Internal-Key.
+    # When the key is valid, skip user/tenant checks.
+    x_internal_key = request.headers.get("x-internal-key")
+    from common.internal_auth import _is_valid_internal_key
+    if _is_valid_internal_key(x_internal_key):
+        with SessionLocal() as db:
+            plugin = db.get(Plugin, plugin_id)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="plugin not found")
+        return _plugin_to_dict(plugin)
+
     user = current_user_from_request(request)
     with SessionLocal() as db:
         plugin = db.get(Plugin, plugin_id)

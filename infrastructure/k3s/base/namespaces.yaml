@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nxr
+  labels:
+    name: nxr
+    managed-by: nexora
+    deployment-mode: self-hosted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nxr-monitoring
+  labels:
+    name: nxr-monitoring
+    managed-by: nexora
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    name: cert-manager
+    managed-by: nexora
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keycloak
+  labels:
+    name: keycloak
+    managed-by: nexora

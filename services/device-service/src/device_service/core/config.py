@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     # Device discovery pairing (RFC 8628)
     DISCOVERY_EXPIRY_SECONDS: int = 900    # 15 minutes
     DISCOVERY_POLL_INTERVAL_SECONDS: int = 5
+
+    # Matter bridge integration
+    # URL of the matter-bridge service for commissioning delegation
+    MATTER_BRIDGE_URL: str = Field(
+        default="http://matter-bridge:8008",
+        description="URL of the matter-bridge service",
+    )
     
     class Config:
         env_file = ".env"
