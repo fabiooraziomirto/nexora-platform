@@ -1,0 +1,45 @@
+[Unit]
+Description=Nexora IoT Edge Agent
+Documentation=https://docs.nexora.io/agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/nexora-agent start
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Watchdog — agent must call sd_notify("WATCHDOG=1") every 60s
+WatchdogSec=90
+
+# Run as dedicated user when available (created by install script)
+# User=nexora-agent
+# Group=nexora-agent
+
+# State directory (offline queue SQLite)
+StateDirectory=nexora-agent
+StateDirectoryMode=0750
+
+# Config directory (credentials)
+ConfigurationDirectory=nexora-agent
+ConfigurationDirectoryMode=0700
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexora-agent
+
+# Environment overrides (optional — edit /etc/nexora-agent/agent.env)
+EnvironmentFile=-/etc/nexora-agent/agent.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/etc/nexora-agent /var/lib/nexora-agent
+
+[Install]
+WantedBy=multi-user.target
