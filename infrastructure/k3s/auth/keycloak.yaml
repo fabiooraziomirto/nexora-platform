@@ -97,12 +97,27 @@ spec:
       initContainers:
         - name: copy-realm
           image: busybox
-          command: ["cp", "/realm-config/realm.json", "/opt/keycloak/data/import/realm.json"]
+          command:
+            - sh
+            - -c
+            - |
+              cp /realm-config/realm.json /opt/keycloak/data/import/realm.json
+              mkdir -p /opt/keycloak/themes/nexora/login/resources/css \
+                       /opt/keycloak/themes/nexora/login/resources/img \
+                       /opt/keycloak/themes/nexora/login/messages
+              cp /theme-config/theme.properties    /opt/keycloak/themes/nexora/login/theme.properties
+              cp /theme-config/messages_en.properties /opt/keycloak/themes/nexora/login/messages/messages_en.properties
+              cp /theme-config/login.css           /opt/keycloak/themes/nexora/login/resources/css/login.css
+              cp /theme-config/nexora-mark.svg     /opt/keycloak/themes/nexora/login/resources/img/nexora-mark.svg
           volumeMounts:
             - name: realm-config
               mountPath: /realm-config
+            - name: theme-config
+              mountPath: /theme-config
             - name: keycloak-data
               mountPath: /opt/keycloak/data
+            - name: keycloak-themes
+              mountPath: /opt/keycloak/themes
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:23.0
@@ -129,6 +144,8 @@ spec:
           volumeMounts:
             - name: keycloak-data
               mountPath: /opt/keycloak/data
+            - name: keycloak-themes
+              mountPath: /opt/keycloak/themes
           readinessProbe:
             httpGet:
               path: /realms/nxr
@@ -153,6 +170,11 @@ spec:
         - name: realm-config
           configMap:
             name: keycloak-realm
+        - name: theme-config
+          configMap:
+            name: keycloak-nexora-theme
+        - name: keycloak-themes
+          emptyDir: {}
         - name: keycloak-data
           persistentVolumeClaim:
             claimName: keycloak-data

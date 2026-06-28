@@ -1,0 +1,243 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-nexora-theme
+  namespace: keycloak
+data:
+  theme.properties: |
+    parent=keycloak.v2
+    import=common/keycloak
+    styles=css/login.css
+    locales=en
+
+  messages_en.properties: |
+    loginTitle=Nexora Control Plane
+    loginTitleHtml=Nexora Control Plane
+    usernameOrEmail=Username
+    doLogIn=Sign in
+    doForgotPassword=Reset access
+    loginAccountTitle=Access your workspace
+    loginProfileTitle=Complete your profile
+    loginTotpTitle=Configure authenticator
+    loginOtpOneTime=One-time code
+    invalidUserMessage=Invalid username or password.
+
+  login.css: |
+    html,
+    body {
+      min-height: 100%;
+    }
+
+    body {
+      background:
+        linear-gradient(90deg, #0d1117 0 42%, #f8fafc 42% 100%),
+        radial-gradient(circle at 18% 22%, rgba(45, 212, 191, 0.14), transparent 25rem),
+        radial-gradient(circle at 34% 72%, rgba(129, 140, 248, 0.16), transparent 24rem),
+        linear-gradient(180deg, #0d1117 0%, #111827 58%, #0d1117 100%);
+      color: #0f172a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .login-pf body {
+      background:
+        linear-gradient(90deg, #0d1117 0 42%, #f8fafc 42% 100%),
+        radial-gradient(circle at 18% 22%, rgba(45, 212, 191, 0.14), transparent 25rem),
+        radial-gradient(circle at 34% 72%, rgba(129, 140, 248, 0.16), transparent 24rem),
+        linear-gradient(180deg, #0d1117 0%, #111827 58%, #0d1117 100%);
+    }
+
+    body::before {
+      position: fixed;
+      top: 50%;
+      left: clamp(32px, 6vw, 72px);
+      width: min(30vw, 380px);
+      transform: translateY(-50%);
+      color: #ffffff;
+      content: "NEXORA CONTROL\A\AOperational access for edge orchestration, fleet health, executions, and AI-assisted operations.";
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: 0;
+      line-height: 1.65;
+      white-space: pre-line;
+    }
+
+    body::after {
+      position: fixed;
+      bottom: 26px;
+      left: clamp(32px, 6vw, 72px);
+      color: rgba(255, 255, 255, 0.72);
+      content: "OIDC / PKCE S256 / Realm nxr";
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .login-pf-page {
+      display: grid;
+      grid-template-columns: minmax(320px, 42%) minmax(360px, 1fr);
+      min-height: 100vh;
+      align-items: center;
+      justify-items: center;
+      padding: 32px clamp(24px, 6vw, 88px);
+    }
+
+    .login-pf-page::before {
+      position: fixed;
+      top: 24px;
+      left: 28px;
+      display: flex;
+      height: 30px;
+      align-items: center;
+      padding-left: 42px;
+      color: #ffffff;
+      content: "nexora";
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 30px;
+      background-image: url("../img/nexora-mark.svg");
+      background-position: left center;
+      background-repeat: no-repeat;
+      background-size: 30px 30px;
+    }
+
+    .login-pf-page::after {
+      position: fixed;
+      right: 28px;
+      bottom: 22px;
+      color: rgba(255, 255, 255, 0.28);
+      content: "Nexora v0.3.0";
+      font-size: 11px;
+    }
+
+    #kc-header { display: none; }
+
+    .card-pf {
+      position: relative;
+      width: min(398px, calc(100vw - 36px));
+      margin: 0;
+      grid-column: 2;
+      padding: 28px 30px 26px;
+      border: 1px solid #e2e8f0;
+      border-top: 2.5px solid #6366f1;
+      border-radius: 10px;
+      background: #ffffff;
+      box-shadow: 0 18px 55px rgba(15, 23, 42, 0.14);
+    }
+
+    .card-pf::before {
+      display: inline-flex;
+      margin-bottom: 13px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.09);
+      color: #4f46e5;
+      content: "Secure session";
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      line-height: 1.4;
+      text-transform: uppercase;
+    }
+
+    #kc-page-title {
+      margin: 0 0 5px;
+      color: #0f172a;
+      font-size: 19px;
+      font-weight: 700;
+    }
+
+    #kc-page-title::after {
+      display: block;
+      margin-top: 7px;
+      color: #64748b;
+      content: "Sign in with your Nexora workspace identity";
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.5;
+    }
+
+    #kc-form { margin-top: 22px; }
+
+    .pf-v5-c-form__label, .pf-c-form__label, label {
+      color: #334155;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .pf-v5-c-form-control, .pf-c-form-control,
+    input[type="text"], input[type="password"] {
+      min-height: 39px;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+      background: #f8fafc;
+      color: #0f172a;
+      font-size: 13px;
+      box-shadow: none;
+    }
+
+    .pf-v5-c-form-control:focus, .pf-c-form-control:focus,
+    input[type="text"]:focus, input[type="password"]:focus {
+      border-color: #6366f1;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+    }
+
+    #kc-form-buttons { margin-top: 22px; }
+
+    .pf-v5-c-button.pf-m-primary, .pf-c-button.pf-m-primary,
+    input[type="submit"] {
+      min-height: 38px;
+      border: 0;
+      border-radius: 7px;
+      background: #4f46e5;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: none;
+    }
+
+    .pf-v5-c-button.pf-m-primary:hover, .pf-c-button.pf-m-primary:hover,
+    input[type="submit"]:hover { background: #4338ca; }
+
+    #kc-form-options, #kc-registration, #kc-info-wrapper {
+      color: #64748b;
+      font-size: 12px;
+    }
+
+    a { color: #4f46e5; font-weight: 500; }
+    a:hover { color: #4338ca; }
+
+    .pf-v5-c-alert, .pf-c-alert {
+      border-left: 3.5px solid #ef4444;
+      border-radius: 9px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 960px) {
+      body, .login-pf body {
+        background:
+          radial-gradient(circle at 20% 8%, rgba(45, 212, 191, 0.14), transparent 24rem),
+          radial-gradient(circle at 85% 4%, rgba(129, 140, 248, 0.18), transparent 25rem),
+          linear-gradient(180deg, #0d1117 0%, #111827 40%, #f8fafc 40%, #f8fafc 100%);
+      }
+      body::before, body::after { display: none; }
+      .login-pf-page {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 92px 18px 32px;
+      }
+      .login-pf-page::before { left: 18px; }
+      .login-pf-page::after { display: none; }
+      .card-pf { grid-column: auto; padding: 24px 22px; }
+    }
+
+  nexora-mark.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Nexora">
+      <circle cx="50" cy="50" r="33" fill="none" stroke="#818CF8" stroke-width="4"/>
+      <circle cx="50" cy="50" r="14" fill="#FFFFFF"/>
+      <circle cx="50" cy="17" r="6.5" fill="#2DD4BF"/>
+      <circle cx="21" cy="67" r="5.5" fill="#2DD4BF"/>
+      <circle cx="79" cy="67" r="5.5" fill="#2DD4BF"/>
+    </svg>

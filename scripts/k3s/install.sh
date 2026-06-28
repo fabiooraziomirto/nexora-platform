@@ -217,6 +217,7 @@ EOF
 # ── auth (keycloak) ──────────────────────────────────────────────────────────
 deploy_auth() {
   log "Deploying Keycloak..."
+  kubectl apply -f "$INFRA_DIR/auth/keycloak-theme.yaml"
   kubectl apply -f "$INFRA_DIR/auth/keycloak.yaml"
   log "Waiting for Keycloak (up to 3 min)..."
   kubectl wait --for=condition=Ready pod -l app=keycloak -n keycloak --timeout=180s || \
