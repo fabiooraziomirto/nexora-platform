@@ -20,6 +20,7 @@ class DeviceTelemetry(Base):
     value = Column(Float, nullable=False)
     ts = Column(DateTime, nullable=False, index=True)
     tags = Column(Text, nullable=True)  # JSON dict
+    unit = Column(String(32), nullable=True)  # e.g. "celsius", "percent", "watts", "bool"
 
     __table_args__ = (
         Index("ix_telemetry_device_metric_ts", "device_id", "metric", "ts"),

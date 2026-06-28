@@ -77,6 +77,7 @@ async def list_devices(
     device_type: str | None = None,
     tenant_id: str | None = None,
     owner_id: str | None = None,
+    connection_protocol: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -94,6 +95,7 @@ async def list_devices(
         device_type=device_type,
         tenant_id=tenant_id,
         owner_id=owner_id,
+        connection_protocol=connection_protocol,
     )
 
 

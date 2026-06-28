@@ -11,6 +11,10 @@ class DeviceBase(BaseModel):
     description: Optional[str] = None
     metadata: Optional[dict] = None
     tags: Optional[list[str]] = None
+    connection_protocol: str = Field(
+        default="nexora-agent",
+        description="Physical connection protocol: nexora-agent | matter | mqtt | zigbee | http-poll",
+    )
 
 
 class DeviceCreate(DeviceBase):
@@ -25,6 +29,8 @@ class DeviceUpdate(BaseModel):
     description: Optional[str] = None
     metadata: Optional[dict] = None
     tags: Optional[list[str]] = None
+    connection_protocol: Optional[str] = None
+    protocol_meta: Optional[dict] = None
 
 
 class DeviceResponse(DeviceBase):
@@ -40,6 +46,8 @@ class DeviceResponse(DeviceBase):
     privacy_level: int = 0
     # FaaS edge capabilities reported by agent
     capabilities: Optional[dict] = None
+    # Protocol-specific metadata (e.g. Matter fabric_id, node_id, clusters)
+    protocol_meta: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -60,6 +68,9 @@ class AgentRegisterRequest(BaseModel):
     metadata: Optional[dict] = None
     # FaaS: agent declares its runtime capabilities on registration
     capabilities: Optional[dict] = None
+    # Bridge services (matter-bridge, mqtt-bridge) set this on behalf of the device
+    connection_protocol: str = Field(default="nexora-agent")
+    protocol_meta: Optional[dict] = None
 
 
 class AgentHeartbeatRequest(BaseModel):

@@ -60,6 +60,8 @@ class DeviceService:
             tenant_id=device.tenant_id,
             privacy_level=device.privacy_level,
             capabilities=caps,
+            connection_protocol=device.connection_protocol or "nexora-agent",
+            protocol_meta=device.protocol_meta,
         )
 
     async def list_devices(
@@ -70,6 +72,7 @@ class DeviceService:
         device_type: Optional[str] = None,
         tenant_id: Optional[str] = None,
         owner_id: Optional[str] = None,
+        connection_protocol: Optional[str] = None,
     ) -> DeviceListResponse:
         """List devices with pagination and filtering."""
         query = select(Device)
@@ -84,6 +87,8 @@ class DeviceService:
             conditions.append(Device.tenant_id == tenant_id)
         if owner_id:
             conditions.append(Device.owner_id == owner_id)
+        if connection_protocol:
+            conditions.append(Device.connection_protocol == connection_protocol)
         
         if conditions:
             query = query.where(and_(*conditions))
@@ -137,6 +142,7 @@ class DeviceService:
             status="offline",
             owner_id=owner_id,
             tenant_id=tenant_id,
+            connection_protocol=device_data.connection_protocol,
         )
 
         self.db.add(device)
@@ -254,6 +260,10 @@ class DeviceService:
                 device.meta = data.metadata
             if data.capabilities is not None:
                 device.capabilities = capabilities_json
+            if data.connection_protocol:
+                device.connection_protocol = data.connection_protocol
+            if data.protocol_meta is not None:
+                device.protocol_meta = data.protocol_meta
             device.status = "online"
             device.last_seen = now
         else:
@@ -263,6 +273,8 @@ class DeviceService:
                 device_type=data.device_type,
                 meta=data.metadata,
                 capabilities=capabilities_json,
+                connection_protocol=data.connection_protocol,
+                protocol_meta=data.protocol_meta,
                 status="online",
                 last_seen=now,
             )

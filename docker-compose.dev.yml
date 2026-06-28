@@ -135,6 +135,9 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+      # matter-bridge bootstrap token (must match AGENT_BOOTSTRAP_TOKENS)
+      AGENT_BOOTSTRAP_TOKENS: "dev-bootstrap:dev-bootstrap-token:4102444800,bridge:bridge-secret:4102444800"
+      MATTER_BRIDGE_URL: http://matter-bridge:8008
     ports:
       - "8000:8000"
     healthcheck:
@@ -416,7 +419,55 @@ services:
     ports:
       - "8091:8091"
 
+  # ---------------------------------------------------------------------------
+  # Matter IoT bridge (optional — only needed when commissioning Matter devices)
+  # Requires network access to the same LAN as the Matter devices.
+  # On Raspberry Pi, run with --network=host so mDNS/Thread work correctly.
+  # ---------------------------------------------------------------------------
+
+  matter-server:
+    profiles: ["dev", "matter"]
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: nxr-matter-server
+    volumes:
+      - matter_data:/data
+    # Matter uses mDNS (UDP multicast) for device discovery — host networking is required.
+    # For cloud deployments, use a dedicated IoT VLAN and bridge host.
+    network_mode: host
+    restart: unless-stopped
+
+  matter-bridge:
+    profiles: ["dev", "matter"]
+    build:
+      context: ./services/matter-bridge
+      dockerfile: Dockerfile
+    container_name: nxr-matter-bridge
+    depends_on:
+      device-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      # matter-server is on host network (port 5580)
+      MATTER_SERVER_URL: ws://host.docker.internal:5580/ws
+      DEVICE_SERVICE_URL: http://device-service:8000
+      EXECUTION_SERVICE_URL: http://execution-service:8002
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC_PREFIX: nxr
+      AGENT_BOOTSTRAP_TOKEN: "bridge:bridge-secret"
+      ENVIRONMENT: development
+    ports:
+      - "8008:8008"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   mysql_data:
   function_artifacts:
   ollama_data:
+  matter_data:

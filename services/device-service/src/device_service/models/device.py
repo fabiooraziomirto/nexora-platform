@@ -3,6 +3,13 @@ from sqlalchemy import Column, String, DateTime, Text, JSON, Index, Integer
 from sqlalchemy.dialects.mysql import CHAR
 from device_service.core.database import Base
 
+# Valid values for connection_protocol
+PROTOCOL_NEXORA_AGENT = "nexora-agent"  # WebSocket via nexora-edge (default)
+PROTOCOL_MATTER = "matter"
+PROTOCOL_MQTT = "mqtt"
+PROTOCOL_ZIGBEE = "zigbee"
+PROTOCOL_HTTP_POLL = "http-poll"
+
 
 class Device(Base):
     """Device model."""
@@ -36,6 +43,16 @@ class Device(Base):
     # JSON: {"VAR_NAME": "value"} — applied by edge agent to nexora-function-runtime at bootstrap.
     runtime_env = Column(Text, nullable=True)
 
+    # Protocol of the physical connection to this device.
+    # "nexora-agent" (default): device runs nexora-edge agent over WebSocket.
+    # "matter": device is commissioned into the Nexora Matter fabric via matter-bridge.
+    # "mqtt", "zigbee", "http-poll": reserved for future bridge services.
+    connection_protocol = Column(String(50), nullable=False, default=PROTOCOL_NEXORA_AGENT, index=True)
+
+    # Protocol-specific metadata (JSON). For Matter: fabric_id, node_id, endpoints, clusters.
+    # For MQTT: broker_url, topic_prefix. Populated by bridge services, not by the device itself.
+    protocol_meta = Column(JSON, nullable=True)
+
     # Metadata
     meta = Column("metadata", JSON, nullable=True)
     tags = Column(JSON, nullable=True)
@@ -49,6 +66,7 @@ class Device(Base):
         Index("idx_device_status_updated", "status", "updated_at"),
         Index("idx_device_name_type", "name", "device_type"),
         Index("idx_device_owner_tenant", "owner_id", "tenant_id"),
+        Index("idx_device_protocol", "connection_protocol"),
     )
 
     

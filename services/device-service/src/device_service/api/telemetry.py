@@ -37,6 +37,7 @@ class TelemetrySample(BaseModel):
     value: float
     ts: Optional[datetime] = Field(None, description="Sample timestamp (UTC). Defaults to server time.")
     tags: Optional[dict] = None
+    unit: Optional[str] = Field(None, max_length=32, description="Physical unit, e.g. 'celsius', 'percent', 'watts'")
 
 
 class TelemetryIngestRequest(BaseModel):
@@ -50,6 +51,7 @@ class TelemetrySampleResponse(BaseModel):
     value: float
     ts: datetime
     tags: Optional[dict]
+    unit: Optional[str] = None
 
 
 class TelemetryQueryResponse(BaseModel):
@@ -90,6 +92,7 @@ def _row_to_response(row: DeviceTelemetry) -> TelemetrySampleResponse:
         value=row.value,
         ts=row.ts,
         tags=tags,
+        unit=getattr(row, "unit", None),
     )
 
 
@@ -127,6 +130,7 @@ async def ingest_telemetry(
             value=s.value,
             ts=ts,
             tags=json.dumps(s.tags) if s.tags else None,
+            unit=s.unit,
         ))
 
     db.add_all(rows)

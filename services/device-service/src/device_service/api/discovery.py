@@ -13,6 +13,7 @@ import string
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4, UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, and_
@@ -323,3 +324,112 @@ async def reject(
     await db.commit()
 
     logger.info("Device rejected", discovery_id=discovery_id, actor=user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Matter commissioning endpoints
+# Delegate commissioning to matter-bridge; track status locally.
+# ---------------------------------------------------------------------------
+
+
+class MatterCommissionRequest(BaseModel):
+    setup_code: str | None = None      # QR code payload: "MT:Y3QT042C00KA0648G00"
+    manual_code: str | None = None     # 11-digit manual pairing code
+    name: str
+    description: str | None = None
+
+
+class MatterCommissionResponse(BaseModel):
+    commissioning_id: str
+    status: str            # "pending" | "commissioned" | "failed"
+    node_id: int | None = None
+    device_id: str | None = None
+    error: str | None = None
+
+
+@router.post("/devices/matter/commission", response_model=MatterCommissionResponse, status_code=202)
+async def matter_commission(
+    body: MatterCommissionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Start Matter commissioning for a new device.
+
+    The owner provides either a QR code (setup_code) or a manual pairing code (manual_code).
+    This endpoint delegates to matter-bridge, which runs the CHIP commissioning flow and will
+    call back to /agents/register once the device is on the Nexora fabric.
+
+    Returns immediately with commissioning_id for status polling.
+    """
+    if not body.setup_code and not body.manual_code:
+        raise HTTPException(status_code=422, detail="Provide setup_code or manual_code")
+
+    commissioning_id = str(uuid4())
+    payload = {
+        "commissioning_id": commissioning_id,
+        "setup_code": body.setup_code,
+        "manual_code": body.manual_code,
+        "name": body.name,
+        "description": body.description,
+        "owner_id": user.user_id,
+        "tenant_id": user.tenant_id,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{settings.MATTER_BRIDGE_URL}/commission",
+                json=payload,
+            )
+            if resp.status_code not in (200, 202):
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"matter-bridge returned {resp.status_code}: {resp.text[:200]}",
+                )
+            bridge_data = resp.json()
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="matter-bridge is unavailable. Ensure the matter-bridge service is running.",
+        )
+
+    logger.info(
+        "Matter commissioning started",
+        commissioning_id=commissioning_id,
+        owner_id=user.user_id,
+    )
+
+    return MatterCommissionResponse(
+        commissioning_id=commissioning_id,
+        status=bridge_data.get("status", "pending"),
+        node_id=bridge_data.get("node_id"),
+    )
+
+
+@router.get("/devices/matter/commission/{commissioning_id}", response_model=MatterCommissionResponse)
+async def matter_commission_status(
+    commissioning_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Poll the status of an in-progress Matter commissioning."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.MATTER_BRIDGE_URL}/commission/{commissioning_id}",
+            )
+            if resp.status_code == 404:
+                raise HTTPException(status_code=404, detail="Commissioning not found")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="matter-bridge error")
+            data = resp.json()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="matter-bridge is unavailable")
+
+    return MatterCommissionResponse(
+        commissioning_id=commissioning_id,
+        status=data.get("status", "unknown"),
+        node_id=data.get("node_id"),
+        device_id=data.get("device_id"),
+        error=data.get("error"),
+    )
