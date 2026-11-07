@@ -6,7 +6,7 @@ Legenda: `[ ]` da fare · `[~]` parziale · `[x]` completato e verificato
 
 ## Stato del repository (filesystem)
 
-**Data controllo:** 2026-03-28 · **Path:** `/home/lucadag/stack4things_v2.0`
+**Data controllo:** 2026-03-28 · **Path:** `nexora-platform` checkout
 
 > **Nota:** Parità funzionale vs IoTronic/Lightning Rod, **non** parità di
 > protocollo WAMP.  I concetti sono mappati (board→device, session→agent,

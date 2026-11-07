@@ -338,6 +338,27 @@ curl -fsS http://localhost:8005/health
 curl -fsS http://localhost:8006/health
 ```
 
+### Run the unit tests without Docker (verified)
+
+The per-service tests use SQLite and disable Kafka, so they need no infrastructure. The root `pyproject.toml` pytest options require `pytest-cov`; if you do not want it, bypass the ini file as shown. Verified with Python 3.11 in a throw-away virtualenv:
+
+```bash
+python3.11 -m venv /tmp/nexora-venv && . /tmp/nexora-venv/bin/activate
+pip install fastapi uvicorn prometheus-client sqlalchemy pymysql cryptography aiokafka alembic \
+    pytest pytest-asyncio pytest-cov httpx redis pydantic-settings pyjwt aiosqlite greenlet \
+    structlog python-json-logger email-validator aiomysql
+cd services/execution-service
+PYTHONPATH=../../libraries/common/src pytest -q          # 9 passed
+cd ../device-service
+PYTHONPATH=../../libraries/common/src:src pytest -q --asyncio-mode=auto   # 15 passed
+```
+
+Other services (`network`, `dns`, `fleet`, `webservice`: 1 test each, `plugin`: 2 tests) run the same way (`PYTHONPATH=../../libraries/common/src:src`). Not verified in this environment: the full Docker stack, Kafka/MySQL/Redis flows, Keycloak/Keystone, Kubernetes/Crossplane manifests applied to a cluster, edge hardware. All `*.py` files compile and all `*.sh` files pass `bash -n`; `docker compose -f docker-compose.dev.yml -f docker-compose.smoke.yml config` (and `.test.yml`) validates.
+
+### Compose files and environment
+
+`docker-compose.smoke.yml` and `docker-compose.test.yml` are override files: always combine them with the dev file, e.g. `docker compose -f docker-compose.dev.yml -f docker-compose.smoke.yml --env-file .env.smoke up -d`. `.env.example` lists the variables used by the services.
+
 ### Stop/Clean
 
 ```bash
@@ -472,6 +493,7 @@ This classification prevents “false done” and helps prioritize what still ne
 
 ## 16) Security Notes
 
+- All credentials in compose files, `scripts/kubernetes/*` and `.env.*` (`rootpassword`, `dev-token`, `dev-bootstrap-token`, `dev-root-token`, `stack4things`, `redispassword`) are development defaults only. Change them for any shared or production deployment; no real secrets are committed.
 - Never commit secrets in repository files.
 - Prefer secret stores and runtime injection.
 - Keep dependencies and images patched.

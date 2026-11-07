@@ -31,7 +31,7 @@ If service auth is disabled (`AUTH_ENABLED=false`), token is not required.
 ## Deploy steps on Horizon host
 
 ```bash
-cd /path/to/stack4things_v2.0
+cd /path/to/nexora-platform
 bash scripts/deploy-iotronic-ui-adapter.sh
 ```
 
