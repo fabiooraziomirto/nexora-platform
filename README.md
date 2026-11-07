@@ -1,27 +1,16 @@
 ![Nexora Logo](nexora.png)
 
-# Nexora
+# Nexora Platform
 
-Nexora is a cloud-native IoT platform: microservice-first, Docker/Kubernetes native, event-driven, and designed to preserve OpenStack interoperability where needed.
+Nexora is a cloud-native IoT control platform written as a set of small FastAPI microservices. It is a rewrite of the Stack4Things/IoTronic control plane: boards register and send heartbeats over HTTP, commands are queued in an execution service and delivered to edge agents through Kafka, and results come back through callbacks. OpenStack (Keystone/Neutron/Nova) interoperability is provided through adapters rather than hard coupling.
 
-This README is intentionally detailed to support handover and onboarding of external contributors without prior project context.
+Status: working prototype. Per-service unit tests pass (see [Testing](#6-testing-and-verification)); the Docker/Kubernetes deployments were **not verified in this environment**.
 
-## 1) Mission and Scope
+## Contents
 
-- Build a modular IoT control platform that can run independently or integrate with OpenStack ecosystems.
-- Replace tightly coupled legacy patterns with service boundaries, explicit contracts, local quality gates, and operational runbooks.
-- Keep an architecture that is evolvable: every major capability should be implementable as an adapter or independent service.
+1. [Architecture](#1-architecture) 2. [Requirements](#2-requirements) 3. [Installation and first run](#3-installation-and-first-run) 4. [Configuration](#4-configuration) 5. [Usage end to end](#5-usage-end-to-end) 6. [Testing and verification](#6-testing-and-verification) 7. [Repository structure](#7-repository-structure) 8. [Troubleshooting](#8-troubleshooting) 9. [Limitations and security](#9-limitations-and-security) 10. [Extending Nexora](#10-extending-nexora)
 
-## 2) Current Maturity
-
-- Version: `Nexora`
-- Runtime: `Python 3.11+`, `FastAPI`, `Docker Compose`, `Kubernetes`
-- Core posture: DB-backed services, health/readiness/metrics endpoints, event contracts, and deployment manifests.
-- OpenStack posture: adapter and integration scaffolding present; full production parity with the original legacy platform still requires iterative hardening.
-
-## 3) System Architecture
-
-### Logical View
+## 1) Architecture
 
 ```mermaid
 flowchart LR
@@ -53,145 +42,7 @@ flowchart LR
     Device --> Redis[(Redis)]
 ```
 
-> **Legacy Edge Agent Parity**: This architecture provides functional equivalence with the legacy control stack. The same operational concepts (board registration, heartbeat, remote command dispatch, result callback) are implemented using HTTP REST APIs and Apache Kafka instead of WAMP/Crossbar.io.
-
-### Complete Architecture (Control + Edge + Ops)
-
-```mermaid
-flowchart TB
-    %% Users and entrypoints
-    subgraph Users["Users and Access"]
-      Operator["Operator / Admin"]
-      LegacyUser["Legacy Horizon User"]
-    end
-
-    subgraph UX["User Experience Layer"]
-      Dashboard["dashboard-ui (React + FastAPI)"]
-      LegacyAdapter["legacy-horizon + Nexora adapter"]
-    end
-
-    subgraph Identity["Identity and Access"]
-      Keycloak["Keycloak (OIDC)"]
-      Rbac["RBAC policy checks"]
-    end
-
-    subgraph Control["Control Plane Services"]
-      Device["device-service"]
-      Module["module-service"]
-      Execution["execution-service"]
-      Network["network-service"]
-      Dns["dns-service"]
-      Webservice["webservice-service"]
-      Fleet["fleet-service"]
-      Gateway["edge-gateway"]
-      Runtime["nexora-module-runtime"]
-    end
-
-    subgraph Data["Data and Event Backbone"]
-      Mysql["MySQL"]
-      Redis["Redis"]
-      Kafka["Kafka"]
-      Zk["Zookeeper"]
-    end
-
-    subgraph Edge["Edge Plane"]
-      Node1["edge-node-1"]
-      Node2["edge-node-2"]
-      ReverseTunnel["Reverse tunnel metadata / keepalive"]
-      Ssh["SSH access channel (WebSocket bridge)"]
-    end
-
-    subgraph AI["Local AI Assistance"]
-      Ollama["Ollama local endpoint"]
-    end
-
-    subgraph Ops["Observability and Operations"]
-      Metrics["/metrics endpoints"]
-      Health["/health and /ready"]
-      Scripts["scripts/test-all.sh + runbooks"]
-    end
-
-    %% Access and auth
-    Operator --> Dashboard
-    LegacyUser --> LegacyAdapter
-    Dashboard --> Keycloak
-    LegacyAdapter --> Keycloak
-    Dashboard --> Rbac
-
-    %% UI to services
-    Dashboard --> Device
-    Dashboard --> Module
-    Dashboard --> Execution
-    Dashboard --> Network
-    Dashboard --> Dns
-    Dashboard --> Webservice
-    Dashboard --> Fleet
-    Dashboard --> Gateway
-    Dashboard --> Runtime
-    Dashboard --> Ollama
-
-    %% Service internals
-    Device --> Mysql
-    Module --> Mysql
-    Execution --> Mysql
-    Network --> Mysql
-    Dns --> Mysql
-    Webservice --> Mysql
-    Fleet --> Mysql
-    Device --> Redis
-    Execution --> Kafka
-    Device --> Kafka
-    Kafka --> Gateway
-    Kafka --> Zk
-
-    %% Edge interactions
-    Gateway --> Node1
-    Gateway --> Node2
-    Node1 --> ReverseTunnel
-    Node2 --> ReverseTunnel
-    Dashboard --> Ssh
-    Ssh --> Node1
-    Ssh --> Node2
-    Runtime --> Node1
-    Runtime --> Node2
-
-    %% Ops
-    Device --> Metrics
-    Module --> Metrics
-    Execution --> Metrics
-    Network --> Metrics
-    Dns --> Metrics
-    Webservice --> Metrics
-    Fleet --> Metrics
-    Gateway --> Metrics
-    Runtime --> Metrics
-    Device --> Health
-    Module --> Health
-    Execution --> Health
-    Scripts --> Dashboard
-    Scripts --> Execution
-    Scripts --> Gateway
-```
-
-### Runtime Topology (Local)
-
-- `device-service` -> `http://localhost:8000` (CRUD + agent register/heartbeat)
-- `module-service` (plugin-compatible API) -> `http://localhost:8001`
-- `execution-service` -> `http://localhost:8002` (command pipeline: queued→dispatched→running→succeeded/failed/timeout)
-- `network-service` -> `http://localhost:8003`
-- `dns-service` -> `http://localhost:8004`
-- `webservice-service` -> `http://localhost:8005`
-- `fleet-service` -> `http://localhost:8006`
-- `edge-gateway` -> `http://localhost:8007` (Kafka consumer, agent sessions, delivery)
-- `nexora-module-runtime` -> `http://localhost:8010` (WASM/WASI execution daemon on board path)
-- `legacy-keystone` -> `http://localhost:15000/v3` (optional `legacy` profile)
-- `legacy-horizon` -> `http://localhost:18089` (optional `legacy` profile with Nexora compatibility plugin)
-- `mysql` -> `localhost:3306`
-- `redis` -> `localhost:6379`
-- `kafka` -> `localhost:9092`
-- `zookeeper` -> `localhost:2181`
-
-### Request-to-Event Flow
+Each core service exposes `/health`, `/ready`, `/metrics` and a CRUD API under `/api/v2/...`. Writes are persisted first and then published as a `ResourceEvent` (`libraries/common/src/common/events/contracts.py`: `event_type`, `service`, `resource`, `action`, `resource_id`, `payload`, `occurred_at`).
 
 ```mermaid
 sequenceDiagram
@@ -210,296 +61,167 @@ sequenceDiagram
     G-->>C: 201 Created
 ```
 
-## 4) Service Catalog
+Execution lifecycle: `queued -> dispatched -> running -> succeeded | failed | timeout`. Timeouts are enforced by `EXECUTION_DISPATCHED_TIMEOUT_SECONDS` / `EXECUTION_RUNNING_TIMEOUT_SECONDS`.
 
-### Core Services
+### Services and ports (docker-compose.dev.yml)
 
-- `device-service`: device inventory and lifecycle primitives.
-- `module-service` (`plugin-service` compatibility name): module metadata lifecycle.
-- `execution-service`: command/execution orchestration primitives.
-- `network-service`: network port abstractions.
-- `dns-service`: DNS record lifecycle.
-- `webservice-service`: endpoint publication metadata.
-- `fleet-service`: grouping and fleet metadata.
+| Service | Host port | Role | API |
+|---|---|---|---|
+| device-service | 8000 | device inventory, agent register/heartbeat | `/api/v2/devices` |
+| plugin-service (module-service) | 8001 | module metadata (legacy `/api/v2/plugins` kept) | `/api/v2/modules` |
+| execution-service | 8002 | command pipeline | `/api/v2/executions` |
+| network-service | 8003 | network ports | `/api/v2/ports` |
+| dns-service | 8004 | DNS records | `/api/v2/dns/records` |
+| webservice-service | 8005 | published endpoints | `/api/v2/webservices` |
+| fleet-service | 8006 | device groups | `/api/v2/fleets` |
+| lightningrod-gateway (edge-gateway) | 8007 | Kafka consumer, agent sessions, delivery | internal |
+| iotronic-ui | 18088 | dashboard backend (Keycloak/Keystone login) | web UI |
+| keycloak | 18080 | OIDC provider | |
+| legacy-keystone / legacy-horizon | 15000 / 18089 | optional `legacy` profile | |
+| mysql, redis, kafka, zookeeper | 3306, 6379, 9092, 2181 | infrastructure | |
 
-### Shared Libraries
+## 2) Requirements
 
-- `libraries/common`: configuration, DB helpers, events, metrics, logging, auth/policy adapters, OpenStack adapters.
-- `libraries/sdk`: client-side SDK primitives (REST + evolving gRPC support).
+| Item | Version |
+|---|---|
+| Python | 3.11+ (`pyproject.toml` says `^3.11`; the code was exercised with 3.11) |
+| Docker + Compose v2 | any recent release (needed only for the full stack) |
+| Python packages | FastAPI, uvicorn, SQLAlchemy 2, alembic, pymysql, aiokafka, prometheus-client, redis, pydantic-settings, structlog (full list in the install command below) |
+| kubectl, helm, k3d | only for `infrastructure/` and `scripts/kubernetes/` (not verified here) |
 
-### Platform Assets
+## 3) Installation and first run
 
-- `infrastructure/kubernetes`: deployment manifests, monitoring, policy, gateway, mesh, secrets, progressive rollout assets.
-- `scripts`: setup/testing/operations automation.
-
-## 5) API Contract Baseline
-
-All core services expose:
-
-- `GET /health`
-- `GET /ready`
-- `GET /metrics`
-
-CRUD baseline endpoints:
-
-- `module-service`: `POST/GET/DELETE /api/v2/modules` (legacy `/api/v2/plugins` still supported)
-## 5.1) Direct Board Access and Module Runtime
-
-- Direct board access intents are exposed by dashboard backend:
-  - `POST /api/boards/{board_id}/access-intent`
-  - `GET /api/boards/{board_id}/access-status`
-  - `GET /api/access/audit`
-- Module runtime orchestration endpoints:
-  - `POST /api/modules/run`
-  - `GET/POST/DELETE /api/modules/assignments`
-  - `GET /api/modules/boards/{board_id}/status`
-- Module Studio endpoints:
-  - `GET /api/modules/studio`
-  - `POST /api/modules/studio/drafts`
-  - `POST /api/modules/studio/drafts/{draft_id}/publish`
-- Automation and alerts endpoints:
-  - `GET/POST/DELETE /api/automation/rules`
-  - `GET/POST /api/alerts/rules`
-  - `GET /api/alerts/events`
-- Feature flags:
-  - `NEXORA_MODULES_ENABLED`
-  - `NEXORA_DEVICE_ACCESS_ENABLED`
-  - `NEXORA_WASM_RUNTIME_ENABLED`
-- `execution-service`: `POST/GET/DELETE /api/v2/executions`
-- `network-service`: `POST/GET/DELETE /api/v2/ports`
-- `dns-service`: `POST/GET/DELETE /api/v2/dns/records`
-- `webservice-service`: `POST/GET/DELETE /api/v2/webservices`
-- `fleet-service`: `POST/GET/DELETE /api/v2/fleets`
-
-## 6) Data, Events, and Reliability
-
-### Persistence
-
-- Core services run MySQL-backed in Docker/K8s environments.
-- Local fallback paths may use SQLite for fast testing.
-
-### Eventing
-
-- Shared event contract in `libraries/common/src/common/events/contracts.py`.
-- Contract includes `event_type`, `service`, `resource`, `action`, `resource_id`, `payload`, `occurred_at`.
-- Publish retry and structured logging are present on core publishers.
-
-### Reliability Building Blocks
-
-- Idempotency, outbox, and DLQ primitives exist in `libraries/common/src/common/events`.
-- Replay tooling exists in `scripts/event-replay.py`.
-- Runtime hardening should continue by wiring these primitives into all write/event paths.
-
-## 7) Auth, Policy, and OpenStack Interop
-
-### Current Auth Baseline
-
-- Bearer middleware in core services.
-- Dev token fallback is available for local workflows.
-- JWT payload checks and write-role guardrail implemented.
-
-### Shared Auth/Policy Modules
-
-- `libraries/common/src/common/auth/oidc.py`
-- `libraries/common/src/common/auth/policy_engine.py`
-
-### OpenStack Adapter Layer
-
-- `libraries/common/src/common/openstack/keystone_adapter.py`
-- `libraries/common/src/common/openstack/neutron_adapter.py`
-- `libraries/common/src/common/openstack/nova_adapter.py`
-- `libraries/common/src/common/openstack/glance_cinder_adapter.py`
-
-These adapters provide interoperability hooks while preserving service modularity.
-
-## 8) Local Development Guide
-
-### Prerequisites
-
-- Docker + Docker Compose
-- Python 3.11+
-- Optional: Poetry, `hey`, kubectl
-
-### Start Stack
+### Option A: a single service without Docker (verified)
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build
-```
-
-### Smoke Check
-
-```bash
-curl -fsS http://localhost:8000/health
-curl -fsS http://localhost:8001/health
-curl -fsS http://localhost:8002/health
-curl -fsS http://localhost:8003/health
-curl -fsS http://localhost:8004/health
-curl -fsS http://localhost:8005/health
-curl -fsS http://localhost:8006/health
-```
-
-### Run the unit tests without Docker (verified)
-
-The per-service tests use SQLite and disable Kafka, so they need no infrastructure. The root `pyproject.toml` pytest options require `pytest-cov`; if you do not want it, bypass the ini file as shown. Verified with Python 3.11 in a throw-away virtualenv:
-
-```bash
+git clone https://github.com/lucadagati/nexora-platform.git && cd nexora-platform
 python3.11 -m venv /tmp/nexora-venv && . /tmp/nexora-venv/bin/activate
 pip install fastapi uvicorn prometheus-client sqlalchemy pymysql cryptography aiokafka alembic \
     pytest pytest-asyncio pytest-cov httpx redis pydantic-settings pyjwt aiosqlite greenlet \
     structlog python-json-logger email-validator aiomysql
-cd services/execution-service
-PYTHONPATH=../../libraries/common/src pytest -q          # 9 passed
-cd ../device-service
-PYTHONPATH=../../libraries/common/src:src pytest -q --asyncio-mode=auto   # 15 passed
+cd services/network-service
+DATABASE_URL=sqlite:///./net.db KAFKA_ENABLED=false \
+PYTHONPATH=../../libraries/common/src uvicorn main:app --port 8003
 ```
 
-Other services (`network`, `dns`, `fleet`, `webservice`: 1 test each, `plugin`: 2 tests) run the same way (`PYTHONPATH=../../libraries/common/src:src`). Not verified in this environment: the full Docker stack, Kafka/MySQL/Redis flows, Keycloak/Keystone, Kubernetes/Crossplane manifests applied to a cluster, edge hardware. All `*.py` files compile and all `*.sh` files pass `bash -n`; `docker compose -f docker-compose.dev.yml -f docker-compose.smoke.yml config` (and `.test.yml`) validates.
-
-### Compose files and environment
-
-`docker-compose.smoke.yml` and `docker-compose.test.yml` are override files: always combine them with the dev file, e.g. `docker compose -f docker-compose.dev.yml -f docker-compose.smoke.yml --env-file .env.smoke up -d`. `.env.example` lists the variables used by the services.
-
-### Stop/Clean
+### Option B: full stack with Docker Compose (not verified in this environment)
 
 ```bash
-docker compose -f docker-compose.dev.yml down -v
+cp .env.example .env            # edit values first
+docker compose -f docker-compose.dev.yml up -d --build
+for p in 8000 8001 8002 8003 8004 8005 8006; do curl -fsS http://localhost:$p/health; done
+docker compose -f docker-compose.dev.yml down -v      # clean up
 ```
 
-## 9) Validation and Test Entry Points
+`docker-compose.smoke.yml` and `docker-compose.test.yml` are override files and must be combined with the dev file: `docker compose -f docker-compose.dev.yml -f docker-compose.smoke.yml --env-file .env.smoke up -d`. The compose configuration itself validates with `docker compose config` (verified).
 
-### Primary Validation Scripts
+### Option C: Kubernetes
 
-- Full local baseline: `scripts/test-all.sh`
-- Cross-service flow: `scripts/integration-cross-service.sh`
-- API contract checks: `scripts/contract-tests-api.py`
-- Post-alpha suite: `scripts/postalpha-validation.sh`
-- Chaos drill: `scripts/chaos-drill.sh`
-- Backup/restore validation: `scripts/backup-restore-validate.sh`
-- Performance baseline: `scripts/perf-baseline.sh`
-- Load catalog: `scripts/load-profile-catalog.sh`
-- DR game day: `scripts/dr-gameday.sh`
+`scripts/kubernetes/setup-all.sh` provisions a k3d cluster, cert-manager, ingress, MySQL, Kafka, Redis, Keycloak, Vault, monitoring and Crossplane compositions from `infrastructure/`. Not verified in this environment.
 
-### Recommended Validation Sequence (Local)
+## 4) Configuration
 
-1. `docker compose -f docker-compose.dev.yml up -d --build`
-2. `bash scripts/test-all.sh`
-3. `bash scripts/postalpha-validation.sh`
-4. targeted script(s) for the component you changed
+Environment variables read by the services (defaults from the code). Templates: `.env.example` (= `.env.dev`), `.env.smoke`, `.env.test`.
 
-## 10) Local Validation and Release Discipline
+| Variable | Default | Meaning |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///./<service>.db` | SQLAlchemy URL (MySQL in compose) |
+| `KAFKA_ENABLED` / `KAFKA_REQUIRED` | `true` / `false` | publish events / fail when Kafka is down |
+| `KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` | broker address |
+| `KAFKA_TOPIC_PREFIX` | `stack4things` | topic prefix |
+| `KAFKA_RETRY_ATTEMPTS`, `KAFKA_RETRY_DELAY_SECONDS` | `3`, `0.5` | publish retry |
+| `AUTH_ENABLED` | `false` | enforce bearer tokens |
+| `AUTH_DEV_TOKEN` | `dev-token` | accepted token in dev mode |
+| `AUTH_WRITE_ROLE` | `writer` | role required for writes |
+| `AGENT_BOOTSTRAP_TOKENS` | `dev-bootstrap:dev-bootstrap-token:4102444800` | `id:secret:expiry_epoch`, comma separated |
+| `AGENT_CALLBACK_SECRET` | empty | signs execution callbacks |
+| `CALLBACK_REPLAY_REQUIRED`, `CALLBACK_REPLAY_TTL_SECONDS` | `false`, `900` | callback replay protection |
+| `EXECUTION_DISPATCHED_TIMEOUT_SECONDS` / `EXECUTION_RUNNING_TIMEOUT_SECONDS` | `300` / `3600` | execution timeouts |
+| `MAX_EXECUTIONS_PER_DEVICE` | `32` | per-device queue cap |
+| `MAX_DELIVERY_ATTEMPTS`, `DELIVERY_BACKOFF_SECONDS` | `3`, `0.5` | gateway delivery retry |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | cluster DNS name, `6379`, empty | cache |
+| `POLICY_FILE`, `POLICY_CACHE_ENABLED`, `POLICY_CACHE_TTL` | `/etc/policy/policy.json`, `true`, `3600` | RBAC policy engine |
+| `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ISSUER` | see `.env.dev` | OIDC login for the UI |
+| `REQUEST_TIMEOUT_SECONDS`, `DB_CONNECT_TIMEOUT_SECONDS` | `5`, `5` | timeouts |
+| `NEXORA_MODULES_ENABLED`, `NEXORA_DEVICE_ACCESS_ENABLED`, `NEXORA_WASM_RUNTIME_ENABLED` | see compose | UI feature flags |
+| `S4T_*_URL` | `http://<service>:8000` | inter-service URLs used by the UI/gateway |
 
-This repository currently uses local validation only (no active CI/CD pipeline in-hosted repository).
+## 5) Usage end to end
 
-Recommended release discipline:
+Run network-service as in Option A, then (real output captured here):
 
-- run service unit tests (`pytest`) for touched services
-- run `scripts/test-all.sh` and `scripts/postalpha-validation.sh`
-- run targeted integration scripts for changed paths
-- tag only after local validation is green
-- complete and sign `docs/deployment/go-live-checklist.md`
+```console
+$ curl -s localhost:8003/health
+{"status":"healthy","service":"network-service"}
+$ curl -s localhost:8003/ready
+{"status":"ready","service":"network-service","database":"ok"}
+$ curl -s -X POST localhost:8003/api/v2/ports -H 'Content-Type: application/json' \
+    -d '{"device_id":"d1","network_id":"n1"}'
+{"id":"ba566061-d72c-4b64-8be1-95b8c26ba349","device_id":"d1","network_id":"n1","status":"created"}
+$ curl -s localhost:8003/api/v2/ports
+{"items":[{"id":"ba566061-...","device_id":"d1","network_id":"n1","status":"created"}],"total":1}
+```
 
-## 11) Kubernetes/Platform Assets
+(The ids differ per run.) The multi-service flow (device register -> execution -> gateway -> board emulator -> callback) is driven by `scripts/lr-emulator-e2e.sh` and `scripts/integration-cross-service.sh` against the compose stack; not verified in this environment. Agent bootstrap uses the header format `<id>:<secret>` matching `AGENT_BOOTSTRAP_TOKENS`.
 
-### Key Areas
+Dashboard backend endpoints (`services/iotronic-ui/main.py`): direct board access (`POST /api/boards/{board_id}/access-intent`, `GET /api/boards/{board_id}/access-status`, `GET /api/access/audit`), module runtime (`POST /api/modules/run`, `GET/POST/DELETE /api/modules/assignments`), Module Studio drafts, automation rules (`/api/automation/rules`) and alert rules (`/api/alerts/rules`, `/api/alerts/events`).
 
-- Gateway routing/rate limits: `infrastructure/kubernetes/kong`
-- Monitoring/alerts/SLO rules: `infrastructure/kubernetes/monitoring`
-- Mesh mTLS baseline: `infrastructure/kubernetes/mesh/istio-mtls.yaml`
-- External secrets baseline: `infrastructure/kubernetes/secrets/external-secrets.yaml`
-- Policy enforcement baseline: `infrastructure/kubernetes/policies/kyverno-security.yaml`
-- Progressive delivery baseline: `infrastructure/kubernetes/progressive-delivery/rollout-device.yaml`
-- Schema registry baseline: `infrastructure/kubernetes/kafka/schema-registry.yaml`
+## 6) Testing and verification
 
-### Important Note
+Verified here with Python 3.11 in a throw-away venv (the root pytest config needs `pytest-cov`; the commands below bypass it):
 
-Some assets are intentionally baseline-level. They provide a concrete start, but each target environment should enforce stricter secrets, identities, network policies, and rollout criteria.
+```bash
+cd services/execution-service && PYTHONPATH=../../libraries/common/src pytest -q -c /dev/null --rootdir .   # 9 passed
+cd ../device-service && PYTHONPATH=../../libraries/common/src:src pytest -q -c /dev/null --rootdir . --asyncio-mode=auto   # 15 passed
+cd ../network-service && PYTHONPATH=../../libraries/common/src pytest -q -c /dev/null --rootdir .   # 1 passed (same for dns, fleet, webservice)
+cd ../plugin-service && PYTHONPATH=../../libraries/common/src:src pytest -q -c /dev/null --rootdir . --asyncio-mode=auto  # 2 passed
+```
 
-## 12) Troubleshooting Cheat Sheet
+Also verified: every `*.py` compiles (`python3 -I -m py_compile`), every `*.sh` passes `bash -n`, compose files validate. Not verified in this environment: `scripts/test-all.sh`, `integration-cross-service.sh`, `contract-tests-api.py`, `chaos-drill.sh`, `backup-restore-validate.sh`, `perf-baseline.sh` (they need the running stack), Kubernetes/Crossplane manifests.
 
-### Service Not Ready
+## 7) Repository structure
 
-1. Check `/health` then `/ready`.
-2. Check MySQL/Kafka/Redis readiness.
-3. Verify service logs with `x-trace-id` or `x-correlation-id`.
+| Path | Content |
+|---|---|
+| `services/*-service` | FastAPI microservices (own Dockerfile, alembic migrations, `k8s/deployment.yaml`, tests) |
+| `services/lightningrod-gateway`, `services/lr-board-emulator` | Kafka-to-agent gateway and a board emulator for end-to-end tests |
+| `services/iotronic-ui`, `services/legacy-*` | dashboard backend and optional legacy Keystone/Horizon containers |
+| `services/rbac-service` | policy engine, cache and audit modules (no Dockerfile) |
+| `libraries/common` | config, DB, events (outbox, DLQ, idempotency), auth/OIDC, policy, metrics, OpenStack adapters |
+| `libraries/sdk` | REST and gRPC client SDK |
+| `infrastructure/` | Crossplane XRDs/compositions, Kubernetes manifests (Kafka, Keycloak, Kong, Istio, monitoring, Kyverno, Vault) |
+| `tools/iotronic-ui-adapter` | Horizon plugin adapter |
+| `scripts/` | setup, validation, chaos, DR, replay tooling |
+| `docs/` | OpenAPI specs, ADR, runbooks, SLO/FinOps/compliance YAML |
 
-### Event Publish Missing
+## 8) Troubleshooting
 
-1. Verify Kafka connectivity and topic prefix env vars.
-2. Confirm producer startup logs.
-3. Inspect retry logs for publish failures.
+| Symptom | Check |
+|---|---|
+| `pytest: unrecognized arguments: --cov` | install `pytest-cov` or pass `-c /dev/null --rootdir .` |
+| `requested an async fixture` | add `--asyncio-mode=auto` |
+| `No module named common` / `device_service` | set `PYTHONPATH` as shown above |
+| `greenlet` / `structlog` import errors | install the full dependency list |
+| Service not ready | `GET /ready` shows the database state; check `DATABASE_URL` and run `alembic upgrade head` |
+| Events not published | Kafka must be reachable at `KAFKA_BOOTSTRAP_SERVERS`, or set `KAFKA_ENABLED=false` |
+| Compose "no image nor build context" | smoke/test files must be combined with the dev file |
+| Migration failure | `alembic current`, `alembic history`, verify credentials, downgrade one revision and retry |
 
-### Migration Failures
+## 9) Limitations and security
 
-1. Check `alembic current` and `alembic history`.
-2. Validate DB URL and credentials.
-3. Roll back controlled revision if needed, then re-run.
+- Prototype: infrastructure assets (`infrastructure/`) are baselines and are not all wired into the runtime path; outbox/DLQ/idempotency primitives exist but are not wired into every write path.
+- Authentication is off by default (`AUTH_ENABLED=false`); never expose that configuration.
+- All passwords and tokens in compose files, `.env.*` and `scripts/kubernetes/*` (`rootpassword`, `stack4things`, `dev-token`, `dev-bootstrap-token`, `dev-root-token`, `redispassword`, UI `admin/admin`) are development defaults. Replace them for anything shared. No real secrets are committed.
+- CORS defaults to `*` (`CORS_ORIGINS`).
 
-### CI Failures
+## 10) Extending Nexora
 
-1. Identify the failing local validation step.
-2. Re-run equivalent local script.
-3. Reproduce with same env vars/profile.
+1. Copy a small service (e.g. `services/network-service`) as a template: `main.py`, `alembic/`, `Dockerfile`, `k8s/deployment.yaml`, `tests/`.
+2. Keep the `/health`, `/ready`, `/metrics` endpoints and publish a `ResourceEvent` after each write.
+3. Add the service to `docker-compose.dev.yml` (and the smoke/test overrides) and to the OpenAPI specs in `docs/openapi/`.
+4. Add a test next to it, run it as in section 6, and document new variables in the table above.
+5. New OpenStack integrations go in `libraries/common/src/common/openstack/` as adapters.
 
-## 13) Operational Runbooks (Condensed)
+## License
 
-### Incident Response
-
-1. Triage impact by service and endpoint.
-2. Validate dependencies first (DB/Kafka/Redis).
-3. Isolate faulty change.
-4. Restart/rollback narrowly.
-5. Re-run smoke + integration + contract checks.
-
-### Rollback
-
-1. Select prior stable artifact.
-2. Apply rollback via deployment channel.
-3. Verify write/read paths and event pipeline.
-4. Close only after post-rollback checks pass.
-
-### DB Migration Failure
-
-1. Freeze writes.
-2. Inspect revision mismatch.
-3. Controlled downgrade or restore path.
-4. Re-test in staging before production retry.
-
-## 14) Handover Guide for New Contributors
-
-If you are picking up development from this repository:
-
-1. Read sections 3, 8, 9, and 10 first.
-2. Start stack locally and run `scripts/test-all.sh`.
-3. Choose one service and trace its full path (API -> DB -> event publish).
-4. When adding features:
-   - update API contract and tests,
-   - preserve observability headers/metrics,
-   - keep changes backward-compatible where possible,
-   - wire any new dependency into compose and CI.
-5. Before pushing:
-   - run local validation scripts relevant to your change,
-   - record which checks you executed and their outcome.
-
-## 15) Roadmap Reality and Gaps
-
-This repository contains both production-facing implementations and baseline/scaffolding assets.  
-When planning next iterations, classify each item as:
-
-- `runtime-wired`: actively used by services in production path
-- `platform-baseline`: deployable infra primitive not fully wired end-to-end
-- `governance-baseline`: policy/process/workflow ready, needing environment secrets and rollout hardening
-
-This classification prevents “false done” and helps prioritize what still needs runtime closure.
-
-## 16) Security Notes
-
-- All credentials in compose files, `scripts/kubernetes/*` and `.env.*` (`rootpassword`, `dev-token`, `dev-bootstrap-token`, `dev-root-token`, `stack4things`, `redispassword`) are development defaults only. Change them for any shared or production deployment; no real secrets are committed.
-- Never commit secrets in repository files.
-- Prefer secret stores and runtime injection.
-- Keep dependencies and images patched.
-- Treat CI security scans as release gates.
-
-## 17) License
-
-Apache License 2.0
-
+Apache License 2.0. Release and operations notes: `docs/deployment/`.
